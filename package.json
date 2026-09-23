@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc -b",
     "docs": "node docs/build-docs.mjs",
-    "build:vercel": "node scripts/build-vercel.mjs"
+    "build:vercel": "node scripts/build-vercel.mjs",
+    "deploy": "node scripts/deploy-vercel.mjs"
   },
   "dependencies": {
     "pg": "^8.23.0",

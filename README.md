@@ -199,6 +199,7 @@ npm run dev
 | `npm run dev` | режим разработки вместе с API |
 | `npm run build` | проверка типов и сборка интерфейса в `dist/` |
 | `npm run build:vercel` | интерфейс и функции API в `.vercel/output` |
+| `npm run deploy` | публикация собранного каталога `.vercel/output` на Vercel |
 | `npm run preview` | просмотр собранного интерфейса |
 | `npm test` | модульные, интерфейсные и серверные тесты (Vitest) |
 | `npm run lint` | статический анализ (oxlint) |
@@ -246,8 +247,13 @@ public/       значки, Service Worker уведомлений, PDF-руко�
 
 ```bash
 npm run build:vercel
-vercel deploy --prebuilt --prod
+npm run deploy
 ```
+
+`npm run deploy` выкладывает сборку из временной копии без каталога `.git`. Это нужно из-за того, что
+Vercel на тарифе Hobby отклоняет развёртывание, если автор последнего коммита не связан с учётной записью
+Vercel (ответ «Not authorized»); без метаданных Git проверка не выполняется. Другой способ — связать
+учётную запись GitHub с Vercel в настройках аутентификации.
 
 Для корпоративной сети без интернета — [docs/corporate-offline.md](docs/corporate-offline.md):
 работа за IIS, вход через Windows, Active Directory и установка без обращений наружу.
