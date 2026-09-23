@@ -1,0 +1,884 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<title>Контроль задач — возможности и руководство пользователя</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #F7F5F0; --sheet: #FFFDF9; --ink: #1F2B3A; --ink-2: #3E4859; --ink-3: #5D6575; --ink-4: #616B7A;
+    --dash: #C9C6BD; --line: #DDD9D0; --accent: #1F3A5F; --accent-2: #2F5480; --soft: #EFEBE3; --soft-alt: #F1EDE5;
+    --amber: #7A5312; --danger: #A32D22; --ok: #2C6B45;
+  }
+  @page { size: A4; margin: 18mm 17mm 20mm; background: #F7F5F0; }
+  @page cover { margin: 0; background: #F7F5F0; }
+  * { box-sizing: border-box; }
+  html { background: var(--paper); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; font-family: 'Golos Text', sans-serif; font-size: 10pt; line-height: 1.6; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .num, code, kbd { font-family: 'IBM Plex Mono', monospace; }
+  code { font-size: 0.92em; color: var(--ink); background: var(--sheet); border: 1px dashed var(--dash); padding: 0 4px; border-radius: 2px; }
+  kbd { font-size: 0.85em; color: var(--ink); border: 1px solid var(--dash); border-bottom-width: 2px; padding: 0 5px; border-radius: 2px; background: var(--sheet); }
+  b, strong { color: var(--ink); font-weight: 600; }
+  a { color: var(--accent); text-decoration: none; }
+
+  /* Обложка */
+  .cover { page: cover; position: relative; width: 210mm; height: 297mm; overflow: hidden; break-after: page; background: var(--paper); }
+  .cover img { position: absolute; right: -34mm; top: 34mm; width: 200mm; }
+  .cover .fade { position: absolute; right: -34mm; top: 34mm; width: 200mm; height: 137mm; background: linear-gradient(90deg, #F7F5F0 0, rgba(247,245,240,0) 32%), linear-gradient(180deg, #F7F5F0 0, rgba(247,245,240,0) 14%, rgba(247,245,240,0) 70%, #F7F5F0 93%); }
+  .cover .inner { position: absolute; left: 18mm; top: 22mm; right: 18mm; bottom: 20mm; display: flex; flex-direction: column; }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .mark { position: relative; width: 40px; height: 40px; flex: none; }
+  .mark span { position: absolute; width: 26px; height: 26px; border-radius: 2px; }
+  .mark span:first-child { left: 2px; top: 2px; background: var(--accent); }
+  .mark span:last-child { right: 2px; bottom: 2px; background: var(--accent-2); mix-blend-mode: multiply; }
+  .logo b { font-size: 15pt; font-weight: 800; letter-spacing: -0.02em; display: block; line-height: 1.1; }
+  .logo small { font-size: 8pt; color: var(--ink-3); }
+  .cover .kicker { margin-top: auto; font-size: 8pt; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); border-top: 2px solid var(--accent); padding-top: 10px; width: 78mm; }
+  .cover h1 { font-size: 36pt; line-height: 1.02; letter-spacing: -0.03em; color: var(--ink); margin: 10px 0 12px; font-weight: 800; }
+  .cover .lead { font-size: 11.5pt; max-width: 80mm; color: var(--ink-2); margin: 0; }
+  .cover .meta { margin-top: 22mm; display: flex; gap: 0; border-top: 1px dashed var(--dash); padding-top: 10px; width: 100%; }
+  .cover .meta div { padding-right: 18px; margin-right: 18px; border-right: 1px dashed var(--dash); font-size: 8.5pt; }
+  .cover .meta div:last-child { border-right: none; }
+  .cover .meta span { display: block; font-size: 7pt; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+
+  /* Заголовки */
+  .chapter { break-before: page; }
+  .chapter-head { display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid var(--accent); padding-bottom: 8px; margin-bottom: 14px; }
+  .chapter-head .no { font-family: 'IBM Plex Mono', monospace; font-size: 22pt; font-weight: 500; color: var(--accent); line-height: 1; }
+  .chapter-head h2 { font-size: 21pt; line-height: 1.1; letter-spacing: -0.02em; margin: 0; color: var(--ink); font-weight: 700; }
+  h3 { font-size: 12.5pt; color: var(--ink); margin: 20px 0 6px; letter-spacing: -0.01em; break-after: avoid; }
+  h4 { font-size: 7.5pt; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); margin: 16px 0 6px; break-after: avoid; }
+  p { margin: 0 0 8px; max-width: 165mm; }
+  .intro { font-size: 11pt; color: var(--ink-2); max-width: 150mm; }
+  ul, ol { margin: 0 0 10px; padding-left: 18px; }
+  li { margin-bottom: 3px; }
+  ol.steps { list-style: none; padding: 0; counter-reset: s; }
+  ol.steps > li { counter-increment: s; position: relative; padding: 5px 0 5px 32px; border-bottom: 1px dashed var(--dash); margin: 0; break-inside: avoid; }
+  ol.steps > li::before { content: counter(s); position: absolute; left: 0; top: 5px; width: 20px; height: 20px; background: var(--accent); color: var(--sheet); font-family: 'IBM Plex Mono', monospace; font-size: 8pt; font-weight: 600; text-align: center; line-height: 20px; border-radius: 2px; }
+
+  /* Скриншоты */
+  figure { margin: 10px 0 14px; break-inside: avoid; }
+  figure img { display: block; width: 100%; border: 1px solid var(--line); border-top: 2px solid var(--accent); border-radius: 2px; }
+  figcaption { font-size: 8pt; color: var(--ink-3); margin-top: 5px; display: flex; gap: 8px; }
+  figcaption .num { color: var(--accent); font-weight: 600; white-space: nowrap; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+  .phones { display: grid; grid-template-columns: 1fr 1fr 1.5fr; gap: 14px; align-items: start; }
+  .phones figure img { border-top-width: 2px; }
+
+  /* Блоки */
+  .note { border-left: 1px solid var(--accent); padding: 2px 0 2px 12px; color: var(--ink-3); margin: 10px 0; break-inside: avoid; }
+  .note.amber { border-left-color: var(--amber); }
+  .note b { color: var(--ink); }
+  .formula { background: var(--sheet); border: 1px dashed var(--dash); border-left: 1px solid var(--accent); padding: 8px 12px; font-family: 'IBM Plex Mono', monospace; font-size: 8.5pt; color: var(--ink); white-space: pre-wrap; margin: 8px 0 12px; border-radius: 2px; break-inside: avoid; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; break-inside: auto; }
+  th { font-size: 7pt; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--accent); }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 9pt; }
+  tr { break-inside: avoid; }
+  td:first-child { color: var(--ink); font-weight: 600; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; column-gap: 22px; }
+  .feature { padding: 6px 0; border-top: 1px dashed var(--dash); break-inside: avoid; font-size: 9.3pt; line-height: 1.5; }
+  .feature b { display: block; font-size: 10.5pt; }
+  .feature .n { font-family: 'IBM Plex Mono', monospace; font-size: 8pt; color: var(--accent); margin-right: 6px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 8.5pt; margin: 6px 0 10px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px; border-left: 2px solid var(--accent); background: var(--sheet); outline: 1px solid var(--line); }
+  .legend i.ok { border-color: var(--ok); background: #E3EDE4; }
+  .legend i.bad { border-color: var(--danger); background: #F3DEDB; }
+  .stats { break-inside: avoid; display: grid; grid-template-columns: repeat(4, 1fr); margin: 10px 0 16px; }
+  .stat { padding: 0 12px; border-left: 1px dashed var(--dash); }
+  .stat:first-child { border-left: none; padding-left: 0; }
+  .stat span { display: block; font-size: 7pt; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+  .stat b { font-family: 'IBM Plex Mono', monospace; font-size: 20pt; line-height: 1.2; }
+  .stat.ok b { color: var(--ok); }
+  .stat small { display: block; font-size: 8pt; color: var(--ink-3); }
+
+  /* Схема потока данных */
+  .flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; margin: 12px 0 16px; break-inside: avoid; }
+  .flow div { padding: 8px 10px 8px 0; position: relative; }
+  .flow div + div { padding-left: 14px; border-left: 1px dashed var(--dash); }
+  .flow div::after { content: '→'; position: absolute; right: -6px; top: 6px; color: var(--accent); font-weight: 700; background: var(--paper); z-index: 1; }
+  .flow div:last-child::after { display: none; }
+  .flow .t { font-size: 7pt; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); display: block; }
+  .flow b { display: block; font-size: 10pt; margin: 2px 0; }
+  .flow small { font-size: 8pt; color: var(--ink-3); line-height: 1.45; display: block; }
+
+  /* Оглавление */
+  .toc { list-style: none; padding: 0; margin: 10px 0 0; }
+  .toc li { display: flex; align-items: baseline; gap: 12px; padding: 7px 0; border-bottom: 1px dashed var(--dash); font-size: 11pt; margin: 0; }
+  .toc .num { color: var(--accent); width: 24px; }
+  .toc .d { font-size: 8.5pt; color: var(--ink-3); margin-left: auto; text-align: right; max-width: 90mm; }
+  .avoid { break-inside: avoid; }
+  .sw { display: inline-block; width: 12px; height: 12px; border-radius: 1px; vertical-align: -1px; }
+  .cover .meta span.v { display: inline; font-size: 8.5pt; letter-spacing: 0; text-transform: none; color: var(--ink-2); font-weight: 400; }
+</style>
+</head>
+<body>
+
+<!-- Обложка -->
+<section class="cover">
+  <img src="assets/cover.png" alt="" /><div class="fade"></div>
+  <div class="inner">
+    <div class="logo"><svg class="mk" viewBox="-33.69 0.89 59.60 59.60" width="40" height="40"><g transform="rotate(45)"><rect x="22.0" y="33.0" width="10.4" height="10.4" rx="0.6" fill="#1F3A5F"/><rect x="11.0" y="33.0" width="10.4" height="10.4" rx="0.6" fill="#1F3A5F"/><rect x="0.0" y="33.0" width="10.4" height="10.4" rx="0.6" fill="#1F2B3A"/><rect x="22.0" y="22.0" width="10.4" height="10.4" rx="0.6" fill="#1F3A5F"/><rect x="11.0" y="22.0" width="10.4" height="10.4" rx="0.6" fill="#1F2B3A"/><rect x="22.0" y="11.0" width="10.4" height="10.4" rx="0.6" fill="#1F3A5F"/><rect x="11.0" y="11.0" width="10.4" height="10.4" rx="0.6" fill="#1F2B3A"/><rect x="22.0" y="0.0" width="10.4" height="10.4" rx="0.6" fill="#1F2B3A"/><rect x="11.0" y="0.0" width="10.4" height="10.4" rx="0.6" fill="#1F3A5F"/></g></svg><div><b>Контроль задач</b><small>планирование и контроль исполнения</small></div></div>
+    <div class="kicker">Документация · версия {{VERSION}}</div>
+    <h1>Возможности<br />и руководство<br />пользователя</h1>
+    <p class="lead">Веб-приложение для планирования задач отдела, контроля сроков, недельной отчётности и расчёта показателей эффективности сотрудников — с ролями, графиком отсутствий и базой данных.</p>
+    <div class="meta">
+      <div><span>Версия</span><span class="num v">{{VERSION}}</span></div>
+      <div><span>Платформа</span>Vite 8 · React 19 · PostgreSQL</div>
+      <div><span>Проверки</span>{{TESTS}} тестов · 4 ширины экрана</div>
+      <div><span>Дата</span><span class="num v">21.09.2026</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- Содержание -->
+<section>
+  <div class="chapter-head"><span class="no">00</span><h2>Содержание</h2></div>
+  <ol class="toc">
+    <li><span class="num">01</span>О приложении<span class="d">назначение, возможности, поток данных</span></li>
+    <li><span class="num">02</span>Начало работы<span class="d">вход, интерфейс, тема, версия</span></li>
+    <li><span class="num">03</span>Роли<span class="d">администратор, руководитель, исполнитель</span></li>
+    <li><span class="num">04</span>Карточка задачи<span class="d">категория, исполнение, баллы за исполнение</span></li>
+    <li><span class="num">05</span>Календарь<span class="d">виды, поиск по содержанию, категории</span></li>
+    <li><span class="num">06</span>Планирование<span class="d">матрица, несколько задач в ячейке, выгрузка, документ, отчёт</span></li>
+    <li><span class="num">07</span>Контроль исполнения<span class="d">шесть колонок сроков и просроченные задачи</span></li>
+    <li><span class="num">08</span>Тетрис<span class="d">график, остатки отпуска и отгулов, пересечения со сроками</span></li>
+    <li><span class="num">09</span>Отчётность<span class="d">недельный отчёт, печать, CSV и справка</span></li>
+    <li><span class="num">10</span>Показатели эффективности<span class="d">баллы сотрудников и динамика</span></li>
+    <li><span class="num">11</span>Сотрудники и переписка<span class="d">карточка сотрудника, общий канал, непрочитанные</span></li>
+    <li><span class="num">12</span>Оформление и телефон<span class="d">тёмная и светлая темы, адаптивность</span></li>
+    <li><span class="num">13</span>Правила и расчёты<span class="d">недели, колонки, баллы — справочно</span></li>
+    <li><span class="num">14</span>Вопросы и ответы<span class="d">типичные ситуации и ограничения</span></li>
+    <li><span class="num">15</span>Для администратора<span class="d">установка, версии, сборка, проверки</span></li>
+    <li><span class="num">16</span>Администрирование<span class="d">пользователи, подразделения, роли, вход, словари, разделы, шаблоны</span></li>
+    <li><span class="num">17</span>Изменения в версии {{VERSION}}<span class="d">что нового по сравнению с 4.0.2</span></li>
+  </ol>
+  <p class="note" style="margin-top:18px"><b>Как читать.</b> Главы 02–12 — пошаговое руководство по экранам. Глава 03 объясняет, чем отличается работа руководителя и исполнителя. Глава 16 описывает раздел «Администрирование», глава 17 — изменения по сравнению с предыдущей документированной версией 4.0.2. Скриншоты сняты с демонстрационными данными на четверг, 17 сентября 2026 года, в двух темах: в этом PDF — светлая, в разделе «Информация» — та, что сейчас включена в приложении.</p>
+</section>
+
+<!-- 01 -->
+<section class="chapter">
+  <div class="chapter-head"><span class="no">01</span><h2>О приложении</h2></div>
+  <p class="intro">«Контроль задач» собирает в одном окне календарь отдела, недельный план мероприятий, контроль сроков, отчёт об исполнении и рейтинг сотрудников. Каждая задача заводится один раз и сразу видна во всех разделах. Руководитель планирует и оценивает, исполнитель ведёт исполнение своих задач.</p>
+
+  <h4>Ключевые возможности</h4>
+  <div class="grid2">
+    <div class="feature"><b><span class="n">05</span>Календарь</b>День, рабочая неделя, неделя, месяц. Поиск по содержанию мероприятий. Цвет события — категория: доклады руководству отдела, управления и службы, ведомства, промежуточный контроль.</div>
+    <div class="feature"><b><span class="n">06</span>Планирование</b>Матрица «раздел планирования × сотрудник» на неделю с пятницы по четверг. В ячейке может быть несколько мероприятий. Перечень выгружается в CSV, а по шаблону собирается текстовый документ.</div>
+    <div class="feature"><b><span class="n">08</span>Тетрис</b>График отпусков, командировок, отгулов, больничных и учёбы; остатки отпуска и отгулов; заявки и согласование; пометки, когда срок задачи приходится на отсутствие исполнителя.</div>
+    <div class="feature"><b><span class="n">04</span>Баллы за исполнение</b>Видит и задаёт руководитель в карточке задачи. Начисляются сотруднику, когда исполненная задача попадает в отчёт по кнопке «Направить в отчёт».</div>
+    <div class="feature"><b><span class="n">03</span>Роли</b>Руководитель видит и меняет всё. Исполнитель работает со своими задачами: указывает результат и отмечает исполнение.</div>
+    <div class="feature"><b><span class="n">07</span>Контроль исполнения</b>Неисполненные задачи в шести колонках по сроку — от просроченных до «В течение квартала». Счётчик просроченных задач всегда виден в шапке.</div>
+    <div class="feature"><b><span class="n">09</span>Отчётность и показатели</b>Недельный отчёт с печатью, выгрузкой в CSV и справкой по шаблону, рейтинг сотрудников по баллам за месяц, квартал, полугодие и год.</div>
+    <div class="feature"><b><span class="n">11</span>Сотрудники и переписка</b>Структура отдела, карточка сотрудника с его задачами и баллами, общий канал со счётчиком непрочитанных сообщений.</div>
+    <div class="feature"><b><span class="n">16</span>Администрирование</b>Пользователи и подразделения, роли с настраиваемыми разрешениями, вход по форме или через Windows, словари с цветами, разделы планирования и шаблоны документов.</div>
+    <div class="feature"><b><span class="n">12</span>Тёмная тема</b>Основная тема — тёмная; светлая включается одной кнопкой, выбор запоминается.</div>
+  </div>
+
+  <h4>Как движутся данные</h4>
+  <div class="flow">
+    <div><span class="t">Шаг 1</span><b>Задача</b><small>руководитель создаёт в Календаре, Планировании или Контроле</small></div>
+    <div><span class="t">Шаг 2</span><b>Исполнение</b><small>исполнитель описывает результат и ставит отметку</small></div>
+    <div><span class="t">Шаг 3</span><b>Оценка</b><small>руководитель при необходимости меняет баллы задачи</small></div>
+    <div><span class="t">Шаг 4</span><b>Отчёт</b><small>«Направить в отчёт» фиксирует задачи недели и баллы</small></div>
+    <div><span class="t">Шаг 5</span><b>Показатели</b><small>баллы попадают в рейтинг и карточки сотрудников</small></div>
+  </div>
+
+  <div class="note"><b>Где хранятся данные.</b> Задачи, отсутствия, нормы, отчёты, сообщения, пользователи, подразделения, словари и шаблоны хранятся в базе данных PostgreSQL на сервере. Все сотрудники работают с одними данными: изменения сохраняются сразу, у коллег появляются в течение минуты или при переключении на вкладку, в «Переписке» — в течение 15 секунд. Права проверяет сервер, а не только интерфейс.</div>
+</section>
+
+<!-- 02 -->
+<section class="chapter">
+  <div class="chapter-head"><span class="no">02</span><h2>Начало работы</h2></div>
+  <h3>Вход в систему</h3>
+  <ol class="steps">
+    <li>Откройте адрес приложения. Без входа любая страница ведёт на форму входа.</li>
+    <li>Введите логин (адрес электронной почты) и пароль не короче 6 символов.</li>
+    <li>Нажмите <b>«Войти»</b>. Откроется страница, на которую вы переходили, а если такой не было — Календарь. Роль определяется учётной записью автоматически.</li>
+  </ol>
+  <table>
+    <tr><th style="width:36%">Учётная запись</th><th style="width:30%">Сотрудник</th><th>Роль</th></tr>
+    <tr><td class="num">user@example.com</td><td>Иванов А.Б., начальник отдела</td><td>администратор</td></tr>
+    <tr><td class="num">petrov@example.com</td><td>Петров В.С., заместитель</td><td>руководитель</td></tr>
+    <tr><td class="num">sidorov@example.com</td><td>Сидоров Д.Е., ведущий специалист</td><td>исполнитель</td></tr>
+    <tr><td class="num">smirnova@example.com</td><td>Смирнова О.Л., документовед</td><td>исполнитель</td></tr>
+  </table>
+  <p class="note">Пароль у всех демонстрационных учётных записей — <code>123456</code>. Остальные сотрудники отдела (40 человек в демоданных) входят через Windows. Если администратор включил <b>вход через Windows</b>, форма не показывается: приложение само узнаёт доменную учётную запись сотрудника (глава 16).</p>
+  <div class="pair" style="grid-template-columns: 1.7fr 1fr">
+    <figure><img src="shots/01-login.png" alt="" /><figcaption><span class="num">Рис. 1</span>Экран входа: форма, переключатель темы, подсказка с учётными записями и номер версии.</figcaption></figure>
+    <figure><img src="shots/01b-login-error.png" alt="" /><figcaption><span class="num">Рис. 2</span>При ошибке под полями появляется причина.</figcaption></figure>
+  </div>
+
+  <h3>Устройство интерфейса</h3>
+  <p>В шапке слева — название, имя вошедшего сотрудника и его роль, справа — служебные кнопки, ниже — разделы. <b>Шапка закреплена</b>: при прокрутке страницы она остаётся наверху, разделы и счётчик просрочки всегда под рукой. Так же закреплена панель структуры подразделения в разделе «Сотрудники». Внизу каждой страницы указаны версия приложения и состояние связи с базой: «сохранено в базе · 13:20», «сохранение…» или «нет связи с базой». Если сохранить изменение не удалось, над страницей появляется причина и кнопка «Повторить».</p>
+  <table>
+    <tr><th style="width:30%">Элемент</th><th>Назначение</th></tr>
+    <tr><td>Разделы</td><td>Календарь, Планирование, Контроль, Тетрис, Отчётность, Показатели, Сотрудники, Переписка, Информация. У исполнителя вместо «Сотрудников» — «Моя карточка», «Отчётности» и «Показателей» нет. Красная цифра у «Контроля» — число просроченных задач, синий кружок у «Переписки» — непрочитанные сообщения коллег (глава 11).</td></tr>
+    <tr><td>Логотип</td><td>Галочка из квадратных блоков — «задача выполнена» и блоки «Тетриса». Нажатие ведёт на главную страницу (Календарь). При наведении курсора на знак кубики по очереди подпрыгивают «по ступеням» снизу слева вверх вправо и возвращаются на место; при включённом в системе «уменьшении движения» знак лишь мягко мигает.</td></tr>
+    <tr><td>Колокольчик</td><td>Число просроченных задач (у исполнителя — только его). По нажатию открывается «Контроль исполнения».</td></tr>
+    <tr><td>Шестерёнка</td><td>Только у администратора: раздел «Администрирование» — пользователи, подразделения, роли, способ входа, словари, разделы планирования, шаблоны документов.</td></tr>
+    <tr><td>Солнце / луна</td><td>Переключение светлой и тёмной темы.</td></tr>
+    <tr><td>Круговая стрелка</td><td>Только у руководителя: восстанавливает демонстрационные данные. Нажмите дважды — первое нажатие только предупреждает.</td></tr>
+    <tr><td>Квадрат с инициалами</td><td>Ваша карточка сотрудника.</td></tr>
+    <tr><td>Дверь со стрелкой</td><td>Выход из системы. Данные при выходе сохраняются.</td></tr>
+  </table>
+  <p>Заголовок экрана компактный: название и короткое пояснение в одну строку, действия — справа. Под ним — строка фильтров: подпись и значение каждого фильтра стоят в одну строку. Значение фильтра — жирный текст со стрелкой <b>▾</b>; нажмите на него, чтобы выбрать другое. Список закрывается клавишей <kbd>Esc</kbd> или кликом мимо, стрелки <kbd>↑</kbd> <kbd>↓</kbd> и <kbd>Enter</kbd> тоже работают.</p>
+  <p><b>Подсказки.</b> Наведите курсор на кнопку, метку срока, полосу отсутствия или процент в «Тетрисе» — через мгновение появится подсказка в стиле приложения. С клавиатуры подсказка появляется при переходе клавишей <kbd>Tab</kbd>.</p>
+  <p><b>Раздел «Информация»</b> — последний в меню: это руководство внутри приложения, с оглавлением слева и кнопкой «Скачать PDF». Нажмите на рисунок — он откроется крупно в окне; клик по рисунку переключает «по размеру окна» и натуральную величину, стрелки <kbd>←</kbd> <kbd>→</kbd> листают рисунки. Там же ссылка на библиотеку компонентов.</p>
+  <figure><img src="shots/12-filter-dropdown.png" alt="" /><figcaption><span class="num">Рис. 3</span>Фильтр «Сотрудник» с открытым списком.</figcaption></figure>
+
+  <h3>Уведомления Chrome</h3>
+  <p>Приложение сообщает о событиях всплывающими уведомлениями Chrome поверх любых окон — какая бы вкладка ни была активна и даже когда Chrome свёрнут. Нужно одно: вкладка приложения открыта (можно в фоне). Закрепите её — правой кнопкой по вкладке → «Закрепить», и она будет открываться вместе с Chrome. Нажатие на уведомление открывает нужный раздел. Интернет не нужен: всё работает внутри корпоративной сети.</p>
+  <ol class="steps">
+    <li>При первом входе над страницей появляется предложение <b>«Включите уведомления Chrome»</b>. Нажмите «Включить уведомления» и разрешите их в запросе браузера — придёт пробное уведомление «Уведомления включены». Если его нет, проверьте настройки Windows (ниже).</li>
+    <li>В подвале страницы — состояние: «уведомления включены» (нажмите, чтобы выключить в этом браузере) или «включить уведомления».</li>
+    <li>Если уведомления запрещены в браузере, разрешите их: значок слева от адреса сайта → «Уведомления» → «Разрешить», затем обновите страницу.</li>
+  </ol>
+  <table>
+    <tr><th style="width:30%">Событие</th><th>Кому приходит</th></tr>
+    <tr><td>Новая задача, назначение, перенос срока</td><td>Исполнителям задачи (кроме того, кто её изменил).</td></tr>
+    <tr><td>Задача исполнена</td><td>Руководителям.</td></tr>
+    <tr><td>Просроченные задачи</td><td>Каждому исполнителю — раз в день, после 9:00 по Москве при первом обращении его вкладки к серверу: список его просроченных задач.</td></tr>
+    <tr><td>Заявка на отсутствие</td><td>Тем, кто согласует отсутствия; решение по заявке — её автору.</td></tr>
+    <tr><td>Отчёт за неделю направлен</td><td>Руководителям; каждому исполнителю — начисленные ему баллы.</td></tr>
+    <tr><td>Сообщение в «Переписке»</td><td>Всем сотрудникам, кроме автора.</td></tr>
+  </table>
+  <p>Вкладка спрашивает сервер о новых уведомлениях каждые 20 секунд. Если вкладку закрывали, при следующем открытии покажутся последние три пропущенных уведомления и строка «И ещё уведомлений: N».</p>
+  <p class="note"><b>Уведомление не всплывает?</b> Chrome показывает уведомления через Windows. Проверьте: «Параметры Windows» → «Система» → «Уведомления» — уведомления включены, у Google Chrome переключатель включён, режим «Не беспокоить» выключен. Другой способ — пусть Chrome рисует уведомления сам: откройте <code>chrome://flags/#enable-system-notifications</code>, выберите «Disabled» и перезапустите Chrome. Уведомления Chrome работают только на защищённом адресе (<b>https://</b>) — так требует браузер.</p>
+</section>
+
+<!-- 03 -->
+<section class="chapter">
+  <div class="chapter-head"><span class="no">03</span><h2>Роли: администратор, руководитель, исполнитель</h2></div>
+  <p class="intro">Интерфейс и права зависят от типа учётной записи. Ограничения проверяются не только скрытием кнопок: приложение не сохранит изменение, на которое у пользователя нет права.</p>
+  <p><b>Администратор</b> может всё, что руководитель, и дополнительно открывает раздел «Администрирование». Набор разрешений каждой роли настраивается (глава 16); в таблице — разрешения по умолчанию.</p>
+  <table>
+    <tr><th style="width:40%">Действие</th><th style="width:30%">Руководитель</th><th>Исполнитель</th></tr>
+    <tr><td>Видеть задачи отдела в Календаре</td><td>да</td><td>да, по умолчанию — только свои</td></tr>
+    <tr><td>Создавать задачи</td><td>любому сотруднику</td><td>только себе</td></tr>
+    <tr><td>Менять название, сроки, позицию, категорию, исполнителей</td><td>да</td><td>нет</td></tr>
+    <tr><td>Указывать документ, результат, отмечать исполнение</td><td>в любой задаче</td><td>в своих задачах</td></tr>
+    <tr><td>Баллы за исполнение в окне задачи</td><td>видит и меняет</td><td>не видит; свои баллы — в «Моей карточке»</td></tr>
+    <tr><td>Удалять задачи</td><td>да</td><td>нет</td></tr>
+    <tr><td>Планирование</td><td>все сотрудники, фильтры по группе и сотруднику, отправка отчёта</td><td>только свой столбец</td></tr>
+    <tr><td>Контроль исполнения</td><td>все, фильтр по сотруднику</td><td>только свои задачи</td></tr>
+    <tr><td>Отчётность, Показатели</td><td>да</td><td>раздел скрыт, прямая ссылка ведёт в Календарь</td></tr>
+    <tr><td>Карточки сотрудников</td><td>все</td><td>только своя («Моя карточка»)</td></tr>
+    <tr><td>Тетрис: график отдела</td><td>да, с остатками всех</td><td>да, остатки — только свои</td></tr>
+    <tr><td>Тетрис: отсутствия создавать и менять</td><td>любому сотруднику, сразу согласовано</td><td>заявка только на себя; менять и отзывать — до решения</td></tr>
+    <tr><td>Согласовать или отклонить заявку</td><td>да</td><td>нет</td></tr>
+    <tr><td>Нормы отпуска и отгулов</td><td>меняет</td><td>видит свои</td></tr>
+    <tr><td>Восстановить демоданные</td><td>только администратор</td><td>нет</td></tr>
+    <tr><td>Администрирование</td><td>только администратор</td><td>нет</td></tr>
+  </table>
+  <div class="pair">
+    <figure><img src="shots/15-exec-planning.png" alt="" /><figcaption><span class="num">Рис. 4</span>Планирование исполнителя: только свой столбец, без отправки отчёта. В шапке нет «Отчётности» и «Показателей».</figcaption></figure>
+    <figure><img src="shots/16-exec-task.png" alt="" /><figcaption><span class="num">Рис. 5</span>Своя задача у исполнителя: содержание только для чтения, баллов нет, доступны документ, результат и отметка.</figcaption></figure>
+  </div>
+  <p class="note">Открыв чужую задачу, исполнитель видит её только для просмотра — вместо «Сохранить» кнопка «Закрыть».</p>
+</section>
+
+<!-- 04 -->
+<section class="chapter">
+  <div class="chapter-head"><span class="no">04</span><h2>Карточка задачи</h2></div>
+  <p class="intro">Задача создаётся и редактируется в одном и том же окне, откуда бы его ни открыли. Изменения сразу видны во всех разделах.</p>
+  <figure style="width:82%"><img src="shots/04-task-modal.png" alt="" /><figcaption><span class="num">Рис. 6</span>Карточка исполненной задачи у руководителя.</figcaption></figure>
+  <table>
+    <tr><th style="width:26%">Поле</th><th>Что указать</th></tr>
+    <tr><td>Название</td><td>Что нужно сделать. Обязательное поле. Поле многострочное и занимает всю свободную высоту левой колонки — удобно вставлять длинные формулировки из плана.</td></tr>
+    <tr><td>Начало, окончание</td><td>Дата и время. <b>Окончание — срок исполнения.</b> При переносе начала окончание сдвигается, длительность сохраняется. Введите дату с клавиатуры («17.09.2026 10:00») или нажмите на значок календаря: слева месяц (неделя с понедельника, сегодня обведено), справа время с шагом 15 минут.</td></tr>
+    <tr><td>Раздел планирования</td><td>Позиция недельного плана. С ней задача попадает в матрицу «Планирования» и в отчёт. «Вне плана» — только Календарь, Контроль и карточки.</td></tr>
+    <tr><td>Категория</td><td>Доклад руководству отдела, доклад руководству управления и службы, доклад руководству ведомства, промежуточный контроль или «Иное». Определяет цвет в Календаре; цветной квадрат рядом с полем показывает выбранный цвет. Цвета категорий меняет администратор (глава 16).</td></tr>
+    <tr><td>Исполнители</td><td>Один или несколько сотрудников. Каждый исполнитель получает за задачу полные баллы. Выбранные видны сверху, у каждого есть крестик «Убрать». Ниже — список отдела по подразделениям с кнопкой «выбрать группу»; если сотрудников больше восьми, появляется поиск по фамилии, имени или должности. Список прокручивается внутри окна, поэтому окно не растёт даже при большом отделе. Если сотрудник отсутствует в день срока, рядом с его фамилией стоит пометка, например «отпуск».</td></tr>
+    <tr><td>Документ, номер</td><td>Основание или результат: приказ, протокол, ТЗ. Выводятся в отчёте и в документах по шаблону. Поля стоят внизу левой колонки, над кнопкой «Удалить».</td></tr>
+    <tr><td>Результат исполнения</td><td>Что фактически сделано. <b>Отметка «Исполнено» доступна только после заполнения результата.</b></td></tr>
+  </table>
+
+  <h3>Баллы за исполнение (руководитель)</h3>
+  <div class="pair" style="grid-template-columns: 1fr 1fr; align-items:center">
+    <figure><img src="shots/04b-task-score.png" alt="" /><figcaption><span class="num">Рис. 7</span>Баллы изменены вручную: рядом пометка «изменено» и доступна кнопка сброса.</figcaption></figure>
+    <div>
+      <p>Под отметкой об исполнении у руководителя находится поле <b>«Баллы за исполнение»</b>. Исполнитель этого поля не видит — свои баллы он смотрит в «Моей карточке».</p>
+      <ul>
+        <li>По умолчанию в поле — базовый вес позиции плана (5 или 2 балла). Он указан справа: «базовый вес позиции: 5».</li>
+        <li>Руководитель вводит другое значение от 0,1 до 15 — появляется пометка «изменено».</li>
+        <li><b>«↺ Сбросить к базовому»</b> возвращает вес позиции из справочника.</li>
+        <li>У задачи вне плана баллов нет: поле пустое и неактивно, под ним пояснение «Базовый вес позиции указывается только за задачи из основных категорий».</li>
+        <li><b>Баллы начисляются сотруднику</b>, когда исполненная задача попадает в отчёт по кнопке «Направить в отчёт» в «Планировании». До этого они не учитываются в показателях и карточке.</li>
+      </ul>
+    </div>
+  </div>
+  <h3>Сохранение и удаление</h3>
+  <ol class="steps">
+    <li>Нажмите <b>«Сохранить»</b>. Незаполненные обязательные поля и неверные баллы подсвечиваются, рядом — текст ошибки.</li>
+    <li>Если срок приходится на отсутствие исполнителя, окно предупреждает: «Срок приходится на отсутствие исполнителя» — с видом и датами отсутствия (глава 08).</li>
+    <li><b>«Отмена»</b>, крестик, <kbd>Esc</kbd> или клик по затемнённому фону закрывают окно без сохранения.</li>
+    <li>Удаление (только руководитель): <b>«Удалить»</b>, затем <b>«Точно удалить?»</b>. Удаление нельзя отменить.</li>
+  </ol>
+  <figure style="width:52%"><img src="shots/04c-task-validation.png" alt="" /><figcaption><span class="num">Рис. 8</span>Проверка обязательных полей.</figcaption></figure>
+</section>
+
+<!-- 05 -->
+<section class="chapter">
+  <div class="chapter-head"><span class="no">05</span><h2>Календарь</h2></div>
+  <p class="intro">Задачи отдела во времени. По умолчанию открывается рабочая неделя; у исполнителя фильтр «Исполнитель» сразу стоит на нём самом.</p>
+  <figure><img src="shots/02-calendar-week.png" alt="" /><figcaption><span class="num">Рис. 9</span>Рабочая неделя. Рамка и точка события — цвет категории, ✓ — исполнено, «!» и красная рамка — просрочено, красная линия — текущее время.</figcaption></figure>
+  <h4>Что можно сделать</h4>
+  <ul>
+    <li><b>Сменить вид</b> — «День», «Рабочая неделя», «Неделя», «Месяц»; стрелки <b>‹ ›</b> листают период, «Сегодня» возвращает к текущей дате.</li>
+    <li><b>Создать задачу</b> — нажмите на свободный получасовой интервал или «Новая задача».</li>
+    <li><b>Открыть задачу</b> — нажмите на неё.</li>
+    <li><b>Показать задачи одного сотрудника</b> — фильтр «Исполнитель».</li>
+  </ul>
+
+  <h3>Поиск по содержанию</h3>
+  <p>Введите слова в поле <b>«Поиск по содержанию»</b>. Поиск идёт по названию, результату исполнения, документу и его номеру, разделу планирования, категории и ФИО исполнителей. Регистр и буквы «ё/е» не различаются, найдутся задачи, где есть все введённые слова.</p>
+  <figure><img src="shots/02b-calendar-search.png" alt="" /><figcaption><span class="num">Рис. 10</span>Поиск «доклад»: список найденного по датам со всех недель, совпадения подсвечены, календарь показывает только подходящие задачи.</figcaption></figure>
+  <ol class="steps">
+    <li>Под фильтрами появится список найденного со всех дат — с цветом категории и отметкой состояния.</li>
+    <li>Нажмите на строку — календарь перейдёт к этому дню и откроет задачу.</li>
+    <li>Крестик в поле или <kbd>Esc</kbd> очищают поиск.</li>
+  </ol>
+
+  <h3>Категории мероприятий</h3>
+  <table>
+    <tr><th style="width:8%"></th><th style="width:45%">Категория</th><th>Когда использовать</th></tr>
+    <tr><td><i class="sw" style="background:#2F5480"></i></td><td>Доклад руководству отдела</td><td>Доклады начальнику отдела и заместителю.</td></tr>
+    <tr><td><i class="sw" style="background:#6A4C93"></i></td><td>Доклад руководству управления и службы</td><td>Доклады вышестоящему управлению и службе.</td></tr>
+    <tr><td><i class="sw" style="background:#983A6E"></i></td><td>Доклад руководству ведомства</td><td>Доклады руководству ведомства.</td></tr>
+    <tr><td><i class="sw" style="background:#1E7268"></i></td><td>Промежуточный контроль</td><td>Контрольные точки по ходу исполнения.</td></tr>
+    <tr><td><i class="sw" style="background:#A8A397"></i></td><td>Иное</td><td>Обычные задачи, в том числе вне плана.</td></tr>
+  </table>
+  <p>Компактные кнопки категорий стоят в строке заголовка, рядом с «Новая задача»: они скрывают и показывают события, полное название — в подсказке. <b>Двойной щелчок</b> оставляет только одну категорию, «показать все» возвращает остальные. Цвета в таблице — по умолчанию; администратор может изменить их в «Словарях».</p>
+  <figure><img src="shots/02c-calendar-categories.png" alt="" /><figcaption><span class="num">Рис. 11</span>Скрыты задачи без категории — остались только доклады и промежуточный контроль.</figcaption></figure>
+  <div class="pair">
+    <figure><img src="shots/03-calendar-month.png" alt="" /><figcaption><span class="num">Рис. 12</span>Месяц: до трёх задач в дне и строка «ещё N».</figcaption></figure>
+    <figure><img src="shots/03b-calendar-day.png" alt="" /><figcaption><span class="num">Рис. 13</span>День: подробное расписание.</figcaption></figure>
+  </div>
+</section>
+
+<!-- 06 -->
+<section class="chapter">
+  <div class="chapter-head"><span class="no">06</span><h2>Планирование</h2></div>
+  <p class="intro">Недельный план отдела в виде матрицы: строки — разделы планирования, столбцы — сотрудники. Неделя идёт <b>с пятницы по четверг</b>; в неё попадают задачи со сроком в этом интервале.</p>
+  <figure><img src="shots/05-planning.png" alt="" /><figcaption><span class="num">Рис.</span>Матрица на высоту окна: строка с фамилиями и колонка «Разделы планирования» закреплены, прокрутка — внутри. Точка у фамилии — сотрудник отсутствует на этой неделе.</figcaption></figure>
+  <figure><img src="shots/05b-planning-cell.png" alt="" /><figcaption><span class="num">Рис. 14</span>У Иванова А.Б. в позиции 1.1 две задачи, под ними — кнопка «+ задача» для следующей. Квадрат перед названием — цвет категории.</figcaption></figure>
+  <h4>Работа с матрицей</h4>
+  <ol class="steps">
+    <li>Выберите неделю стрелками в фильтре «Плановая неделя»; «Текущая» возвращает к текущей неделе.</li>
+    <li>Матрица занимает высоту окна и прокручивается внутри себя: строка с фамилиями и колонка разделов остаются на месте, столбцы разделены тонкими линиями. Легенда — под матрицей.</li>
+    <li><b>Точка у фамилии</b> — сотрудник отсутствует на выбранной неделе. Цвет точки — вид отсутствия (как в «Тетрисе»), вид, даты и основание — в подсказке.</li>
+    <li><b>Первая задача в ячейке:</b> наведите курсор на пустую ячейку и нажмите появившуюся «+ задача». Позиция и исполнитель подставятся сами.</li>
+    <li><b>Следующие задачи:</b> под уже добавленными мероприятиями кнопка «+ задача» видна всегда — в ячейку можно внести сколько угодно мероприятий.</li>
+    <li>Плашка задачи показывает срок, «просрочено» или «✓ исполнено». Если исполнитель в день срока отсутствует, под сроком красным — вид и даты отсутствия. Нажмите на плашку, чтобы открыть задачу.</li>
+    <li>Колонки баллов в матрице нет: баллы конкретной задачи руководитель видит и меняет в её карточке (глава 04).</li>
+    <li><b>Фильтр «Группа»</b> (руководитель) оставляет в матрице только столбцы сотрудников одной группы отдела — при большом отделе матрицу не нужно прокручивать вбок. «Весь отдел» возвращает все столбцы.</li>
+    <li>Фильтр «Сотрудник» оставляет один столбец — удобно для личной планёрки. Если выбрана группа, в списке только её сотрудники, а первый пункт называется «Вся группа». При смене группы сотрудник из другой группы сбрасывается.</li>
+  </ol>
+  <h4>Выгрузка и документ</h4>
+  <ul>
+    <li><b>«Выгрузить CSV»</b> — файл <code>plan-ГГГГ-ММ-ДД.csv</code> для Excel: мероприятия недели сотрудников, показанных в матрице с учётом фильтров. Кнопка неактивна, если мероприятий нет.</li>
+    <li><b>«Документ»</b> — текст по шаблону «План мероприятий на неделю»: разделы, позиции и пронумерованные мероприятия со сроками, исполнителями и документами. В окне — предпросмотр и кнопки «Скачать .doc» (открывается в Word), «Скачать .txt» (простой текст для СЭД, почты или мессенджера), «Скачать CSV» (та же таблица, что по кнопке «Выгрузить CSV») и «Копировать». Шаблоны настраивает администратор (глава 16); здесь предлагаются только шаблоны «Планирования».</li>
+  </ul>
+  <div class="formula">Столбцы CSV: Раздел; Позиция; Наименование позиции; Мероприятие; Срок; Исполнители; Категория; Статус; Документ; Результат</div>
+  <figure><img src="shots/05c-planning-doc.png" alt="" /><figcaption><span class="num">Рис.</span>Окно «Документ по шаблону» с планом мероприятий недели.</figcaption></figure>
+  <h4>Отправка отчёта (руководитель)</h4>
+  <p>Нажмите <b>«Направить в отчёт»</b>. В отчёт попадут исполненные задачи недели с разделом планирования, каждая — со своими <b>баллами за исполнение</b> на момент отправки. <b>Именно в этот момент баллы начисляются сотрудникам</b> и появляются в «Показателях» и карточках. Повторная отправка («Обновить отчёт») заменяет отчёт недели, а не дублирует его.</p>
+  <figure><img src="shots/06-planning-report-sent.png" alt="" /><figcaption><span class="num">Рис. 15</span>Подтверждение отправки и статус отчёта в строке фильтров.</figcaption></figure>
+</section>
+
+<!-- 07 -->
+<section class="chapter">
+  <div class="chapter-head"><span class="no">07</span><h2>Контроль исполнения</h2></div>
+  <p class="intro">Доска неисполненных задач по срокам. У руководителя — все сотрудники с фильтром, у исполнителя — только его задачи.</p>
+  <figure style="width:82%"><img src="shots/07-control.png" alt="" /><figcaption><span class="num">Рис. 16</span>Шесть колонок сроков по три в ряд и сводка над доской.</figcaption></figure>
+  <table>
+    <tr><th style="width:26%">Колонка</th><th>Какие задачи</th><th style="width:30%">Срок новой задачи по «+»</th></tr>
+    <tr><td style="color:var(--danger)">Просроченные</td><td>Срок раньше сегодняшнего дня; справа — сколько дней прошло.</td><td>— (кнопки нет)</td></tr>
+    <tr><td>Сегодня</td><td>Срок сегодня; указано время окончания.</td><td>сегодня, 18:00</td></tr>
+    <tr><td>На этой неделе</td><td>С завтрашнего дня до воскресенья.</td><td>пятница, 18:00; с пятницы — следующий день</td></tr>
+    <tr><td>На следующей неделе</td><td>Понедельник — воскресенье следующей недели.</td><td>пятница следующей недели</td></tr>
+    <tr><td>В течение месяца</td><td>До конца месяца, но не менее 30 дней вперёд.</td><td>пятница через две недели</td></tr>
+    <tr><td>В течение квартала</td><td>До конца квартала, но не менее трёх месяцев вперёд.</td><td>пятница через семь недель</td></tr>
+  </table>
+  <p>На широком экране колонки стоят по три в ряд, на узком — одна под другой. Задачи со сроком дальше квартала на доску не попадают — их число показано в сводке «Позже квартала».</p>
+  <p>Нажмите на карточку, опишите результат, отметьте «Исполнено» и сохраните — карточка исчезнет с доски, счётчик в шапке уменьшится.</p>
+  <p class="note"><b>Исполнитель отсутствует.</b> Если срок задачи приходится на отпуск, командировку, отгул, больничный или учёбу исполнителя, на карточке красным написано, кто и когда отсутствует. Такую задачу стоит перенести или передать другому сотруднику.</p>
+</section>
+
+<!-- 08 -->
+<section class="chapter">
+  <div class="chapter-head"><span class="no">08</span><h2>Тетрис</h2></div>
+  <p class="intro">Раздел «Тетрис» — график событий отдела на месяц: строки — сотрудники, столбцы — дни, полосы — отпуска, командировки, отгулы, больничные и учёба. На той же строке круглыми метками отмечены сроки задач сотрудника, поэтому пересечения видны сразу.</p>
+  <figure><img src="shots/19-absences.png" alt="" /><figcaption><span class="num">Рис.</span>Тетрис на сентябрь: у Петрова В.С. отпуск, и на него приходятся сроки трёх задач (красные метки и красная рамка).</figcaption></figure>
+  <table>
+    <tr><th style="width:26%">Элемент</th><th>Что показывает</th></tr>
+    <tr><td>Полоса</td><td>Отсутствие. Цвет — вид: <span style="color:#9A6B12">отпуск</span>, <span style="color:#2F5480">командировка</span>, <span style="color:#6A4C93">отгул</span>, <span style="color:#983A6E">больничный</span>, <span style="color:#1E7268">учёба</span>. Сплошная заливка — согласовано, диагональная штриховка — заявка, точечный правый край — больничный без даты окончания. Цвета видов задаёт администратор в «Словарях».</td></tr>
+    <tr><td>Метка срока</td><td>Срок задачи сотрудника: синяя — назначен, зелёная — исполнено, <b style="color:var(--danger)">красная</b> — срок приходится на отсутствие. Нажмите на метку, чтобы открыть задачу.</td></tr>
+    <tr><td>Под именем</td><td>Остаток отпуска и отгулов на текущий год (исполнитель видит только свой). Остаток отпуска 5 дней и меньше выделен.</td></tr>
+    <tr><td>Сводка</td><td>Кто отсутствует сегодня (первые трое и «ещё N», полный список — в подсказке), сколько пересечений со сроками, пик отпусков в месяце, сколько заявок ждут решения.</td></tr>
+    <tr><td>Строка «Отсутствуют, %»</td><td>Внизу графика: доля сотрудников (отдела или группы) в согласованном отсутствии любого вида по каждому дню. «—» — все на месте; выше 30% ячейка красная. В подсказке — кто отсутствует.</td></tr>
+  </table>
+  <h4>Как работать с графиком</h4>
+  <ol class="steps">
+    <li>Шапка раздела компактная: в одной строке с заголовком — месяц, группа и кнопка создания; ниже узкая полоса сводки: список видов отсутствий, сегодня отсутствуют, пересечения, пик отпусков, заявки. Остальная высота отдана графику, легенда — под ним.</li>
+    <li><b>Пик отпусков</b> — наибольшая доля сотрудников (отдела или выбранной группы), которые одновременно в согласованном отпуске в этом месяце, например «14% · 1 из 7 · 14–25.09». <b>Порог — 30%.</b> Если он превышен, цифра красная, над графиком появляется предупреждение с датами, а эти дни в шапке графика отмечены красной полосой. Если порог превысят ещё не согласованные заявки — предупреждение и отметки янтарные. В списке заявок у заявки, после согласования которой в отпуске окажется больше 30% отдела, стоит пометка «в отпуске будет N% отдела».</li>
+    <li>Листайте месяцы стрелками, «Текущий» возвращает к текущему месяцу. Фильтр «Группа» оставляет одну группу. Список «Виды» в начале строки сводки скрывает и показывает виды событий: отметьте нужные, «все виды» возвращает остальные.</li>
+    <li>Нажмите на пустой день в строке сотрудника — откроется новое событие с этой датой. Кнопка «Событие» в строке заголовка делает то же для себя.</li>
+    <li>Нажмите на полосу — откроется событие: руководитель изменит его, согласует или отклонит заявку; исполнитель изменит или отзовёт свою заявку до решения.</li>
+    <li>Имя сотрудника ведёт в его карточку с остатками и списком отсутствий за год.</li>
+  </ol>
+  <p class="note"><b>Термины.</b> В «Тетрисе» запись об отпуске, командировке, отгуле, больничном или учёбе называется <b>событием</b>: кнопка «Событие», окно «Новое событие», «Заявка на событие», список «Виды». В остальных разделах (карточка сотрудника, точки у фамилий) — по-прежнему «отсутствие».</p>
+  <p class="note"><b>Большой отдел.</b> Строки сотрудников компактные — 40 пикселей. В демоданных в отделе разработки 47 человек: руководство, две проектные группы, группа документооборота и четыре отделения — разработки, сопровождения, аналитики и тестирования. Фильтр «Группа» оставляет на графике одно подразделение; подразделения и состав берутся из «Администрирования».</p>
+  <h3>Новое событие и заявка</h3>
+  <div class="pair" style="grid-template-columns: 1.1fr 1fr; align-items:start">
+    <figure style="margin-top:0"><img src="shots/20-absence-modal.png" alt="" /><figcaption><span class="num">Рис.</span>Окно события: дни, остаток сейчас и после, предупреждение о задаче со сроком в эти даты.</figcaption></figure>
+    <div>
+      <ul>
+        <li><b>Сотрудник</b> — руководитель выбирает любого; исполнитель подаёт заявку только на себя.</li>
+        <li><b>Вид</b> и <b>даты</b> «с» и «по» включительно. Для больничного можно отметить «Дата окончания не известна».</li>
+        <li>Строка расчёта показывает число дней (отгул — в рабочих днях, остальное — в календарных) и для отпуска и отгула — остаток сейчас и после. Отрицательный остаток выделен красным.</li>
+        <li>Если на эти даты приходятся сроки задач сотрудника, окно перечисляет их — до сохранения.</li>
+        <li><b>Статус</b> (только руководитель): заявка, согласовано, отклонено. Событие, созданное руководителем, сразу согласовано.</li>
+        <li>Два события одного сотрудника не могут пересекаться — приложение назовёт мешающее.</li>
+      </ul>
+    </div>
+  </div>
+  <h3>Пересечения и заявки</h3>
+  <p>Под графиком — два списка. <b>«Пересечения со сроками задач»</b>: задача, исполнитель, срок и отсутствие, с отметкой «Просрочено» (срок уже прошёл), «Под угрозой» (срок впереди) или «По заявке» (отсутствие ещё не согласовано). Нажмите на название, чтобы перенести срок или передать задачу, или «Показать на графике». <b>«Заявки на согласование»</b> — руководитель согласует или отклоняет их одной кнопкой и видит, сколько задач заявка задевает.</p>
+  <h3>Исполнитель и карточка сотрудника</h3>
+  <div class="pair">
+    <figure><img src="shots/22-exec-absences.png" alt="" /><figcaption><span class="num">Рис.</span>Тетрис у исполнителя: график отдела, свои остатки, свои пересечения и заявки.</figcaption></figure>
+    <figure><img src="shots/21-employee-absences.png" alt="" /><figcaption><span class="num">Рис.</span>Блок «Отсутствия» в карточке сотрудника: остатки за год, список отсутствий, нормы.</figcaption></figure>
+  </div>
+  <p>В карточке сотрудника блок <b>«Отсутствия»</b> показывает на текущий год: ежегодный отпуск (использовано, идёт и запланировано, в заявках, остаток), отгулы (накоплено, использовано, остаток), дни больничных, командировок и обучения, а также список отсутствий. Руководитель здесь же меняет <b>нормы</b>: право на отпуск, дни, перенесённые с прошлого года, и накопленные отгулы.</p>
+</section>
+
+<!-- 09 -->
+<section class="chapter">
+  <div class="chapter-head"><span class="no">09</span><h2>Отчётность</h2></div>
+  <p class="intro">Отчёт об исполненных мероприятиях за неделю (раздел руководителя).</p>
+  <figure><img src="shots/08-reports.png" alt="" /><figcaption><span class="num">Рис. 17</span>Отчёт за неделю: только разделы и сотрудники с исполнением, внизу — итог баллов.</figcaption></figure>
+  <ul>
+    <li><b>Отчётная неделя</b> — стрелки листают недели, «Прошлая» возвращает к прошлой.</li>
+    <li>В ячейке — задача, результат, срок, баллы и документ.</li>
+    <li>Таблица занимает высоту окна и прокручивается внутри себя: строка с фамилиями, колонка «Разделы планирования» и строка «Итого баллов» остаются на месте. При печати таблица выводится целиком.</li>
+    <li><b>«Печать»</b> — печать браузера или «Сохранить как PDF».</li>
+    <li><b>«Выгрузить CSV»</b> — файл <code>otchet-ГГГГ-ММ-ДД.csv</code> для Excel (разделитель — точка с запятой, UTF-8).</li>
+  </ul>
+  <div class="formula">Столбцы CSV: Позиция; Наименование позиции; Исполнитель (ФИО); Задача; Результат; Срок; Документ; Баллы</div>
+  <h3>Справка по шаблону</h3>
+  <p>Кнопка <b>«Документ»</b> — такая же, как в «Планировании», но текст собирается из отправленного отчёта, поэтому в нём <b>только исполненные мероприятия</b>. По умолчанию — шаблон «Справка об исполнении»:</p>
+  <ul>
+    <li>разделы плана с суммой баллов, внутри — мероприятия с исполнителями;</li>
+    <li>у мероприятия: дата исполнения, «исполнено в срок» или «исполнено с нарушением срока», результат, документ и баллы. Если исполнителей несколько, мероприятие — одна строка, баллы сложены;</li>
+    <li>внизу — итоги по сотрудникам (мероприятий и баллов) и общий итог недели.</li>
+  </ul>
+  <p>Кнопка доступна, когда за неделю получен отчёт с исполненными мероприятиями. Предлагаются только шаблоны «Отчётности». В окне есть и «Скачать CSV» — таблица отчёта для Excel.</p>
+  <figure><img src="shots/08b-report-doc.png" alt="" /><figcaption><span class="num">Рис.</span>«Справка об исполнении» по отчёту за неделю.</figcaption></figure>
+</section>
+
+<!-- 10 -->
+<section class="chapter">
+  <div class="chapter-head"><span class="no">10</span><h2>Показатели эффективности</h2></div>
+  <p class="intro">Рейтинг сотрудников по сумме баллов из полученных отчётов (раздел руководителя).</p>
+  <figure><img src="shots/09-kpi.png" alt="" /><figcaption><span class="num">Рис. 18</span>Итоги периода, баллы по сотрудникам и динамика по неделям.</figcaption></figure>
+  <ul>
+    <li><b>Период</b>: всё время, месяц, квартал (по умолчанию), полугодие, год.</li>
+    <li><b>Итоги</b>: всего баллов, исполнено задач, среднее на сотрудника, лучший результат.</li>
+    <li><b>Баллы по сотрудникам</b>: лидер выделен зелёным; имя ведёт в карточку сотрудника.</li>
+    <li><b>Динамика по неделям</b>: столбец — сумма баллов отчёта за неделю.</li>
+  </ul>
+  <div class="note"><b>Баллы не пересчитываются задним числом.</b> Если после отправки отчёта изменить баллы задачи, отправьте отчёт недели ещё раз.</div>
+</section>
+
+<!-- 11 -->
+<section class="chapter">
+  <div class="chapter-head"><span class="no">11</span><h2>Сотрудники и переписка</h2></div>
+  <h3>Сотрудники</h3>
+  <p>У руководителя слева — структура отдела по подразделениям с числом задач в работе и просроченных. <b>Точка у фамилии</b> — сотрудник сегодня отсутствует: цвет — вид отсутствия, подробности — в подсказке; в заголовке карточки такая же метка стоит после ФИО и должности. У исполнителя раздел называется <b>«Моя карточка»</b> и показывает только его.</p>
+  <figure><img src="shots/10-employee.png" alt="" /><figcaption><span class="num">Рис. 19</span>Карточка сотрудника: сводка, запланированные задачи и исполненные задачи с баллами.</figcaption></figure>
+  <h3 style="break-before: page">Переписка</h3>
+  <p>Общий канал отдела. Сообщения сгруппированы по дням, ваши подписаны «(Вы)». <kbd>Enter</kbd> — отправить, <kbd>Shift</kbd>+<kbd>Enter</kbd> — новая строка.</p>
+  <h4>Непрочитанные сообщения</h4>
+  <ul>
+    <li>У пункта «Переписка» в меню — <b>синий счётчик</b> сообщений коллег, пришедших после вашего последнего захода в чат (больше 99 — «99+»). То же число — на вкладке браузера: «(2) Контроль задач».</li>
+    <li>При открытии лента прокручивается к линии <b>«Новые сообщения · N»</b>, у новых сообщений рядом с автором — точка.</li>
+    <li>Открытая и видимая переписка сразу считается прочитанной — счётчик пропадает. Ваше сообщение отмечает прочитанным всё, что было до него.</li>
+    <li>На странице «Переписки» сообщения обновляются каждые 15 секунд.</li>
+  </ul>
+  <figure><img src="shots/11b-chat-badge.png" alt="" /><figcaption><span class="num">Рис.</span>Два непрочитанных сообщения — счётчик у «Переписки».</figcaption></figure>
+  <figure><img src="shots/11-chat.png" alt="" /><figcaption><span class="num">Рис. 20</span>Лента с разделителем «Новые сообщения» и только что отправленным ответом.</figcaption></figure>
+  <p class="note">Сообщения хранятся в базе: их видят все сотрудники отдела. Отметка «прочитано» у каждого своя и одинакова на всех его компьютерах; пока сотрудник ни разу не открывал чат, новыми считаются все сообщения коллег.</p>
+</section>
+
+<!-- 12 -->
+<section class="chapter">
+  <div class="chapter-head"><span class="no">12</span><h2>Оформление и телефон</h2></div>
+  <h3>Тёмная и светлая темы</h3>
+  <p>Основная тема — <b>тёмная</b>: тёплый графит, светлые чернила, один акцентный цвет. Кнопка с солнцем в шапке включает светлую тему, с луной — возвращает тёмную. Выбор запоминается в браузере и действует и на экране входа. Скриншоты в разделе «Информация» переключаются вместе с темой: в светлой показаны светлые варианты.</p>
+  <figure><img src="shots/13-light-calendar.png" alt="" /><figcaption><span class="num">Рис. 21</span>Календарь в светлой теме.</figcaption></figure>
+  <h3>Библиотека компонентов</h3>
+  <p>Все элементы интерфейса оформлены в единой теме «Графит · Полночь»; стандартные элементы браузера не выбиваются из системы. Календарь выбора даты и времени, подсказки, выпадающие списки, флажки, переключатели, поля ввода, окна и полосы прокрутки используют общую палитру. Витрина компонентов открывается из раздела «Информация» кнопкой «Библиотека компонентов» (адрес <code>/kit</code>).</p>
+  <div class="pair">
+    <figure><img src="shots/23-datepicker.png" alt="" /><figcaption><span class="num">Рис.</span>Выбор даты и времени в окне задачи: календарь месяца и список времени.</figcaption></figure>
+    <figure><img src="shots/24-kit.png" alt="" /><figcaption><span class="num">Рис.</span>Витрина библиотеки компонентов.</figcaption></figure>
+  </div>
+  <h3>Работа с телефона</h3>
+  <div class="phones">
+    <figure><img src="shots/17-mobile-control.png" alt="" /><figcaption><span class="num">Рис. 22</span>Контроль.</figcaption></figure>
+    <figure><img src="shots/18-mobile-calendar.png" alt="" /><figcaption><span class="num">Рис. 23</span>Календарь.</figcaption></figure>
+    <div>
+      <p>Проверены ширины 375, 768, 1024 и 1440 пикселей: страница не прокручивается по горизонтали, кнопки на телефоне не меньше 44 пикселей.</p>
+      <ul>
+        <li>Шапка компактная: знак логотипа и кнопки в одной строке, разделы — во второй, одной строкой с прокруткой вбок; текущий раздел всегда виден.</li>
+        <li>Фильтры встают столбцом, кнопки растягиваются на всю ширину.</li>
+        <li>Колонки контроля идут одна под другой.</li>
+        <li>Календарь и матрица прокручиваются внутри себя.</li>
+        <li>Поля ввода крупнее, чтобы телефон не увеличивал страницу.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 13 -->
+<section class="chapter">
+  <div class="chapter-head"><span class="no">13</span><h2>Правила и расчёты</h2></div>
+  <h3>Недели</h3>
+  <table>
+    <tr><th style="width:28%">Где</th><th>Границы недели</th></tr>
+    <tr><td>Календарь, Контроль</td><td>Понедельник — воскресенье.</td></tr>
+    <tr><td>Планирование, Отчётность</td><td><b>Пятница — четверг</b>. Задача относится к неделе, если её срок (окончание) попадает в интервал. На четверг 17.09.2026 плановая неделя — 11–17 сентября, прошлая — 4–10 сентября.</td></tr>
+  </table>
+  <h3>Состояния задачи в календаре</h3>
+  <table>
+    <tr><th style="width:28%">Состояние</th><th>Как показано</th></tr>
+    <tr><td>В работе</td><td>Рамка и точка цвета категории, без знака.</td></tr>
+    <tr><td>Исполнено</td><td>Знак ✓ зелёным, событие приглушено.</td></tr>
+    <tr><td>Просрочено</td><td>Знак «!» и время красным, красная рамка. Просрочка определяется по дню.</td></tr>
+  </table>
+  <h3>Баллы</h3>
+  <div class="formula">баллы задачи       = индивидуальные баллы задачи, если заданы, иначе базовый вес позиции плана
+баллы записи отчёта = баллы задачи на момент отправки отчёта (каждому исполнителю — полностью)
+баллы сотрудника    = Σ баллов записей отчётов с датой исполнения в выбранном периоде
+диапазон            = от 0,1 до 15, шаг 0,1; базовые веса позиций — 5 или 2</div>
+  <h3>Тетрис: отсутствия</h3>
+  <div class="formula">дни отсутствия     = календарные дни; отгул — рабочие дни (пн–пт)
+больничный без даты = длится по сегодня + 3 дня, пока его не закроют
+остаток отпуска    = право + перенесено − использовано − идёт − запланировано (заявки не вычитаются до согласования)
+остаток отгулов    = накоплено − использовано
+пик отпусков        = max по дням месяца (сотрудников в согласованном отпуске ÷ сотрудников в отделе или группе)
+предупреждение      = пик больше 30% (ровно 30% — ещё норма); янтарное — если порог превысят заявки
+пересечение        = задача не исполнена, её срок (окончание) приходится на согласованное отсутствие исполнителя или его заявку</div>
+  <p>Отклонённые отсутствия в графике, остатках и пересечениях не учитываются. Остатки не хранятся, а каждый раз вычисляются из норм и отсутствий, поэтому они не расходятся с графиком.</p>
+  <h3>Проверки при сохранении задачи</h3>
+  <table>
+    <tr><th style="width:36%">Ситуация</th><th>Сообщение</th></tr>
+    <tr><td>Пустое название</td><td>«Введите название задачи.»</td></tr>
+    <tr><td>Окончание раньше начала</td><td>«Окончание раньше начала: исправьте дату или время.»</td></tr>
+    <tr><td>Нет исполнителей</td><td>«Выберите хотя бы одного исполнителя.»</td></tr>
+    <tr><td>Баллы вне диапазона</td><td>«Баллы — число от 0,1 до 15.»</td></tr>
+    <tr><td>Отметка без результата</td><td>Отметка недоступна: «Отметка доступна после описания результата».</td></tr>
+    <tr><td>Выбран раздел плана</td><td>Предупреждение: задача не попадёт в матрицу и отчёт.</td></tr>
+  </table>
+</section>
+
+<!-- 14 -->
+<section class="chapter">
+  <div class="chapter-head"><span class="no">14</span><h2>Вопросы и ответы</h2></div>
+  <div class="grid2">
+    <div class="feature"><b>Не вижу «Отчётность» и «Показатели»</b>Вы вошли как исполнитель. Эти разделы доступны руководителю.</div>
+    <div class="feature"><b>Не могу изменить название или срок задачи</b>Содержание и сроки задачи определяет руководитель. Исполнитель указывает документ, результат и отмечает исполнение.</div>
+    <div class="feature"><b>Не вижу баллов в окне задачи</b>Баллы видит и назначает руководитель. Свои баллы исполнитель смотрит в «Моей карточке»; они появляются после отправки отчёта недели.</div>
+    <div class="feature"><b>Заявка не уменьшила остаток отпуска</b>Заявка учитывается в остатке только после согласования руководителем.</div>
+    <div class="feature"><b>Красная метка в графике отсутствий</b>Срок задачи приходится на отсутствие исполнителя. Перенесите срок или передайте задачу — метка станет синей.</div>
+    <div class="feature"><b>«Нет связи с базой» в подвале</b>Проверьте подключение к сети и нажмите «Повторить». Изменения, которые не удалось сохранить, заново загружаются с сервера.</div>
+    <div class="feature"><b>Задача не видна в Планировании</b>Проверьте позицию плана (не раздел) и срок: он должен попадать в выбранную неделю (пятница — четверг).</div>
+    <div class="feature"><b>Поиск ничего не нашёл</b>Проверьте, не скрыты ли категории и не выбран ли один исполнитель. Все введённые слова должны встречаться в задаче.</div>
+    <div class="feature"><b>Баллы в Показателях не изменились</b>Баллы берутся из отправленных отчётов. Отправьте отчёт нужной недели повторно.</div>
+    <div class="feature"><b>Экран слишком тёмный</b>Нажмите кнопку с солнцем в шапке — включится светлая тема.</div>
+    <div class="feature"><b>CSV открывается одной колонкой</b>В Excel: «Данные → Из текста/CSV», разделитель — точка с запятой.</div>
+    <div class="feature"><b>Счётчик у «Переписки» не пропадает</b>Откройте «Переписку»: открытая и видимая страница отмечает сообщения прочитанными.</div>
+    <div class="feature"><b>В окне «Документ» нет нужного шаблона</b>Кнопка предлагает только шаблоны своего раздела — «Планирования» или «Отчётности». Раздел шаблона меняет администратор.</div>
+    <div class="feature"><b>Зачем «Скачать .txt»</b>Это тот же текст без оформления — для вставки в СЭД, письмо или мессенджер. Для Word — «Скачать .doc».</div>
+  </div>
+  <h3>Ограничения текущей версии</h3>
+  <table>
+    <tr><th style="width:30%">Ограничение</th><th>Что это значит</th></tr>
+    <tr><td>Пароли демоучётных записей</td><td>Пароли демонстрационных учётных записей заданы в коде приложения; остальные сотрудники входят только через Windows. Для рабочей эксплуатации включите вход через Windows (глава 16).</td></tr>
+    <tr><td>Обновление у коллег</td><td>Изменения других пользователей подгружаются раз в минуту и при переключении на вкладку, а не мгновенно.</td></tr>
+    <tr><td>Документы по шаблону</td><td>Шаблон — простой текст с подстановками: в .doc весь текст получает один шрифт, таблиц и выделения нет.</td></tr>
+  </table>
+</section>
+
+<!-- 15 -->
+<section class="chapter">
+  <div class="chapter-head"><span class="no">15</span><h2>Для администратора</h2></div>
+  <h3>Установка и запуск</h3>
+  <p>Нужен Node.js 20.19 или новее (проверено на 24.13).</p>
+  <div class="formula">npm install          # установка зависимостей
+npm run dev          # режим разработки с API, http://localhost:5173
+npm run build        # проверка типов и сборка интерфейса в dist/
+npm run build:vercel # интерфейс + функции API в .vercel/output
+npm test             # модульные и интерфейсные тесты
+npm run lint         # статический анализ (oxlint)
+npm run docs         # скриншоты + дымовая проверка + этот PDF</div>
+  <p>Опубликованная версия: <b>https://task-control-rho.vercel.app</b>. В режиме разработки API работает внутри сервера Vite и хранит данные в файле <code>.data/dev-db.json</code>; если задана переменная <code>DATABASE_URL</code> (например, после <code>vercel env pull</code>), используется PostgreSQL.</p>
+  <h3>Сервер и база данных</h3>
+  <table>
+    <tr><th style="width:30%">Часть</th><th>Как устроено</th></tr>
+    <tr><td>База</td><td>Neon PostgreSQL, подключается к проекту в панели Vercel (Storage → Neon → Connect); адрес передаётся в переменной <code>DATABASE_URL</code>. Таблицы создаются автоматически при первом запросе, пустая база заполняется демоданными.</td></tr>
+    <tr><td>Таблицы</td><td><code>tc_tasks</code>, <code>tc_absences</code>, <code>tc_entitlements</code>, <code>tc_reports</code>, <code>tc_messages</code>, <code>tc_chat_reads</code>, <code>tc_users</code>, <code>tc_roles</code>, <code>tc_units</code>, <code>tc_dictionaries</code>, <code>tc_plan_rows</code>, <code>tc_templates</code>, <code>tc_meta</code>. Изменения пишутся в транзакции под общей блокировкой; записываются только изменившиеся строки.</td></tr>
+    <tr><td>API</td><td>Функции Vercel: <code>POST /api/login</code>, <code>GET /api/state</code>, <code>POST /api/action</code>, <code>GET /api/health</code>. Изменения выполняет тот же код, что и в браузере (<code>src/lib/reducer.ts</code>), с пользователем из подписанного токена; входящие данные проверяются.</td></tr>
+    <tr><td>Сеанс</td><td>Токен HMAC-SHA256 на 7 дней. Секрет — <code>AUTH_SECRET</code> или, если не задан, вычисляется из <code>DATABASE_URL</code>.</td></tr>
+    <tr><td>Уведомления</td><td>Без внешних служб и интернета. События определяет <code>src/lib/notify.ts</code>, сервер записывает уведомления в журнал <code>tc_notices</code> (хранится неделю). Открытая вкладка раз в 20 секунд запрашивает <code>GET /api/notices?since=…</code> и показывает новые уведомления средствами Chrome; таймер работает в отдельном потоке, поэтому в фоновой вкладке не замедляется. <code>public/sw.js</code> обрабатывает нажатие на уведомление. Напоминание о просрочке сервер создаёт сам при первом запросе сотрудника после 9:00 — планировщик не нужен. Требуется HTTPS.</td></tr>
+    <tr><td>Публикация</td><td><code>npm run build:vercel</code>, затем <code>vercel deploy --prebuilt --prod</code>. Без <code>DATABASE_URL</code> API отвечает «База данных не подключена».</td></tr>
+  </table>
+
+  <h3>Версии</h3>
+  <p>Приложение использует семантическое версионирование <b>MAJOR.MINOR.PATCH</b>: MAJOR — смена модели данных, ролей или облика; MINOR — новые возможности; PATCH — исправления. Версия хранится в <code>package.json</code>, показывается в подвале приложения, на экране входа и на обложке документации. История изменений — в файле <code>CHANGELOG.md</code>. Перед каждой публикацией версия повышается, документация пересобирается.</p>
+
+  <h3>Технологии и структура</h3>
+  <table>
+    <tr><th style="width:30%">Компонент</th><th>Версия и назначение</th></tr>
+    <tr><td>Сборка</td><td>Vite 8.3, @vitejs/plugin-react 6</td></tr>
+    <tr><td>Интерфейс</td><td>React 19.3, React Router 8.4, TypeScript 6 (строгий режим)</td></tr>
+    <tr><td>Оформление</td><td>CSS по дизайн-системе «Графит · Полночь»; Golos Text, IBM Plex Mono</td></tr>
+    <tr><td>Состояние</td><td>Контекст с оптимистичным обновлением: изменение сразу видно на экране, затем сохраняется на сервере; ответ сервера заменяет локальные данные. Модель данных версии 5</td></tr>
+    <tr><td>Сервер</td><td>Node.js 22 на Vercel Functions, <code>pg</code>; тесты хранилища — на встроенном PostgreSQL (PGlite)</td></tr>
+    <tr><td>Права</td><td><code>src/lib/permissions.ts</code> — одно место для интерфейса и проверки при сохранении</td></tr>
+    <tr><td>Библиотека компонентов</td><td><code>src/kit/</code> — кнопки, поля, календарь даты и времени, списки, флажки, подсказки, окно; витрина — <code>/kit</code></td></tr>
+    <tr><td>Документация</td><td><code>docs/manual.html</code> — один источник для PDF и раздела «Информация»; <code>npm run docs</code> снимает скриншоты и собирает PDF</td></tr>
+    <tr><td>Доступ</td><td><code>src/lib/access.ts</code> — разрешения и роли по умолчанию; пользователи, роли, словари и позиции плана хранятся в базе</td></tr>
+    <tr><td>Корпоративная сеть</td><td>Работа без обращений в интернет и вход через Windows (IIS, Kerberos/NTLM, Active Directory) — <code>docs/corporate-offline.md</code></td></tr>
+    <tr><td>Сотрудники</td><td>Берутся из пользователей базы и их подразделений. <code>src/lib/staff.ts</code> — 40 сотрудников отдела разработки для демоданных и демонстрационный каталог Active Directory</td></tr>
+  </table>
+  <h3>Результаты проверки версии {{VERSION}}</h3>
+  <div class="stats">
+    <div class="stat ok"><span>Тесты</span><b>{{TESTS}} / {{TESTS}}</b><small>логика, права, интерфейс, API, PostgreSQL</small></div>
+    <div class="stat ok"><span>Типы</span><b>0</b><small>ошибок tsc</small></div>
+    <div class="stat ok"><span>Линтер</span><b>0</b><small>замечаний oxlint</small></div>
+    <div class="stat ok"><span>Браузер</span><b>0</b><small>ошибок и переполнений на 4 ширинах</small></div>
+  </div>
+</section>
+
+<!-- 16 -->
+<section class="chapter">
+  <div class="chapter-head"><span class="no">16</span><h2>Администрирование</h2></div>
+  <p class="intro">Раздел открывается кнопкой с шестерёнкой в шапке и доступен только администратору. Вкладки: пользователи, подразделения, роли и разрешения, аутентификация, словари, разделы планирования, шаблоны документов. Все изменения сохраняются в базе и действуют для всех сотрудников сразу.</p>
+  <figure><img src="shots/26-admin-users.png" alt="" /><figcaption><span class="num">Рис.</span>Пользователи: учётная запись, Windows-логин, роль и доступ.</figcaption></figure>
+  <h3>Пользователи</h3>
+  <ul>
+    <li>У каждого пользователя — ФИО, должность, рабочая почта, <b>Windows-логин</b> (для входа через домен) и <b>роль</b>.</li>
+    <li>«Добавить пользователя» — новая учётная запись; если настроен поиск в Active Directory, сотрудника можно найти по фамилии.</li>
+    <li>У пользователя — <b>подразделение</b>: выпадающий список деревом в окне пользователя, в таблице — колонка «Подразделение» (полный путь — в подсказке). Сотрудники приложения — это пользователи базы: добавленный или переведённый сотрудник сразу появляется во всех разделах и фильтрах.</li>
+    <li>Отключённый пользователь не может войти. Нельзя отключить или удалить последнего администратора и собственную учётную запись.</li>
+  </ul>
+  <h3>Подразделения</h3>
+  <p>Иерархия «организация → управление → отдел → отделение» деревом со сворачиванием. «+» добавляет вложенное подразделение следующего уровня, изменение и удаление — через форму. Родитель — строго уровнем выше; удалить можно только пустое подразделение без вложенных. Отделения основного отдела — это группы в фильтрах «Планирования», «Тетриса» и выборе исполнителей.</p>
+  <figure><img src="shots/30-admin-units.png" alt="" /><figcaption><span class="num">Рис.</span>Дерево подразделений.</figcaption></figure>
+  <h3>Роли и разрешения</h3>
+  <p>Слева — роли (администратор, руководитель, исполнитель) с числом разрешений, справа — разрешения выбранной роли по группам: администрирование, работа отдела, задачи, отсутствия, система. Флажок включает разрешение для всех пользователей с этой ролью.</p>
+  <figure><img src="shots/27-admin-roles.png" alt="" /><figcaption><span class="num">Рис.</span>Разрешения роли «Руководитель».</figcaption></figure>
+  <h3>Аутентификация</h3>
+  <table>
+    <tr><th style="width:26%">Способ</th><th>Как работает</th></tr>
+    <tr><td>Форма входа</td><td>Рабочая почта и пароль приложения. Используется по умолчанию.</td></tr>
+    <tr><td>Windows</td><td>Бесшовный вход: сервер за IIS или доверенным прокси получает подтверждённый доменный логин и сопоставляет его со столбцом «Windows-логин». Формы и пароля нет. Доступен, только если сервер настроен (глава 15).</td></tr>
+    <tr><td>Резервный вход</td><td>При входе через Windows администратор может войти по форме — на случай недоступности домена. Рекомендуется оставить включённым.</td></tr>
+  </table>
+  <h3>Словари</h3>
+  <p>Категории задач, виды отсутствий и статусы задач. Значения — таблицей; «Добавить значение», «Изменить» и «Удалить» открывают форму. Название показывается в интерфейсе, код связывает значение с данными. У категорий задач и видов отсутствий есть <b>цвет</b> — палитра из 12 приглушённых цветов или код <code>#RRGGBB</code>. Цвет категории — рамки событий Календаря и точки в «Планировании», цвет вида отсутствия — полосы «Тетриса» и точки у фамилий. В тёмной теме цвета автоматически высветляются.</p>
+  <figure style="width:62%"><img src="shots/31-admin-dictionary.png" alt="" /><figcaption><span class="num">Рис.</span>Форма значения словаря с выбором цвета.</figcaption></figure>
+  <h3>Разделы планирования</h3>
+  <p>План — дерево: <b>разделы</b> содержат вложенные разделы и рабочие <b>позиции</b>. Позиции используются в «Планировании» и задают базовый вес в баллах.</p>
+  <figure><img src="shots/28-admin-plan.png" alt="" /><figcaption><span class="num">Рис.</span>Дерево разделов планирования: разделы можно свернуть, «+» добавляет вложенную позицию.</figcaption></figure>
+  <ol class="steps">
+    <li>Разделы сворачиваются стрелкой слева от названия; «Свернуть всё» / «Развернуть всё» — для всего плана.</li>
+    <li><b>«+» у раздела</b> добавляет в него позицию со следующим свободным номером.</li>
+    <li>В окне позиции выберите <b>«Родитель»</b> — раздел плана или «Верхний уровень плана» — и номер в разделе. <b>Код собирается сам</b> и виден сразу: родитель «2» и номер «3» дают «2.3».</li>
+    <li>Чтобы <b>перенести</b> позицию или целый раздел, выберите другого родителя. Вложенные позиции и связанные задачи переедут вместе с ним — задачи не теряют позицию.</li>
+    <li>Удалить можно только позицию без задач и без вложенных позиций.</li>
+  </ol>
+  <figure><img src="shots/29-admin-plan-dialog.png" alt="" /><figcaption><span class="num">Рис.</span>Выбор родителя: в списке только разделы, кроме самой позиции и её вложенных.</figcaption></figure>
+  <p class="note"><b>Правила иерархии.</b> Родителем может быть только существующий раздел. Позицию нельзя вложить в неё саму или в её потомка; раздел с вложенными нельзя превратить в рабочую позицию; позицию с задачами нельзя сделать разделом. Эти правила проверяет и сервер.</p>
+  <h3>Шаблоны документов</h3>
+  <p>Шаблоны для кнопки «Документ». У шаблона — название, <b>раздел</b> («Планирование» или «Отчётность») и текст с подстановками. Кнопка в каждом разделе предлагает только свои шаблоны. По умолчанию: «План мероприятий на неделю» — для «Планирования», «Справка об исполнении» — для «Отчётности».</p>
+  <figure><img src="shots/32-admin-templates.png" alt="" /><figcaption><span class="num">Рис.</span>Список шаблонов с разделом.</figcaption></figure>
+  <p>В редакторе слева — текст, справа — предпросмотр: для «Планирования» — на мероприятиях текущей недели, для «Отчётности» — на последнем отправленном отчёте. Список подстановок раскрывается под текстом и меняется вместе с разделом. Шаблон с незакрытым блоком не сохраняется, ошибка видна сразу.</p>
+  <figure><img src="shots/33-admin-template-dialog.png" alt="" /><figcaption><span class="num">Рис.</span>Редактор «Справки об исполнении».</figcaption></figure>
+  <table>
+    <tr><th style="width:36%">Подстановка</th><th>Что означает</th></tr>
+    <tr><td><code>&#123;&#123;отдел&#125;&#125;</code>, <code>&#123;&#123;неделя&#125;&#125;</code>, <code>&#123;&#123;год&#125;&#125;</code>, <code>&#123;&#123;с&#125;&#125;</code>, <code>&#123;&#123;по&#125;&#125;</code></td><td>Отдел и неделя документа.</td></tr>
+    <tr><td><code>&#123;&#123;дата&#125;&#125;</code>, <code>&#123;&#123;составил&#125;&#125;</code>, <code>&#123;&#123;всего&#125;&#125;</code></td><td>Дата формирования, кто сформировал, число мероприятий.</td></tr>
+    <tr><td><code>&#123;&#123;#разделы&#125;&#125;…&#123;&#123;/разделы&#125;&#125;</code></td><td>Повторить текст для каждого раздела; внутри — <code>&#123;&#123;код&#125;&#125;</code>, <code>&#123;&#123;раздел&#125;&#125;</code> и блок <code>&#123;&#123;#позиции&#125;&#125;</code>.</td></tr>
+    <tr><td><code>&#123;&#123;#мероприятия&#125;&#125;…&#123;&#123;/мероприятия&#125;&#125;</code></td><td><code>&#123;&#123;№&#125;&#125;</code>, <code>&#123;&#123;название&#125;&#125;</code>, <code>&#123;&#123;срок&#125;&#125;</code>, <code>&#123;&#123;исполнители&#125;&#125;</code>, <code>&#123;&#123;статус&#125;&#125;</code>, <code>&#123;&#123;документ&#125;&#125;</code>, <code>&#123;&#123;результат&#125;&#125;</code>; в «Планировании» ещё <code>&#123;&#123;категория&#125;&#125;</code>, в «Отчётности» — <code>&#123;&#123;исполнено&#125;&#125;</code> и <code>&#123;&#123;баллы&#125;&#125;</code>.</td></tr>
+    <tr><td><code>&#123;&#123;#сотрудники&#125;&#125;…&#123;&#123;/сотрудники&#125;&#125;</code></td><td>Только «Отчётность»: итоги по исполнителям — <code>&#123;&#123;сотрудник&#125;&#125;</code>, <code>&#123;&#123;фио&#125;&#125;</code>, <code>&#123;&#123;мероприятий&#125;&#125;</code>, <code>&#123;&#123;баллы&#125;&#125;</code>. Там же <code>&#123;&#123;получен&#125;&#125;</code> и общий <code>&#123;&#123;баллы&#125;&#125;</code>.</td></tr>
+    <tr><td><code>&#123;&#123;^разделы&#125;&#125;…&#123;&#123;/разделы&#125;&#125;</code></td><td>Текст, если список пуст.</td></tr>
+  </table>
+</section>
+
+<!-- 17 -->
+<section class="chapter">
+  <div class="chapter-head"><span class="no">17</span><h2>Изменения в версии {{VERSION}}</h2></div>
+  <p class="intro">Сравнение с предыдущей документированной версией 4.0.2 от 19.09.2026 (выпуски 4.0.3–{{VERSION}}).</p>
+  <table>
+    <tr><th style="width:34%">Было в 4.0.2</th><th>Стало в {{VERSION}}</th></tr>
+    <tr><td>Сотрудники и группы заданы в коде</td><td><b>Подразделения</b> — иерархия «организация → управление → отдел → отделение» в «Администрировании»; у пользователя — подразделение. Сотрудники приложения берутся из пользователей базы; в демоданных 40 сотрудников отдела разработки в четырёх отделениях.</td></tr>
+    <tr><td>Словари — только код и название, правка в строке таблицы</td><td>Словари редактируются <b>через форму</b>; у категорий задач и видов отсутствий — <b>цвет</b> (палитра или #RRGGBB), он применяется в Календаре, «Планировании» и «Тетрисе».</td></tr>
+    <tr><td>«Планирование» — матрица под страницей, без выгрузки</td><td>Матрица на высоту окна с закреплёнными шапкой и колонкой, тонкие линии между столбцами, легенда под матрицей, <b>точка отсутствия</b> у фамилии. Кнопки <b>«Выгрузить CSV»</b> и <b>«Документ»</b> — текст по шаблону.</td></tr>
+    <tr><td>«Отчётность» прокручивалась вместе со страницей</td><td>Таблица на высоту окна: закреплены шапка, колонка разделов и итог баллов. Кнопка <b>«Документ»</b> — справка по исполненным мероприятиям отчёта.</td></tr>
+    <tr><td>—</td><td><b>Шаблоны документов</b> в «Администрировании»: раздел шаблона, редактор с предпросмотром и подстановками.</td></tr>
+    <tr><td>«Контроль» — пять колонок</td><td>Шесть колонок по три в ряд: добавлена <b>«В течение квартала»</b>.</td></tr>
+    <tr><td>Новые сообщения в «Переписке» не отмечались</td><td><b>Счётчик непрочитанных</b> у пункта меню и на вкладке браузера, разделитель «Новые сообщения», обновление каждые 15 секунд.</td></tr>
+    <tr><td>События Календаря — заливка цветом категории</td><td>Стиль <b>«Контур с точкой»</b>: рамка и точка в цвет категории; фильтр категорий компактный, в строке заголовка. Линии сетки таблиц менее заметны.</td></tr>
+    <tr><td>Окно задачи: однострочное название, «Позиция плана»</td><td>Название — многострочное поле на всю высоту колонки; поле называется <b>«Раздел планирования»</b>, вкладка администрирования — «Разделы планирования».</td></tr>
+    <tr><td>Скриншоты «Информации» — только тёмные</td><td>Скриншоты переключаются <b>вместе с темой</b>; PDF собирается со светлыми.</td></tr>
+  </table>
+  <p>Подробный список выпусков — в файле <code>CHANGELOG.md</code>.</p>
+  <h3>История версий</h3>
+  <h4>4.0 — 19.09.2026</h4>
+  <table>
+    <tr><th style="width:34%">Было в 3.7.0</th><th>Стало в 4.0</th></tr>
+    <tr><td>Две роли, права заданы в коде</td><td><b>Раздел «Администрирование»</b>: пользователи, три роли (администратор, руководитель, исполнитель) с настраиваемыми разрешениями, словари.</td></tr>
+    <tr><td>Вход только по форме</td><td><b>Способ входа</b>: форма или бесшовный вход через Windows (IIS, Kerberos/NTLM), резервный вход администратора; работа в корпоративной сети без интернета.</td></tr>
+    <tr><td>Позиции плана заданы в коде, код вводился вручную</td><td><b>Иерархия позиций плана</b>: дерево со сворачиванием разделов, выбор родителя, код собирается сам; при переносе раздела вложенные позиции и задачи переезжают вместе с ним.</td></tr>
+    <tr><td>Заголовок страницы и фильтры — в несколько строк</td><td><b>Компактные заголовки</b>: название и пояснение в одну строку, строка фильтров — подпись и значение в одну строку, высота 48 px.</td></tr>
+  </table>
+  <h4>3.7.4 — 18.09.2026</h4>
+  <ul><li>В окнах «Сохранить» и «Отмена» — справа, «Удалить» — слева.</li></ul>
+  <h4>3.7.3 — 18.09.2026</h4>
+  <ul><li>Окно задачи в две колонки, без прокрутки: 662 px вместо 1151.</li></ul>
+  <h4>3.7.2 — 18.09.2026</h4>
+  <ul><li>«Тетрис»: таблица на высоту окна с прокруткой внутри; строка дней сверху и строка «Отсутствуют, %» снизу закреплены.</li></ul>
+  <h4>3.7.1 — 18.09.2026</h4>
+  <ul><li>Логотип приведён к утверждённому образцу.</li></ul>
+  <h4>3.7.0 — 18.09.2026</h4>
+  <table>
+    <tr><th style="width:34%">Было в 3.5.0</th><th>Стало в 3.7.0</th></tr>
+    <tr><td>Системный календарь браузера для дат, серые системные подсказки, системные полосы прокрутки</td><td><b>Своя библиотека компонентов</b> в стиле «Тёплый мел»: календарь даты и времени (ввод с клавиатуры, неделя с понедельника, время с шагом 15 минут), подсказки при наведении и фокусе, поля, кнопки, списки, флажки, окно; полосы прокрутки в цветах темы. Витрина — <code>/kit</code>.</td></tr>
+    <tr><td>Логотип — два наложенных квадрата</td><td><b>Новый логотип</b>: галочка из квадратных блоков; в шапке, на вкладке браузера и в документации. Цвета меняются вместе с темой.</td></tr>
+    <tr><td>Документация — только PDF-файл</td><td><b>Раздел «Информация»</b> — последний в меню: руководство внутри приложения с оглавлением и подсветкой текущей главы, в цветах темы, с кнопкой «Скачать PDF».</td></tr>
+    <tr><td>Демоотдел из 7 человек</td><td><b>40 тестовых сотрудников</b> в четырёх новых группах с отпусками, командировками, больничными, отгулами и учёбой — для проверки «Тетриса» и других разделов на большом отделе.</td></tr>
+    <tr><td>Сводка «Сегодня отсутствуют» перечисляла всех</td><td>Показаны первые трое и «ещё N», полный список — в подсказке.</td></tr>
+  </table>
+  <h4>3.6.1 — 18.09.2026</h4>
+  <ul>
+    <li>«Тетрис»: компактные строки сотрудников — 40 пикселей; полоса отсутствия у верха строки, ромбы сроков — у низа.</li>
+  </ul>
+  <h4>3.6.0 — 18.09.2026</h4>
+  <ul>
+    <li>«Тетрис»: итоговая строка «Отсутствуют, %» по каждому дню, выше 30% — красная ячейка.</li>
+    <li>У графика нет собственной вертикальной прокрутки.</li>
+  </ul>
+  <h4>3.5.0 — 18.09.2026</h4>
+  <table>
+    <tr><th style="width:34%">Было в 3.4.0</th><th>Стало в 3.5.0</th></tr>
+    <tr><td>Над графиком «Тетриса» — крупный заголовок с длинным пояснением, строка фильтров из трёх карточек, четыре крупные цифры сводки и заголовок «График на …»; график начинался примерно на 450 px от верха страницы</td><td><b>Компактная шапка</b>: заголовок, месяц, группа и кнопка «Отсутствие» — в одной строке; сводка — узкой полосой в одну строку; виды отсутствий и легенда — вместе в следующей строке. График начинается на 232 px, на экране 1440×900 все семь сотрудников видны без прокрутки.</td></tr>
+    <tr><td>Показатель «Отпуск в этом месяце» — сумма дней отпуска всех сотрудников (например, 12): не видно, сколько людей отсутствует одновременно</td><td><b>«Пик отпусков»</b> — наибольшая доля сотрудников, одновременно находящихся в отпуске в этом месяце, с числом людей и датами: «14% · 1 из 7 · 14–25.09». Считается по отделу или по выбранной группе.</td></tr>
+    <tr><td>Одновременные отпуска не контролировались</td><td><b>Порог 30%</b>: при превышении — красная цифра, предупреждение над графиком с датами и красные метки дней в шапке графика. Если порог превысят заявки — янтарное предупреждение. У заявки, согласование которой приведёт к превышению, — пометка «в отпуске будет N% отдела».</td></tr>
+    <tr><td>—</td><td>На телефоне сводка — сетка 2×2 без пояснений.</td></tr>
+  </table>
+  <h4>3.4.0 — 18.09.2026</h4>
+  <table>
+    <tr><th style="width:34%">Было в 3.3.2</th><th>Стало в 3.4.0</th></tr>
+    <tr><td>Раздел «Отсутствия», адрес <code>/absences</code></td><td>Раздел называется <b>«Тетрис»</b>, как его называют в отделе: в меню, в заголовке страницы и в этом руководстве. Адрес — <code>/tetris</code>; старые ссылки и закладки на <code>/absences</code> открывают «Тетрис».</td></tr>
+  </table>
+  <p>Остальное не изменилось: блок «Отсутствия» в карточке сотрудника, виды отсутствий, кнопки «Отсутствие» и «Заявка на отсутствие» называются по-прежнему, данные в базе те же.</p>
+  <h4>3.3.2 — 18.09.2026</h4>
+  <table>
+    <tr><th style="width:34%">Было в 3.3.1</th><th>Стало в 3.3.2</th></tr>
+    <tr><td>Обращение к пользователю со строчной буквы: «это вы», «(вы)», «ваши задачи»</td><td>Вежливая форма с прописной: «это Вы» в карточке сотрудника, «(Вы)» у своих сообщений в «Переписке», «Ваши задачи на время отсутствия» в «Отсутствиях».</td></tr>
+  </table>
+  <h4>3.3.1 — 18.09.2026</h4>
+  <table>
+    <tr><th style="width:34%">Было в 3.3.0</th><th>Стало в 3.3.1</th></tr>
+    <tr><td>Категория «Без категории»</td><td>Категория называется <b>«Иное»</b> — в окне задачи, в фильтре категорий Календаря и в подсказках. Цвет прежний.</td></tr>
+    <tr><td>У задачи вне плана вместо поля баллов — текст «Баллы начисляются только за задачи с позицией плана»</td><td>Поле «Баллы за исполнение» <b>остаётся на месте, но пустое и неактивное</b>, рядом пояснение: «Базовый вес позиции указывается только за задачи из основных категорий». Окно не меняет раскладку при выборе позиции плана.</td></tr>
+  </table>
+  <h4>3.3.0 — 18.09.2026</h4>
+  <table>
+    <tr><th style="width:34%">Было в 3.2.1</th><th>Стало в 3.3.0</th></tr>
+    <tr><td>Шапка с разделами уезжала вверх вместе со страницей</td><td><b>Шапка закреплена</b> на всех экранах: при прокрутке разделы, счётчик просрочки и кнопки остаются наверху.</td></tr>
+    <tr><td>Панель структуры в «Сотрудниках» прокручивалась вместе с карточкой</td><td><b>Панель закреплена</b> под шапкой и прокручивается внутри себя, если сотрудников много. Отступ от шапки подстраивается под её высоту (одна или две строки).</td></tr>
+    <tr><td>На телефоне разделы занимали три строки шапки</td><td>Шапка на телефоне компактная — 119 px вместо 263: знак логотипа и кнопки в одной строке, разделы — одной строкой с прокруткой вбок; текущий раздел автоматически попадает в поле зрения.</td></tr>
+  </table>
+  <p>Шапка и панель и раньше были задуманы закреплёнными, но настройка страницы против горизонтальной прокрутки мешала им держаться. Теперь она сделана иначе, и страница по-прежнему не прокручивается вбок.</p>
+  <h4>3.2.1 — 18.09.2026</h4>
+  <table>
+    <tr><th style="width:34%">Было в 3.2.0</th><th>Стало в 3.2.1</th></tr>
+    <tr><td>В графике «Отсутствий» дни имели постоянную ширину 32 px; на широком мониторе справа от графика оставалось пустое место</td><td><b>График занимает всю ширину</b>: дни растягиваются равномерно, на мониторе 1920 px день шириной около 55 px, подписи полос читаются лучше. На узких экранах день не уже 32 px (на телефоне — 30 px), график прокручивается вбок, как раньше.</td></tr>
+  </table>
+  <h4>3.2.0 — 18.09.2026</h4>
+  <table>
+    <tr><th style="width:34%">Было в 3.1.0</th><th>Стало в 3.2.0</th></tr>
+    <tr><td>Матрица «Планирования» показывала столбцы всего отдела или одного сотрудника; при 20 и более сотрудниках её приходилось прокручивать вбок</td><td><b>Фильтр «Группа»</b> в строке фильтров «Планирования» (у руководителя): в матрице остаются столбцы только выбранной группы.</td></tr>
+    <tr><td>В фильтре «Сотрудник» всегда был весь отдел</td><td>При выбранной группе в фильтре «Сотрудник» только её сотрудники, первый пункт — «Вся группа». Сотрудник из другой группы сбрасывается при смене группы.</td></tr>
+  </table>
+  <p>Фильтр «Группа» в «Отсутствиях» и в «Планировании» теперь один и тот же элемент, поэтому группы в обоих разделах совпадают. Исполнитель по-прежнему видит в «Планировании» только свой столбец.</p>
+  <h4>3.1.0 — 18.09.2026</h4>
+  <table>
+    <tr><th style="width:34%">Было в 3.0.1</th><th>Стало в 3.1.0</th></tr>
+    <tr><td>Исполнители в окне задачи — флажки всех сотрудников подряд; при 20–30 сотрудниках окно становилось очень длинным</td><td><b>Новый выбор исполнителей.</b> Выбранные сотрудники видны сверху, у каждого есть крестик «Убрать». Весь отдел — в прокручиваемом списке высотой до 232 px, разбитом по группам.</td></tr>
+    <tr><td>Искать сотрудника приходилось глазами</td><td><b>Поиск</b> по фамилии, имени или должности; «е» и «ё» не различаются. Поиск появляется, если сотрудников больше восьми. Первое нажатие Escape очищает поиск, окно остаётся открытым.</td></tr>
+    <tr><td>Группу назначали по одному человеку</td><td><b>«Выбрать группу» / «снять группу»</b> — одним нажатием для каждой группы отдела. Рядом со списком — счётчик «выбрано N из M».</td></tr>
+    <tr><td>Отсутствие исполнителя было видно только в предупреждении над полем</td><td>Пометка об отсутствии в день срока («отпуск», «больничный», «заявка») стоит <b>прямо у фамилии</b>, в том числе у тех, кого ещё не выбрали.</td></tr>
+  </table>
+  <p>Исполнитель по-прежнему видит список исполнителей задачи только для чтения, без флажков.</p>
+  <h4>3.0.1 — 18.09.2026</h4>
+  <table>
+    <tr><th style="width:34%">Было в 3.0.0</th><th>Стало в 3.0.1</th></tr>
+    <tr><td>Приложение занимало колонку шириной до 1320 px по центру экрана, по бокам — отступы 40 px и пустые поля</td><td><b>Приложение занимает всю ширину окна.</b> Боковые отступы уменьшены: 24 px на компьютере, 20 px на планшете, 14 px на телефоне.</td></tr>
+    <tr><td>На экранах около 1600 px меню в шапке обрезалось: «Календарь» и «Переписка» уходили за край</td><td><b>Все разделы меню видны целиком.</b> Шапка в одну строку — от 1400 px; при нехватке места сокращается подпись под логотипом, а не меню. На более узких экранах меню стоит второй строкой.</td></tr>
+  </table>
+  <h4>3.0.0 — 18.09.2026</h4>
+  <p>Сравнение с версией 2.0.1.</p>
+  <table>
+    <tr><th style="width:34%">Было в 2.0.1</th><th>Стало в 3.0.0</th></tr>
+    <tr><td>Данные хранились в браузере одного компьютера</td><td><b>База данных PostgreSQL на сервере</b>: все сотрудники работают с одними данными; права проверяет сервер; состояние связи — в подвале.</td></tr>
+    <tr><td>Учёта отсутствий не было</td><td><b>Раздел «Отсутствия»</b>: график на месяц, пять видов отсутствий, заявки и согласование, нормы и остатки отпуска и отгулов по каждому сотруднику, блок в карточке сотрудника.</td></tr>
+    <tr><td>Пересечения сроков с отсутствиями не отслеживались</td><td><b>Индикация пересечений</b>: красные ромбы и рамки в графике, список пересечений с отметкой срочности, пометки в «Планировании», «Контроле» и «Календаре», предупреждение в окне задачи и в окне отсутствия.</td></tr>
+    <tr><td>Колонка «Баллы» в матрице «Планирования»</td><td><b>Колонка убрана</b> — матрица шире. Баллы руководитель видит в окне задачи.</td></tr>
+    <tr><td>Исполнитель видел поле баллов в окне задачи</td><td><b>Исполнитель не видит баллы</b> в окнах «Планирования» и «Календаря»; свою статистику с баллами он смотрит в «Моей карточке».</td></tr>
+    <tr><td>—</td><td>Уточнено: баллы начисляются сотруднику, когда исполненная задача попадает в отчёт по кнопке «Направить в отчёт».</td></tr>
+    <tr><td>Разделы в одну строку с логотипом от 1180 px</td><td>С восемью разделами шапка переходит в одну строку только от 1600 px, чтобы меню не обрезалось.</td></tr>
+  </table>
+  <h4>Исправлено в 3.0.0</h4>
+  <ul>
+    <li>Если сервер отклонил изменение, причина остаётся на экране, а данные перечитываются с сервера.</li>
+  </ul>
+  <h4>Совместимость 3.0.0</h4>
+  <p>Данные версий 1 и 2, сохранённые в браузере, читаются в автономном режиме с автоматическим переносом. На сервере база заполняется демоданными при первом входе.</p>
+  <h4>2.0.1 — 18.09.2026</h4>
+  <ul>
+    <li><b>Календарь:</b> текст событий больше не обрезается. Шрифт мельче и легче (название — 10,5 px, время и исполнители — 9,5 px), длинные слова переносятся, текст прижат к верху события.</li>
+    <li>В коротких событиях (меньше 1 ч 15 мин) время начала стоит в одной строке с названием; полный интервал виден в подсказке при наведении.</li>
+    <li>Час в сетке календаря стал выше — 52 px вместо 44, чтобы в часовое событие помещалось четыре строки.</li>
+  </ul>
+  <h4>2.0.0 — 18.09.2026</h4>
+  <p>Сравнение с версией 1.0.0 от 17.09.2026.</p>
+  <table>
+    <tr><th style="width:34%">Было в 1.0.0</th><th>Стало в 2.0</th></tr>
+    <tr><td>Все пользователи с одинаковыми правами</td><td><b>Роли руководителя и исполнителя</b> с разным интерфейсом: исполнитель ведёт исполнение своих задач, не видит отчётность и показатели, не удаляет задачи и не отправляет отчёты. Права проверяются и при сохранении.</td></tr>
+    <tr><td>Одна ячейка матрицы — кнопка только в пустом месте</td><td><b>Несколько мероприятий в ячейке</b>: под добавленными задачами всегда видна кнопка «+ задача».</td></tr>
+    <tr><td>Вес позиции менялся полем в колонке «Баллы» для всей строки</td><td><b>Баллы за исполнение в карточке задачи</b>: поле под отметкой об исполнении, кнопка сброса к базовому весу. Колонка «Баллы» показывает только базовый вес.</td></tr>
+    <tr><td>В календаре не было поиска</td><td><b>Поиск по содержанию</b> со списком найденного и переходом к задаче.</td></tr>
+    <tr><td>Цвет события показывал только состояние</td><td><b>Категории мероприятий</b> с цветами и фильтром; состояние — знаками ✓ и «!».</td></tr>
+    <tr><td>Только светлая тема</td><td><b>Тёмная тема по умолчанию</b> и переключатель тем.</td></tr>
+    <tr><td>Версия нигде не указывалась</td><td><b>Версионность</b>: номер в интерфейсе и документации, файл CHANGELOG.md.</td></tr>
+    <tr><td>Учётные записи только руководителей</td><td>Добавлены исполнители <code>sidorov@example.com</code> и <code>smirnova@example.com</code>; в демоданных — доклады и промежуточный контроль.</td></tr>
+  </table>
+  <p><b>Исправлено в 2.0.0:</b></p>
+  <ul>
+    <li>Окно задачи, открытое только для чтения, теперь получает фокус: <kbd>Esc</kbd> закрывает его, экранный диктор сразу читает содержимое.</li>
+    <li>В поле поиска убран дублирующий крестик браузера.</li>
+  </ul>
+  <p>Данные, сохранённые версией 1.0.0, переносятся автоматически: изменённый вес строки становится баллами её задач, роль пользователя берётся из карточки сотрудника. Повторно входить не требуется.</p>
+  <h4>1.0.0 — 17.09.2026</h4>
+  <p>Перенос приложения с Next.js на Vite: рабочий вход и защита разделов, сохранение данных, единая задача для всех разделов, отчёты по неделям, печать и CSV, адаптивная вёрстка в дизайн-системе «Тёплый мел».</p>
+  <p style="font-size:8pt;color:var(--ink-4);margin-top:14px">Иллюстрация на обложке создана в Higgsfield. Скриншоты сняты автоматически скриптом <code>docs/shoot.mjs</code>.</p>
+</section>
+
+</body>
+</html>

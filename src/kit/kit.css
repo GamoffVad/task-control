@@ -1,0 +1,221 @@
+/* ——— Библиотека компонентов: то, что раньше рисовал браузер ——— */
+
+/* Полосы прокрутки в цветах темы. */
+* { scrollbar-width: thin; scrollbar-color: var(--dash) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--dash); border: 3px solid var(--paper); border-radius: 6px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--ink-4); }
+*::-webkit-scrollbar-corner { background: transparent; }
+
+/* Выделение текста и ручка изменения размера многострочных полей. */
+::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); color: var(--ink); }
+textarea.input::-webkit-resizer { background: linear-gradient(135deg, transparent 50%, var(--dash) 50%, var(--dash) 60%, transparent 60%, transparent 70%, var(--dash) 70%, var(--dash) 80%, transparent 80%); }
+input[type='search']::-webkit-search-cancel-button, input[type='search']::-webkit-search-decoration { -webkit-appearance: none; appearance: none; }
+.field-hint { font-size: 11.5px; color: var(--ink-4); }
+.text-action.ok { color: var(--ok); }
+
+/* Подсказка вместо title. */
+.kit-tip {
+  position: fixed; z-index: 200; max-width: min(360px, calc(100vw - 16px)); transform: translate(-50%, -100%);
+  padding: 5px 9px; border-radius: 2px; background: var(--ink); color: var(--paper);
+  font-size: 12px; line-height: 1.4; pointer-events: none; white-space: pre-line; text-align: left;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25); opacity: 0; transition: opacity 0.12s ease;
+}
+.kit-tip.below { transform: translate(-50%, 0); }
+.kit-tip.show { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .kit-tip { transition: none; } }
+
+/* Поле даты: текст и кнопка календаря внутри рамки поля. */
+.datefield { position: relative; display: flex; align-items: stretch; min-width: 0; }
+.datefield .input { flex: 1 1 auto; min-width: 0; padding-right: 40px; }
+.datefield-btn {
+  position: absolute; right: 1px; top: 1px; bottom: 1px; width: 38px; border: none; border-left: 1px dashed var(--dash);
+  background: transparent; color: var(--ink-3); cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+}
+.datefield-btn:hover, .datefield.open .datefield-btn { color: var(--accent); }
+.datefield-btn:disabled { cursor: not-allowed; opacity: 0.5; }
+
+.datepop {
+  position: absolute; z-index: 70; top: calc(100% + 4px); left: 0; display: flex; gap: 0;
+  background: var(--sheet); border: 1px dashed var(--dash); border-radius: 2px; box-shadow: 0 0 0 4px var(--paper), 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+.datepop-cal { padding: 10px 12px 8px; width: 268px; }
+.datepop-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.datepop-head b { font-size: 13.5px; font-weight: 700; }
+.datepop-head .icon-btn { width: 30px; height: 30px; }
+.datepop-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.datepop-grid .wd { text-align: center; font-size: 10.5px; color: var(--ink-3); padding: 2px 0 4px; text-transform: lowercase; }
+.datepop-grid .wd.we { color: var(--ink-4); }
+.datepop-grid .day {
+  height: 32px; border: 1px solid transparent; border-radius: 2px; background: none; cursor: pointer;
+  font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: var(--ink);
+}
+.datepop-grid .day.we { color: var(--ink-3); }
+.datepop-grid .day.other { color: var(--ink-4); opacity: 0.55; }
+.datepop-grid .day:hover { background: var(--soft); color: var(--accent); }
+.datepop-grid .day.today { border-color: var(--danger); }
+.datepop-grid .day[aria-selected='true'] { background: var(--accent); color: var(--sheet); font-weight: 700; }
+.datepop-grid .day:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.datepop-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 12px; }
+.datepop-time { width: 76px; max-height: 300px; overflow-y: auto; border-left: 1px dashed var(--dash); padding: 6px 4px; display: flex; flex-direction: column; gap: 1px; }
+.datepop-time button { border: none; background: none; border-radius: 2px; padding: 5px 0; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
+.datepop-time button:hover { background: var(--soft); color: var(--accent); }
+.datepop-time button[aria-selected='true'] { background: var(--accent); color: var(--sheet); font-weight: 700; }
+@media (max-width: 559px) {
+  .datepop { position: fixed; left: 8px; right: 8px; top: auto; bottom: 8px; flex-direction: column; }
+  .datepop-cal { width: auto; }
+  .datepop-time { width: auto; max-height: 120px; flex-direction: row; flex-wrap: wrap; border-left: none; border-top: 1px dashed var(--dash); }
+  .datepop-time button { flex: 0 0 64px; padding: 8px 0; }
+  .datepop-grid .day { height: 40px; }
+}
+
+/* Витрина библиотеки. */
+.kit-page section { padding: 18px 0; border-top: 1px dashed var(--dash); }
+.kit-page h2 { font-size: 17px; margin: 0 0 4px; }
+.kit-page .kit-desc { font-size: 12.5px; color: var(--ink-3); margin: 0 0 14px; max-width: 80ch; }
+.kit-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; }
+.kit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px 24px; align-items: start; }
+.kit-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.kit-swatch { font-size: 11.5px; color: var(--ink-3); }
+.kit-swatch i { display: block; height: 36px; border-radius: 2px; border: 1px solid var(--line); margin-bottom: 4px; }
+.kit-swatch code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-2); }
+.modal--wide { width: min(1060px, 100%); }
+
+/* Компактное окно: без прокрутки на экранах от 768 px высотой. */
+.modal-back { padding-top: 3vh; }
+.modal { padding: 16px clamp(16px, 3vw, 24px) 18px; }
+.modal-head { margin-bottom: 10px; }
+.modal h2 { font-size: 19px; }
+.modal .form-stack { gap: 10px; }
+.modal .input { min-height: 38px; padding: 8px 11px; }
+.modal textarea.input { min-height: 56px; }
+.modal .datefield .input { padding-right: 40px; }
+.modal .dd--light .dd-btn { min-height: 38px; }
+.modal .picker-list { max-height: 176px; }
+.modal .picked { min-height: 28px; }
+.modal .done-box { padding: 4px 0 4px 14px; }
+.modal .score-row { margin-top: 4px; }
+
+/* Окно задачи в две колонки: слева содержание и сроки, справа исполнители и исполнение. */
+.task-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px 26px; }
+.task-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+@media (min-width: 900px) {
+  .task-grid { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); }
+  .task-col + .task-col { border-left: 1px dashed var(--dash); padding-left: 26px; }
+}
+
+/* Крестик очистки поиска — зона нажатия 30×30. */
+.search .clear { width: 30px; height: 30px; right: -6px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+/* На сенсорных экранах полосы и строки «Тетриса» крупнее, чтобы попадать пальцем. */
+@media (pointer: coarse) {
+  .tl-bar { height: 30px; }
+  .tl-lane, .tl-who { min-height: 44px; }
+}
+
+/* Действия окна: удаление слева, «Сохранить» и «Отмена» справа; на телефоне удаление — последним. */
+.modal .form-actions { justify-content: flex-end; }
+@media (max-width: 767px) { .modal .form-actions .btn--danger { order: 1; } }
+
+/* Позиции плана: дерево с отступом по уровню и сворачиванием разделов. */
+.plan-tree { display: flex; align-items: center; gap: 6px; padding-left: calc(var(--depth, 0) * 22px); min-height: 28px; }
+.plan-tree-toggle, .plan-tree-spacer { flex: none; width: 24px; height: 24px; }
+.plan-tree-toggle { display: inline-grid; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 2px; background: none; color: var(--ink-3); cursor: pointer; position: relative; }
+.plan-tree-toggle::after { content: ''; position: absolute; inset: -4px; }
+.plan-tree-toggle svg { transition: transform 0.15s ease; }
+.plan-tree-toggle.open svg { transform: rotate(90deg); }
+.plan-tree-toggle:hover { color: var(--accent); border-color: var(--dash); }
+@media (prefers-reduced-motion: reduce) { .plan-tree-toggle svg { transition: none; } }
+.plan-code { min-height: 38px; display: flex; align-items: center; padding: 0 11px; border: 1px dashed var(--dash); border-radius: 2px; color: var(--accent); font-weight: 600; }
+
+/* Строка фильтров под заголовком — компактная, как в «Тетрисе»: подпись и значение в одну строку. */
+@media (min-width: 768px) {
+  .filter-card { display: flex; align-items: center; gap: 10px; padding-block: 6px; min-width: 0; }
+  .filter-card > .caps { margin: 0 !important; flex: none; white-space: nowrap; }
+  .filter-card > :not(.caps) { flex: 1 1 auto; min-width: 0; }
+}
+
+/* На широких экранах ячейки фильтров по ширине содержимого: переключатели не переносятся, поиск не обрезается. */
+@media (min-width: 1024px) {
+  .filters { display: flex; }
+  .filter-card { flex: 1 1 auto; }
+  .filter-card + .filter-card { border-top: none; border-left: 1px dashed var(--dash); }
+  .filter-card .seg { flex-wrap: nowrap; }
+  .filter-card .seg button { white-space: nowrap; }
+  .filter-card .search { min-width: 200px; }
+  .filter-card .stepper { flex-wrap: nowrap; white-space: nowrap; }
+  .filter-card:has(.stepper), .filter-card:has(.seg) { flex: none; }
+}
+
+/* Вкладки администрирования — зона нажатия не меньше 34 px, как у остальных переключателей. */
+.admin-page > .seg button { min-height: 34px; }
+
+/* Категории Календаря в строке заголовка: компактные метки рядом с кнопкой «Новая задача». */
+.page-actions:has(.cat-filter--compact) { align-items: center; }
+.cat-filter--compact { margin: 0; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.cat-filter--compact .cat-toggle { min-height: 28px; padding: 0 8px; gap: 5px; font-size: 11.5px; }
+.cat-filter--compact .cat-toggle i { width: 8px; height: 8px; }
+.cat-filter--compact .text-action { font-size: 11.5px; margin-left: 4px; }
+@media (max-width: 767px) {
+  .cat-filter--compact { justify-content: flex-start; }
+  .cat-filter--compact .cat-toggle { min-height: 34px; }
+}
+
+/* Метка отсутствия у фамилии: «Планирование» и карточка сотрудника. */
+.absent-tag {
+  display: inline-flex; align-items: center; min-height: 20px; padding: 1px 7px; border-radius: 2px;
+  background: var(--danger-bg); color: var(--danger); border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  font-size: 11px; font-weight: 600; letter-spacing: 0; text-transform: none; white-space: nowrap;
+}
+.plan-table th.emp { vertical-align: top; }
+.absent-dot { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--c, var(--danger)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c, var(--danger)) 24%, transparent); vertical-align: 1px; cursor: help; position: relative; }
+.absent-dot::after { content: ''; position: absolute; inset: -8px; }
+.absent-dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.page-title--employee .absent-tag { align-self: center; }
+
+/* «Планирование»: тонкие вертикальные линии между столбцами сотрудников. */
+.plan-table th.emp, .plan-table td.cell, .plan-table tr.section td:not(.sticky-col) { border-right: 1px solid var(--grid-line); }
+
+/* Выбор цвета: палитра и код. */
+.colorfield { display: flex; flex-direction: column; gap: 8px; }
+.colorfield-swatches { display: grid; grid-template-columns: repeat(6, 30px); gap: 6px; }
+.colorfield-swatch { width: 30px; height: 30px; border: 2px solid transparent; border-radius: 2px; color: #fff; display: inline-grid; place-items: center; cursor: pointer; padding: 0; }
+.colorfield-swatch[aria-checked="true"] { border-color: var(--ink); box-shadow: 0 0 0 2px var(--paper) inset; }
+.colorfield-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.colorfield-input { display: flex; align-items: center; gap: 8px; max-width: 200px; }
+.colorfield-preview { flex: none; width: 38px; height: 38px; border-radius: 2px; border: 1px solid var(--dash); }
+.admin-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 2px; vertical-align: -2px; margin-right: 8px; border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent); }
+
+/* Окно задачи: название растягивается на свободную высоту левой колонки — поля документа внизу, над «Удалить». */
+.task-col:first-child .task-title-field { flex: 1 1 auto; }
+.task-title-field textarea.input { flex: 1 1 auto; min-height: 64px; line-height: 1.45; resize: vertical; }
+
+/* «Отчётность»: таблица на высоту окна, как «Планирование» — шапка, колонка разделов и итог закреплены. */
+.report-wrap { overflow: auto; max-height: var(--report-max, none); overscroll-behavior: contain; border-bottom: 1px dashed var(--dash); }
+.report-table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 980px; }
+.report-table th, .report-table td { border-right: 1px solid var(--grid-line); }
+.report-table thead th { position: sticky; top: 0; z-index: 3; background: var(--paper); border-bottom: 1px solid var(--accent); }
+.report-table .sticky-col { position: sticky; left: 0; z-index: 2; background: var(--paper); border-right: 1px dashed var(--dash); min-width: 240px; }
+.report-table thead .sticky-col { z-index: 4; }
+.report-table tfoot td { position: sticky; bottom: 0; z-index: 3; background: var(--paper); border-top: 2px solid var(--accent); }
+.report-table tfoot .sticky-col { z-index: 4; }
+@media print {
+  .report-wrap { max-height: none; overflow: visible; }
+  .report-table thead th, .report-table .sticky-col, .report-table tfoot td { position: static; }
+}
+
+/* Документ по шаблону: предпросмотр текста и редактор шаблона. */
+.doc-preview {
+  margin: 0; max-height: min(52vh, 460px); overflow: auto; padding: 12px 14px;
+  background: var(--sheet); border: 1px dashed var(--dash); border-radius: 2px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 12px; line-height: 1.55; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.template-editor { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px 18px; }
+@media (min-width: 900px) { .template-editor { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.modal textarea.template-body.input, .template-body.input { min-height: 320px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; line-height: 1.5; tab-size: 2; }
+.template-preview { max-height: 360px; min-height: 320px; }
+.template-help summary { cursor: pointer; font-size: 12.5px; color: var(--accent); }
+.template-help dl { display: grid; gap: 4px 14px; grid-template-columns: minmax(0, 1fr); margin: 8px 0 0; font-size: 12px; }
+.template-help dl div { display: grid; grid-template-columns: minmax(180px, 280px) minmax(0, 1fr); gap: 10px; }
+.template-help dt code { font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: var(--ink); }
+.template-help dd { margin: 0; color: var(--ink-3); }

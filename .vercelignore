@@ -1,0 +1,8 @@
+node_modules
+dist
+docs/*
+!docs/manual.html
+!docs/manual.meta.json
+!docs/shots/
+!docs/shots/**
+.vscode
