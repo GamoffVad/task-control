@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTaskEditor } from '../components/taskEditor';
 import { EmployeeFilter } from '../components/ui';
-import { FilterCard, MultiSelect, PageHeader, SearchField, Segmented, Stepper, type MultiOption } from '../kit';
+import { FilterCard, MultiSelect, PageHeader, SearchField, Segmented, Stepper } from '../kit';
 import { Icon } from '../components/Icons';
-import { CATEGORIES, categoryLabel, OTHER_CATEGORY, shortName } from '../lib/data';
+import { CATEGORIES, categoryLabel, shortName } from '../lib/data';
+import { catColor, useCategoryOptions, type CatKey } from '../lib/categories';
 import {
   addDays,
   addMonths,
@@ -23,7 +24,7 @@ import { isManager } from '../lib/permissions';
 import { useStore } from '../lib/store';
 import { useClashes } from '../lib/useClashes';
 import type { Clash } from '../lib/absences';
-import type { CalendarView, Category, Task } from '../lib/types';
+import type { CalendarView, Task } from '../lib/types';
 
 const HOURS = Array.from({ length: LAST_HOUR - FIRST_HOUR }, (_, i) => FIRST_HOUR + i);
 
@@ -34,14 +35,7 @@ const VIEWS: { value: CalendarView; label: string }[] = [
   { value: 'month', label: 'Месяц' },
 ];
 
-type CatKey = Category | 'none';
-const ALL_CATS: CatKey[] = [...CATEGORIES.map((c) => c.key), 'none'];
-const CAT_OPTIONS: MultiOption<CatKey>[] = [
-  ...CATEGORIES.map((c) => ({ value: c.key as CatKey, label: c.label, style: { '--c': `var(--cat-${c.key})` } as CSSProperties })),
-  { value: 'none', label: OTHER_CATEGORY, style: { '--c': 'var(--cat-none)' } as CSSProperties },
-];
-
-const catStyle = (t: Pick<Task, 'category'>) => ({ '--c': `var(--cat-${t.category ?? 'none'})` }) as CSSProperties;
+const catStyle = (t: Pick<Task, 'category'>) => catColor(t.category ?? 'none');
 const stateClass = (t: Task, now: Date) => (t.done ? ' done' : isOverdue(t, now) ? ' overdue' : '');
 
 /** Значок состояния: цвет события занят категорией, поэтому исполнение и просрочка — знаком. */
@@ -69,7 +63,10 @@ export const Calendar = () => {
   // Исполнитель по умолчанию видит свои задачи, но может посмотреть и весь отдел.
   const [employee, setEmployee] = useState<number | null>(manager ? null : (state.user?.employeeId ?? null));
   const [query, setQuery] = useState('');
-  const [cats, setCats] = useState<Set<CatKey>>(() => new Set(ALL_CATS));
+  const { keys: allCats, options: catOptions } = useCategoryOptions();
+  // Снятые категории хранятся отдельно: добавленная в словаре категория сразу показывается.
+  const [hiddenCats, setHiddenCats] = useState<Set<CatKey>>(() => new Set());
+  const cats = useMemo(() => new Set(allCats.filter((k) => !hiddenCats.has(k))), [allCats, hiddenCats]);
   const [now, setNow] = useState(() => new Date());
   const clashes = useClashes();
 
@@ -134,9 +131,9 @@ export const Calendar = () => {
                 variant="light"
                 label="Категории мероприятий"
                 allLabel="все категории"
-                options={CAT_OPTIONS}
-                value={ALL_CATS.filter((k) => cats.has(k))}
-                onChange={(shown) => setCats(new Set(shown))}
+                options={catOptions}
+                value={allCats.filter((k) => cats.has(k))}
+                onChange={(shown) => setHiddenCats(new Set(allCats.filter((k) => !shown.includes(k))))}
               />
             </div>
             <button type="button" className="btn btn--primary" onClick={() => create(nextQuarter())}>
@@ -214,7 +211,7 @@ export const Calendar = () => {
       )}
       <div className="legend" style={{ marginTop: 12 }}>
         {CATEGORIES.map((c) => (
-          <span key={c.key}><i className="cat" style={{ '--c': `var(--cat-${c.key})` } as CSSProperties} />{c.short}</span>
+          <span key={c.key}><i className="cat" style={catColor(c.key)} />{c.short}</span>
         ))}
         <span><i className="cat" style={{ '--c': 'var(--cat-none)' } as CSSProperties} />иное</span>
         <span><span className="state ok">✓</span>исполнено</span>

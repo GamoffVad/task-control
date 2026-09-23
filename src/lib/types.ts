@@ -74,7 +74,11 @@ export type AuthenticationSettings = {
 };
 
 /** Категория мероприятия — определяет цвет в календаре. */
-export type Category = 'reportDept' | 'reportDirectorate' | 'reportAgency' | 'interim';
+/**
+ * Категория мероприятия — код значения справочника «Категории задач» (Администрирование → Словари).
+ * Список живой: см. syncCategories в data.ts. Пустая категория (null) показывается как «Иное».
+ */
+export type Category = string;
 
 export type Employee = {
   id: number;

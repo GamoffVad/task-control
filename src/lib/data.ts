@@ -1,6 +1,6 @@
 import { DEFAULT_USERS } from './access';
 import { DEFAULT_UNIT_OF, DEFAULT_UNITS, MAIN_DEPARTMENT_ID, unitWithDescendants } from './units';
-import type { AbsenceStatus, AbsenceType, Category, Department, Employee, ManagedUser, PlanRow, Role, Unit } from './types';
+import type { AbsenceStatus, AbsenceType, Category, Department, DictionaryEntry, Employee, ManagedUser, PlanRow, Role, Unit } from './types';
 
 // Сотрудники приложения — это пользователи из базы (Администрирование → Пользователи),
 // а группы в фильтрах — отделения основного отдела (Администрирование → Подразделения).
@@ -72,13 +72,33 @@ export const ROLE_LABELS: Record<Role, string> = {
 /** Задачи вне основных категорий: обычная работа, в том числе вне плана. */
 export const OTHER_CATEGORY = 'Иное';
 
-/** Категории мероприятий. Цвет задаётся CSS-переменной --cat-<key> для каждой темы. */
-export const CATEGORIES: { key: Category; label: string; short: string }[] = [
+/** Категории по умолчанию: тот же набор, что и в справочнике новой базы (seed.ts). */
+const DEFAULT_CATEGORIES: { key: Category; label: string; short: string }[] = [
   { key: 'reportDept', label: 'Доклад руководству отдела', short: 'Доклад отдела' },
   { key: 'reportDirectorate', label: 'Доклад руководству управления и службы', short: 'Доклад управления' },
   { key: 'reportAgency', label: 'Доклад руководству ведомства', short: 'Доклад ведомства' },
   { key: 'interim', label: 'Промежуточный контроль', short: 'Промежуточный контроль' },
 ];
+const SHORT_CATEGORY = Object.fromEntries(DEFAULT_CATEGORIES.map((c) => [c.key, c.short]));
+
+/**
+ * Категории мероприятий: значения справочника «Категории задач» из базы.
+ * Список живой — syncCategories обновляет его на месте, как syncStaff обновляет состав сотрудников,
+ * поэтому добавленная в администрировании категория сразу видна в фильтрах и в окне задачи.
+ * Цвет каждой задаётся CSS-переменной --cat-<код> (см. DictionaryColors).
+ */
+export const CATEGORIES: { key: Category; label: string; short: string }[] = [...DEFAULT_CATEGORIES];
+
+let categoriesKey = '';
+export const syncCategories = (dictionaries: DictionaryEntry[]) => {
+  const values = dictionaries.filter((d) => d.dictionary === 'taskCategory');
+  const key = JSON.stringify(values.map((d) => [d.code, d.title]));
+  if (key === categoriesKey) return;
+  categoriesKey = key;
+  // Пустой справочник (старые данные) — остаются категории по умолчанию.
+  const list = values.length ? values.map((d) => ({ key: d.code, label: d.title, short: SHORT_CATEGORY[d.code] ?? d.title })) : DEFAULT_CATEGORIES;
+  CATEGORIES.splice(0, CATEGORIES.length, ...list);
+};
 
 export const categoryLabel = (c: Category | null): string =>
   CATEGORIES.find((x) => x.key === c)?.label ?? OTHER_CATEGORY;

@@ -1,9 +1,10 @@
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useMemo, useState } from 'react';
 import { useTaskEditor } from '../components/taskEditor';
 import { EmployeeFilter } from '../components/ui';
 import { FilterCard, MultiSelect, PageHeader, type MultiOption } from '../kit';
 import { Icon } from '../components/Icons';
-import { absenceType, CATEGORIES, OTHER_CATEGORY, shortName } from '../lib/data';
+import { absenceType, shortName } from '../lib/data';
+import { useCategoryOptions, type CatKey } from '../lib/categories';
 import { defaultDeadlineFor, fmtDate, fmtTime, startOfDay, toDateKey } from '../lib/dates';
 import { bucketize } from '../lib/logic';
 import { controlWordHtml } from '../lib/controlExport';
@@ -12,14 +13,7 @@ import { isManager } from '../lib/permissions';
 import { useStore } from '../lib/store';
 import { useClashes } from '../lib/useClashes';
 import { fmtSpan } from '../lib/absences';
-import type { Category, DeadlineBucket, Task } from '../lib/types';
-
-type CatKey = Category | 'none';
-const ALL_CATS: CatKey[] = [...CATEGORIES.map((c) => c.key), 'none'];
-const CAT_OPTIONS: MultiOption<CatKey>[] = [
-  ...CATEGORIES.map((c) => ({ value: c.key as CatKey, label: c.label, style: { '--c': `var(--cat-${c.key})` } as CSSProperties })),
-  { value: 'none', label: OTHER_CATEGORY, style: { '--c': 'var(--cat-none)' } as CSSProperties },
-];
+import type { DeadlineBucket, Task } from '../lib/types';
 
 type DoneKey = 'done' | 'open';
 const DONE_OPTIONS: MultiOption<DoneKey>[] = [
@@ -57,10 +51,13 @@ export const Control = () => {
   const [chosen, setEmployee] = useState<number | null>(null);
   // Исполнитель контролирует только свои задачи.
   const employee = manager ? chosen : (state.user?.employeeId ?? null);
-  const [cats, setCats] = useState<CatKey[]>(ALL_CATS);
+  const { keys: allCats, options: catOptions } = useCategoryOptions();
+  // Хранятся снятые категории: новая категория из словаря сразу попадает в отбор.
+  const [hiddenCats, setHiddenCats] = useState<CatKey[]>([]);
+  const cats = useMemo(() => allCats.filter((k) => !hiddenCats.includes(k)), [allCats, hiddenCats]);
   const [columns, setColumns] = useState<DeadlineBucket[]>(ALL_COLUMNS);
-  // По умолчанию доска показывает исполненные задачи; «В работе» добавляется отметкой в фильтре.
-  const [done, setDone] = useState<DoneKey[]>(['done']);
+  // По умолчанию доска показывает задачи в работе; исполненные добавляются отметкой в фильтре и видны бледными.
+  const [done, setDone] = useState<DoneKey[]>(['open']);
   const now = new Date();
   const clashes = useClashes();
   // Сводка над доской считается по всем задачам сотрудника, независимо от фильтров.
@@ -76,7 +73,7 @@ export const Control = () => {
   const exportWord = () => {
     const parts = [
       `Сотрудник: ${employee === null ? 'все' : shortName(employee)}`,
-      `категории: ${cats.length === ALL_CATS.length ? 'все' : CAT_OPTIONS.filter((o) => cats.includes(o.value)).map((o) => o.label.toLowerCase()).join(', ')}`,
+      `категории: ${cats.length === allCats.length ? 'все' : catOptions.filter((o) => cats.includes(o.value)).map((o) => o.label.toLowerCase()).join(', ')}`,
       `сроки: ${columns.length === ALL_COLUMNS.length ? 'все' : visible.map((c) => c.title.toLowerCase()).join(', ')}`,
       `исполнение: ${done.length === 2 ? 'исполненные и в работе' : done.includes('done') ? 'исполненные' : 'в работе'}`,
     ];
@@ -97,7 +94,7 @@ export const Control = () => {
     <>
       <PageHeader
         title="Контроль исполнения"
-        subtitle="Задачи по срокам. Фильтры отбирают сотрудника, категории, сроки и исполнение; исполненные показаны бледными."
+        subtitle="Задачи по срокам. Фильтры отбирают сотрудника, категории, сроки и исполнение; исполненные задачи показаны бледными."
         actions={
           <button type="button" className="btn" onClick={exportWord}>
             <Icon.Download size={15} /> Выгрузить в Word
@@ -113,7 +110,7 @@ export const Control = () => {
           )}
         </FilterCard>
         <FilterCard label="Категории">
-          <MultiSelect<CatKey> label="Категории задач" allLabel="все категории" options={CAT_OPTIONS} value={cats} onChange={setCats} />
+          <MultiSelect<CatKey> label="Категории задач" allLabel="все категории" options={catOptions} value={cats} onChange={(shown) => setHiddenCats(allCats.filter((k) => !shown.includes(k)))} />
         </FilterCard>
         <FilterCard label="Сроки">
           <MultiSelect<DeadlineBucket> label="Сроки" allLabel="все сроки" options={COLUMN_OPTIONS} value={columns} onChange={setColumns} />

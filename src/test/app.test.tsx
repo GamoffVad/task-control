@@ -22,14 +22,6 @@ afterAll(() => vi.useRealTimers());
 const loggedIn = (): AppState => ({ ...createSeed(), user: { email: 'user@example.com', employeeId: 1, role: 'administrator' } });
 const executorIn = (): AppState => ({ ...createSeed(), user: { email: 'sidorov@example.com', employeeId: 3, role: 'executor' } });
 
-/** «Контроль» по умолчанию показывает исполненные задачи; для проверок переключаем фильтр на «В работе». */
-const showOpenTasks = async (user: ReturnType<typeof userEvent.setup>) => {
-  await user.click(screen.getByRole('button', { name: /^Исполнение:/ }));
-  await user.click(screen.getByRole('option', { name: 'В работе' }));
-  await user.click(screen.getByRole('option', { name: 'Исполненные' }));
-  await user.keyboard('{Escape}');
-};
-
 const renderAt = (path: string, state: AppState = loggedIn()) =>
   render(
     <StoreProvider initial={state}>
@@ -117,7 +109,6 @@ describe('задачи', () => {
   it('отмечает исполнение только после описания результата', async () => {
     const user = userEvent.setup();
     renderAt('/control');
-    await showOpenTasks(user);
     const overdue = screen.getByRole('region', { name: 'Просроченные' });
     const card = within(overdue).getAllByRole('button').find((b) => b.classList.contains('task-card'))!;
     const title = card.querySelector('.title')!.textContent!;
@@ -251,24 +242,48 @@ describe('переписка', () => {
   });
 });
 
+describe('категории из словаря', () => {
+  const withNewCategory = (): AppState => {
+    const st = loggedIn();
+    st.dictionaries = [...st.dictionaries, { id: 'dict-cat-plan', dictionary: 'taskCategory', code: 'deptPlan', title: 'План отдела', color: '#7A5312' }];
+    return st;
+  };
+
+  it('добавленная в словаре категория появляется в фильтрах и в окне задачи', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderAt('/calendar', withNewCategory());
+    await user.click(screen.getByRole('button', { name: /^Категории мероприятий: все категории/ }));
+    expect(screen.getByRole('option', { name: 'План отдела' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    // В окне задачи — в выпадающем списке категории.
+    await user.click(screen.getByRole('button', { name: /Новая задача/ }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^Категория:/ }));
+    expect(screen.getByRole('option', { name: 'План отдела' })).toBeInTheDocument();
+    unmount();
+
+    renderAt('/control', withNewCategory());
+    await user.click(screen.getByRole('button', { name: /^Категории задач: все категории/ }));
+    expect(screen.getByRole('option', { name: 'План отдела' })).toBeInTheDocument();
+  });
+});
+
 describe('контроль: фильтры и выгрузка', () => {
-  it('по умолчанию на доске исполненные задачи — бледные; «В работе» добавляется отметкой', async () => {
+  it('по умолчанию на доске задачи в работе; исполненные добавляются отметкой и видны бледными', async () => {
     const user = userEvent.setup();
     const { container } = renderAt('/control');
     const cards = () => [...container.querySelectorAll('.task-card')];
     expect(cards().length).toBeGreaterThan(0);
-    expect(cards().every((c) => c.classList.contains('done'))).toBe(true);
-    await user.click(screen.getByRole('button', { name: /^Исполнение: Исполненные$/ }));
-    await user.click(screen.getByRole('option', { name: 'В работе' }));
+    expect(cards().some((c) => c.classList.contains('done'))).toBe(false);
+    await user.click(screen.getByRole('button', { name: /^Исполнение: В работе$/ }));
+    await user.click(screen.getByRole('option', { name: 'Исполненные' }));
     await user.keyboard('{Escape}');
-    expect(cards().some((c) => !c.classList.contains('done'))).toBe(true);
     expect(cards().some((c) => c.classList.contains('done'))).toBe(true);
+    expect(cards().some((c) => !c.classList.contains('done'))).toBe(true);
   });
 
   it('фильтры категорий и сроков убирают карточки и колонки', async () => {
     const user = userEvent.setup();
     const { container } = renderAt('/control');
-    await showOpenTasks(user);
     const cards = () => container.querySelectorAll('.task-card').length;
     const all = cards();
     await user.click(screen.getByRole('button', { name: /^Категории задач: все категории/ }));
@@ -307,7 +322,6 @@ describe('выпадающий список', () => {
   it('фильтрует доску по сотруднику и закрывается по Escape', async () => {
     const user = userEvent.setup();
     renderAt('/control');
-    await showOpenTasks(user);
     await user.click(screen.getByRole('button', { name: /^Сотрудник: Все сотрудники/ }));
     expect(screen.getByRole('listbox')).toBeInTheDocument();
     await user.keyboard('{Escape}');
@@ -468,7 +482,6 @@ describe('исполнитель', () => {
   it('в своей задаче меняет только исполнение, баллы не редактирует', async () => {
     const user = userEvent.setup();
     renderAt('/control', executorIn());
-    await showOpenTasks(user);
     await user.click(screen.getByRole('button', { name: /Проверить резервные копии/ }));
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByRole('note')).toHaveTextContent('Содержание и сроки задачи определяет руководитель');
@@ -790,7 +803,6 @@ describe('отсутствия', () => {
   it('помечает задачу, срок которой приходится на отсутствие', async () => {
     const user = userEvent.setup();
     renderAt('/control');
-    await showOpenTasks(user);
     expect(screen.getAllByText(/Петров В\.С\. отсутствует: отпуск/).length).toBeGreaterThan(0);
     await user.click(screen.getAllByRole('button', { name: /Согласовать бюджет/ })[0]);
     expect(within(screen.getByRole('dialog')).getByText('Срок приходится на отсутствие исполнителя.')).toBeInTheDocument();

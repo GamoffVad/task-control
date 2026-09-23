@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react';
-import { CATEGORIES, employees, OTHER_CATEGORY, shortName } from '../lib/data';
+import { employees, shortName } from '../lib/data';
+import { useCategorySelectOptions } from '../lib/categories';
 import { fmtNum, fromInputDateTime, toInputDateTime } from '../lib/dates';
 import { baseScore, MAX_SCORE, MIN_SCORE, validateTask, type TaskDraft, type TaskErrors } from '../lib/logic';
 import { taskAccess } from '../lib/permissions';
@@ -46,11 +47,6 @@ export const TaskEditorProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-const categoryOptions: { value: Category | ''; label: string }[] = [
-  { value: '', label: OTHER_CATEGORY },
-  ...CATEGORIES.map((c) => ({ value: c.key, label: c.label })),
-];
-
 const parseScore = (text: string): number | null => {
   const n = parseFloat(text.replace(',', '.'));
   return Number.isFinite(n) ? n : Number.NaN;
@@ -58,6 +54,7 @@ const parseScore = (text: string): number | null => {
 
 const TaskModal = ({ task, defaults, context, onClose }: OpenArgs & { onClose: () => void }) => {
   const { state, dispatch } = useStore();
+  const categoryOptions = useCategorySelectOptions();
   const user = state.user;
   const access = taskAccess(user, task ?? null);
   const [draft, setDraft] = useState<TaskDraft>(() => (task ? { ...task } : emptyDraft(user, defaults)));
@@ -216,7 +213,7 @@ const TaskModal = ({ task, defaults, context, onClose }: OpenArgs & { onClose: (
                 <div className="field">
                   <span className="caps">Категория</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span aria-hidden style={{ width: 10, height: 10, flex: 'none', borderRadius: 1, background: `var(--cat-${draft.category ?? 'none'})` }} />
+                    <span aria-hidden style={{ width: 10, height: 10, flex: 'none', borderRadius: 1, background: `var(--cat-${draft.category ?? 'none'}, var(--cat-none))` }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <Select<Category | ''>
                         variant="light"

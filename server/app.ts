@@ -10,11 +10,11 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { validateAbsence, type AbsenceDraft } from '../src/lib/absences';
 import { authenticate } from '../src/lib/auth';
 import { DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_USERS, effectiveUser, hasPermission, sessionUser } from '../src/lib/access';
-import { CATEGORIES, employeeById, planRows, syncStaff } from '../src/lib/data';
+import { CATEGORIES, employeeById, planRows, syncCategories, syncStaff } from '../src/lib/data';
 import { DEFAULT_UNITS } from '../src/lib/units';
 import { validateTask, type TaskDraft } from '../src/lib/logic';
 import { fromData, PERSISTED, reducer, toData, type Action } from '../src/lib/reducer';
-import { createSeed } from '../src/lib/seed';
+import { createSeed, DEFAULT_DICTIONARIES } from '../src/lib/seed';
 import type { Data, DictionaryKind, Entitlement, ManagedUser, Permission, Role, UnitKind, User } from '../src/lib/types';
 import { signToken, verifyToken } from './auth';
 import type { Repo } from './repo';
@@ -336,6 +336,7 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
     const data = (await repo.read()) ?? await repo.update((cur) => cur ?? toData(createSeed(now())));
     // Проверки сотрудников (исполнители, отсутствия, нормы) — по актуальному составу из базы.
     syncStaff(data.users ?? DEFAULT_USERS, data.units ?? DEFAULT_UNITS);
+    syncCategories(data.dictionaries ?? DEFAULT_DICTIONARIES);
     return normalizeData(data);
   };
 

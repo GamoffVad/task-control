@@ -1381,7 +1381,8 @@ a.label:hover { color: var(--accent); }
 }
 
 /* «Контроль»: исполненные задачи — бледные и полупрозрачные; фильтры-списки в строке фильтров. */
-.task-card.done { opacity: 0.55; border-style: dashed; }
+/* Ширину рамки задаём явно: у карточки border: none, и один border-style дал бы рамку по умолчанию в 3 px. */
+.task-card.done { opacity: 0.55; border: 1px dashed var(--dash); border-left: 1px dashed var(--accent); border-radius: 2px; }
 .task-card.done .title { color: var(--ink-3); font-weight: 600; }
 .task-card.done .row, .task-card.done .meta { color: var(--ink-4); }
 .task-card.done:hover { opacity: 0.8; }

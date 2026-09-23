@@ -238,7 +238,7 @@ const TaskChip = ({ task, now, clash, onOpen }: { task: Task; now: Date; clash?:
   return (
     <button type="button" className={`chip${cls}`} onClick={onOpen}>
       {task.category && (
-        <i className="cat-dot" style={{ background: `var(--cat-${task.category})` }} data-tip={categoryLabel(task.category)} aria-label={categoryLabel(task.category)} />
+        <i className="cat-dot" style={{ background: `var(--cat-${task.category}, var(--cat-none))` }} data-tip={categoryLabel(task.category)} aria-label={categoryLabel(task.category)} />
       )}
       {task.title}
       <span className="meta">

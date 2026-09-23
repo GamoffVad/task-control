@@ -6,7 +6,7 @@ import { DEFAULT_DICTIONARIES } from './seed';
 import { DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_USERS } from './access';
 import { loadState, saveState, StoreContext, type Sync } from './store';
 import type { AppState, DirectoryUser, User } from './types';
-import { planRows, syncStaff } from './data';
+import { planRows, syncCategories, syncStaff } from './data';
 import { searchDemoDirectory } from './staff';
 import { DEFAULT_UNITS } from './units';
 import { DEFAULT_TEMPLATES } from './templates';
@@ -39,6 +39,7 @@ const LocalStore = ({ children, initial }: { children: ReactNode; initial?: AppS
   const sync: Sync = useMemo(() => ({ mode: 'local', loading: false, saving: false, syncedAt: null, error: null }), []);
   // Состав сотрудников и отделений — из пользователей и подразделений (до отрисовки экранов).
   syncStaff(state.users, state.units);
+  syncCategories(state.dictionaries);
   const value = useMemo(() => ({ state, dispatch, signIn, signInWindows, windowsAuthAvailable: false, authenticationReady: true, directoryAvailable: true, searchDirectory, sync, reload: () => undefined, fetchNotices: null }), [state, signIn, signInWindows, searchDirectory, sync]);
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 };
@@ -177,6 +178,7 @@ const RemoteStore = ({ children }: { children: ReactNode }) => {
   }, []);
 
   syncStaff(state.users, state.units);
+  syncCategories(state.dictionaries);
   const value = useMemo(() => ({ state, dispatch, signIn, signInWindows, windowsAuthAvailable, authenticationReady, directoryAvailable, searchDirectory, sync, reload: () => void load(), fetchNotices }), [state, dispatch, signIn, signInWindows, windowsAuthAvailable, authenticationReady, directoryAvailable, searchDirectory, sync, load, fetchNotices]);
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 };
