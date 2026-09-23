@@ -55,10 +55,11 @@ export const bucketize = (
   tasks: Task[],
   employeeId: number | null,
   now: Date = new Date(),
+  opts: { includeDone?: boolean } = {},
 ): Record<DeadlineBucket, Task[]> => {
   const out: Record<DeadlineBucket, Task[]> = { overdue: [], today: [], week: [], nextWeek: [], month: [], quarter: [], later: [] };
   for (const t of tasks) {
-    if (t.done) continue;
+    if (t.done && !opts.includeDone) continue;
     if (employeeId !== null && !t.assigneeIds.includes(employeeId)) continue;
     out[deadlineBucket(taskEnd(t), now)].push(t);
   }

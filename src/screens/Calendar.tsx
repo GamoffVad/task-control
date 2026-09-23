@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTaskEditor } from '../components/taskEditor';
 import { EmployeeFilter } from '../components/ui';
-import { FilterCard, PageHeader, SearchField, Segmented, Stepper } from '../kit';
+import { FilterCard, MultiSelect, PageHeader, SearchField, Segmented, Stepper, type MultiOption } from '../kit';
 import { Icon } from '../components/Icons';
 import { CATEGORIES, categoryLabel, OTHER_CATEGORY, shortName } from '../lib/data';
 import {
@@ -36,6 +36,10 @@ const VIEWS: { value: CalendarView; label: string }[] = [
 
 type CatKey = Category | 'none';
 const ALL_CATS: CatKey[] = [...CATEGORIES.map((c) => c.key), 'none'];
+const CAT_OPTIONS: MultiOption<CatKey>[] = [
+  ...CATEGORIES.map((c) => ({ value: c.key as CatKey, label: c.label, style: { '--c': `var(--cat-${c.key})` } as CSSProperties })),
+  { value: 'none', label: OTHER_CATEGORY, style: { '--c': 'var(--cat-none)' } as CSSProperties },
+];
 
 const catStyle = (t: Pick<Task, 'category'>) => ({ '--c': `var(--cat-${t.category ?? 'none'})` }) as CSSProperties;
 const stateClass = (t: Task, now: Date) => (t.done ? ' done' : isOverdue(t, now) ? ' overdue' : '');
@@ -111,15 +115,6 @@ export const Calendar = () => {
       },
     });
 
-  const toggleCat = (c: CatKey) =>
-    setCats((prev) => {
-      const next = new Set(prev);
-      if (next.has(c)) next.delete(c);
-      else next.add(c);
-      return next;
-    });
-
-  const onlyCat = (c: CatKey) => setCats((prev) => (prev.size === 1 && prev.has(c) ? new Set(ALL_CATS) : new Set([c])));
 
   const goTo = (t: Task) => {
     setCursor(startOfDay(new Date(t.start)));
@@ -133,40 +128,16 @@ export const Calendar = () => {
         subtitle="Задачи отдела во времени. Свободное время — новая задача, задача — открыть."
         actions={
           <>
-            {/* Категории — компактно, рядом с кнопкой: больше высоты остаётся календарю. */}
-            <div className="cat-filter cat-filter--compact" role="group" aria-label="Категории мероприятий">
-              {CATEGORIES.map((c) => (
-                <button
-                  key={c.key}
-                  type="button"
-                  className="cat-toggle"
-                  style={{ '--c': `var(--cat-${c.key})` } as CSSProperties}
-                  aria-pressed={cats.has(c.key)}
-                  onClick={() => toggleCat(c.key)}
-                  onDoubleClick={() => onlyCat(c.key)}
-                  data-tip={`${c.label}. Нажмите, чтобы скрыть или показать; двойной щелчок — только эта категория.`}
-                >
-                  <i aria-hidden />
-                  {c.short}
-                </button>
-              ))}
-              <button
-                type="button"
-                className="cat-toggle"
-                style={{ '--c': 'var(--cat-none)' } as CSSProperties}
-                aria-pressed={cats.has('none')}
-                onClick={() => toggleCat('none')}
-                onDoubleClick={() => onlyCat('none')}
-                data-tip="Задачи без основной категории. Нажмите, чтобы скрыть или показать; двойной щелчок — только эта категория."
-              >
-                <i aria-hidden />
-                {OTHER_CATEGORY}
-              </button>
-              {cats.size < ALL_CATS.length && (
-                <button type="button" className="text-action" onClick={() => setCats(new Set(ALL_CATS))}>
-                  показать все
-                </button>
-              )}
+            {/* Категории — выпадающий список с отметками рядом с кнопкой: больше высоты остаётся календарю. */}
+            <div className="cat-filter-dd">
+              <MultiSelect<CatKey>
+                variant="light"
+                label="Категории мероприятий"
+                allLabel="все категории"
+                options={CAT_OPTIONS}
+                value={ALL_CATS.filter((k) => cats.has(k))}
+                onChange={(shown) => setCats(new Set(shown))}
+              />
             </div>
             <button type="button" className="btn btn--primary" onClick={() => create(nextQuarter())}>
               <Icon.Plus size={15} /> Новая задача

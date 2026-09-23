@@ -113,9 +113,6 @@ export const Planning = () => {
         actions={
           <>
             {/* Выгрузка перечня мероприятий недели и документ по шаблону — по выбранным сотрудникам. */}
-            <button type="button" className="btn" onClick={exportCsv} disabled={items.length === 0}>
-              <Icon.Download size={15} /> Выгрузить CSV
-            </button>
             <button type="button" className="btn" onClick={() => setDocOpen(true)}>
               Документ
             </button>

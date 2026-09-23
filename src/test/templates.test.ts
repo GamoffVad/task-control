@@ -3,12 +3,38 @@ import { planDocContext, planItems, planToCsv } from '../lib/planExport';
 import { createSeed } from '../lib/seed';
 import { DEFAULT_TEMPLATES, parseTemplate, renderTemplate, templateScope } from '../lib/templates';
 import { reportDocContext } from '../lib/reportExport';
+import { controlWordHtml } from '../lib/controlExport';
+import { bucketize } from '../lib/logic';
 import type { Report } from '../lib/types';
 import { planWeekStart } from '../lib/dates';
 
 vi.mock('../lib/staff', async (original) => ({ ...(await original<typeof import('../lib/staff')>()), STAFF_USERS: [] }));
 
 const NOW = new Date(2026, 8, 17, 12, 0);
+
+describe('выгрузка «Контроля» в Word', () => {
+  it('раздел на колонку, таблица с задачами и строка условий отбора', () => {
+    const state = createSeed(NOW);
+    const buckets = bucketize(state.tasks, null, NOW, { includeDone: true });
+    const html = controlWordHtml(
+      [
+        { key: 'overdue', title: 'Просроченные', tasks: buckets.overdue },
+        { key: 'today', title: 'Сегодня', tasks: [] },
+      ],
+      state.planRows,
+      'Сотрудник: все; категории: все',
+      NOW,
+    );
+    expect(html).toContain('<h1>Контроль исполнения</h1>');
+    expect(html).toContain('Сотрудник: все; категории: все');
+    expect(html).toContain(`<h2>Просроченные — ${buckets.overdue.length}</h2>`);
+    // Пустые колонки в документ не попадают.
+    expect(html).not.toContain('Сегодня —');
+    expect(html).toContain('<th>Раздел планирования</th>');
+    expect(html).toContain('просрочено на');
+    expect(html).toContain(state.tasks.find((t) => buckets.overdue.includes(t))!.title);
+  });
+});
 
 describe('документ отчётности', () => {
   it('объединяет исполнителей задачи, считает баллы и срок исполнения', () => {

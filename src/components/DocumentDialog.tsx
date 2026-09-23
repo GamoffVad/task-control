@@ -1,18 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Button, Dialog, Select } from '../kit';
 import { saveFile } from '../lib/download';
+import { wordDocument, wordParagraphs } from '../lib/wordDoc';
 import { renderTemplate, type TemplateContext } from '../lib/templates';
 import type { DocumentTemplate } from '../lib/types';
 import { Icon } from './Icons';
-
-const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-/** Документ для Word: строки текста — абзацы, отступы сохраняются. */
-const toWordHtml = (title: string, text: string) =>
-  `<html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head><body style="font-family:'Times New Roman',serif;font-size:14pt">${text
-    .split('\n')
-    .map((line) => `<p style="margin:0;white-space:pre-wrap">${escapeHtml(line) || '&nbsp;'}</p>`)
-    .join('')}</body></html>`;
 
 /**
  * Структурированный текстовый документ по шаблону: предпросмотр, копирование, .doc и .txt.
@@ -46,7 +38,7 @@ export const DocumentDialog = ({ templates, context, fileBase, source, onCsv, on
         {result.error ? <p className="field-error" role="alert">{result.error}</p> : <pre className="doc-preview" aria-label="Текст документа">{result.text}</pre>}
         <div className="form-actions">
           <span className="spacer" />
-          <Button variant="primary" icon={<Icon.Save size={15} />} disabled={!!result.error} onClick={() => saveFile(`${fileBase}.doc`, toWordHtml(template?.name ?? '', result.text), 'application/msword')}>
+          <Button variant="primary" icon={<Icon.Save size={15} />} disabled={!!result.error} onClick={() => saveFile(`${fileBase}.doc`, wordDocument(template?.name ?? 'Документ', wordParagraphs(result.text)), 'application/msword')}>
             Скачать .doc
           </Button>
           <Button icon={<Icon.Download size={15} />} data-tip="Простой текст без оформления — для вставки в СЭД, почту или мессенджер" disabled={!!result.error} onClick={() => saveFile(`${fileBase}.txt`, '﻿' + result.text.replace(/\n/g, '\r\n'), 'text/plain;charset=utf-8')}>

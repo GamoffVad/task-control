@@ -1,16 +1,31 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import { useTaskEditor } from '../components/taskEditor';
 import { EmployeeFilter } from '../components/ui';
-import { FilterCard, PageHeader } from '../kit';
+import { FilterCard, MultiSelect, PageHeader, type MultiOption } from '../kit';
 import { Icon } from '../components/Icons';
-import { absenceType, shortName } from '../lib/data';
-import { defaultDeadlineFor, fmtDate, fmtTime, startOfDay } from '../lib/dates';
+import { absenceType, CATEGORIES, OTHER_CATEGORY, shortName } from '../lib/data';
+import { defaultDeadlineFor, fmtDate, fmtTime, startOfDay, toDateKey } from '../lib/dates';
 import { bucketize } from '../lib/logic';
+import { controlWordHtml } from '../lib/controlExport';
+import { saveFile } from '../lib/download';
 import { isManager } from '../lib/permissions';
 import { useStore } from '../lib/store';
 import { useClashes } from '../lib/useClashes';
 import { fmtSpan } from '../lib/absences';
-import type { DeadlineBucket, Task } from '../lib/types';
+import type { Category, DeadlineBucket, Task } from '../lib/types';
+
+type CatKey = Category | 'none';
+const ALL_CATS: CatKey[] = [...CATEGORIES.map((c) => c.key), 'none'];
+const CAT_OPTIONS: MultiOption<CatKey>[] = [
+  ...CATEGORIES.map((c) => ({ value: c.key as CatKey, label: c.label, style: { '--c': `var(--cat-${c.key})` } as CSSProperties })),
+  { value: 'none', label: OTHER_CATEGORY, style: { '--c': 'var(--cat-none)' } as CSSProperties },
+];
+
+type DoneKey = 'done' | 'open';
+const DONE_OPTIONS: MultiOption<DoneKey>[] = [
+  { value: 'done', label: 'Исполненные' },
+  { value: 'open', label: 'В работе' },
+];
 
 const COLUMNS: { key: DeadlineBucket; title: string; canAdd: boolean }[] = [
   { key: 'overdue', title: 'Просроченные', canAdd: false },
@@ -20,6 +35,8 @@ const COLUMNS: { key: DeadlineBucket; title: string; canAdd: boolean }[] = [
   { key: 'month', title: 'В течение месяца', canAdd: true },
   { key: 'quarter', title: 'В течение квартала', canAdd: true },
 ];
+const COLUMN_OPTIONS: MultiOption<DeadlineBucket>[] = COLUMNS.map((c) => ({ value: c.key, label: c.title }));
+const ALL_COLUMNS = COLUMNS.map((c) => c.key);
 
 const EMPTY: Record<DeadlineBucket, string> = {
   overdue: 'Просроченных задач нет',
@@ -40,10 +57,32 @@ export const Control = () => {
   const [chosen, setEmployee] = useState<number | null>(null);
   // Исполнитель контролирует только свои задачи.
   const employee = manager ? chosen : (state.user?.employeeId ?? null);
+  const [cats, setCats] = useState<CatKey[]>(ALL_CATS);
+  const [columns, setColumns] = useState<DeadlineBucket[]>(ALL_COLUMNS);
+  // По умолчанию доска показывает исполненные задачи; «В работе» добавляется отметкой в фильтре.
+  const [done, setDone] = useState<DoneKey[]>(['done']);
   const now = new Date();
   const clashes = useClashes();
-  const buckets = useMemo(() => bucketize(state.tasks, employee), [state.tasks, employee]);
-  const open = Object.values(buckets).reduce((s, l) => s + l.length, 0);
+  // Сводка над доской считается по всем задачам сотрудника, независимо от фильтров.
+  const all = useMemo(() => bucketize(state.tasks, employee), [state.tasks, employee]);
+  const shown = useMemo(() => {
+    const catSet = new Set(cats);
+    const tasks = state.tasks.filter((t) => catSet.has((t.category ?? 'none') as CatKey) && (t.done ? done.includes('done') : done.includes('open')));
+    return bucketize(tasks, employee, new Date(), { includeDone: true });
+  }, [state.tasks, employee, cats, done]);
+  const open = Object.values(all).reduce((s, l) => s + l.length, 0);
+  const visible = COLUMNS.filter((c) => columns.includes(c.key));
+
+  const exportWord = () => {
+    const parts = [
+      `Сотрудник: ${employee === null ? 'все' : shortName(employee)}`,
+      `категории: ${cats.length === ALL_CATS.length ? 'все' : CAT_OPTIONS.filter((o) => cats.includes(o.value)).map((o) => o.label.toLowerCase()).join(', ')}`,
+      `сроки: ${columns.length === ALL_COLUMNS.length ? 'все' : visible.map((c) => c.title.toLowerCase()).join(', ')}`,
+      `исполнение: ${done.length === 2 ? 'исполненные и в работе' : done.includes('done') ? 'исполненные' : 'в работе'}`,
+    ];
+    const html = controlWordHtml(visible.map((c) => ({ key: c.key, title: c.title, tasks: shown[c.key] })), state.planRows, parts.join('; '), now);
+    saveFile(`kontrol-${toDateKey(now)}.doc`, html, 'application/msword');
+  };
 
   const add = (bucket: DeadlineBucket) => {
     const end = defaultDeadlineFor(bucket);
@@ -58,7 +97,12 @@ export const Control = () => {
     <>
       <PageHeader
         title="Контроль исполнения"
-        subtitle="Неисполненные задачи, распределённые по срокам. Исполненные задачи сюда не попадают."
+        subtitle="Задачи по срокам. Фильтры отбирают сотрудника, категории, сроки и исполнение; исполненные показаны бледными."
+        actions={
+          <button type="button" className="btn" onClick={exportWord}>
+            <Icon.Download size={15} /> Выгрузить в Word
+          </button>
+        }
       />
       <div className="filters">
         <FilterCard label="Сотрудник">
@@ -68,22 +112,31 @@ export const Control = () => {
             <div style={{ minHeight: 34, display: 'flex', alignItems: 'center', fontSize: 15, fontWeight: 700 }}>{shortName(employee)}</div>
           )}
         </FilterCard>
+        <FilterCard label="Категории">
+          <MultiSelect<CatKey> label="Категории задач" allLabel="все категории" options={CAT_OPTIONS} value={cats} onChange={setCats} />
+        </FilterCard>
+        <FilterCard label="Сроки">
+          <MultiSelect<DeadlineBucket> label="Сроки" allLabel="все сроки" options={COLUMN_OPTIONS} value={columns} onChange={setColumns} />
+        </FilterCard>
+        <FilterCard label="Исполнение">
+          <MultiSelect<DoneKey> label="Исполнение" allLabel="исполненные и в работе" options={DONE_OPTIONS} value={done} onChange={setDone} />
+        </FilterCard>
         <FilterCard label="В работе">
           <div className="num" style={{ fontSize: 15, fontWeight: 700, minHeight: 34, display: 'flex', alignItems: 'center' }}>{open}</div>
         </FilterCard>
         <FilterCard label="Просрочено">
-          <div className={`num${buckets.overdue.length ? ' danger' : ''}`} style={{ fontSize: 15, fontWeight: 700, minHeight: 34, display: 'flex', alignItems: 'center' }}>
-            {buckets.overdue.length}
+          <div className={`num${all.overdue.length ? ' danger' : ''}`} style={{ fontSize: 15, fontWeight: 700, minHeight: 34, display: 'flex', alignItems: 'center' }}>
+            {all.overdue.length}
           </div>
         </FilterCard>
         <FilterCard label="Позже квартала">
-          <div className="num" style={{ fontSize: 15, fontWeight: 700, minHeight: 34, display: 'flex', alignItems: 'center' }}>{buckets.later.length}</div>
+          <div className="num" style={{ fontSize: 15, fontWeight: 700, minHeight: 34, display: 'flex', alignItems: 'center' }}>{all.later.length}</div>
         </FilterCard>
       </div>
 
       <div className="board">
-        {COLUMNS.map((col) => {
-          const list = buckets[col.key];
+        {visible.map((col) => {
+          const list = shown[col.key];
           return (
             <section key={col.key} className={`column column--${col.key}`} aria-label={col.title}>
               <div className="column-head">
@@ -99,19 +152,20 @@ export const Control = () => {
               {list.length === 0 && <p className="empty">{EMPTY[col.key]}</p>}
               {list.map((t) => {
                 const row = t.rowId ? state.planRows.find((item) => item.id === t.rowId) : null;
-                const late = col.key === 'overdue' ? daysLate(t, now) : 0;
+                const late = col.key === 'overdue' && !t.done ? daysLate(t, now) : 0;
                 return (
-                  <button key={t.id} type="button" className={`task-card${col.key === 'overdue' ? ' overdue' : ''}`} onClick={() => openTask({ task: t })}>
-                    <div className="title">{t.title}</div>
+                  <button key={t.id} type="button" className={`task-card${col.key === 'overdue' && !t.done ? ' overdue' : ''}${t.done ? ' done' : ''}`} onClick={() => openTask({ task: t })}>
+                    <div className="title">{t.done && <span className="state ok" aria-label="исполнено">✓ </span>}{t.title}</div>
                     <div className="row">{row ? `${row.id} ${row.title}` : 'Вне плана'}</div>
-                    {clashes
-                      .filter((c) => c.task.id === t.id)
-                      .map((c) => (
-                        <div key={c.employeeId} className="row absent-mark">
-                          {shortName(c.employeeId)} отсутствует: {absenceType(c.absence.type).label.toLowerCase()} {fmtSpan(c.absence)}
-                          {c.absence.status === 'request' && ' (заявка)'}
-                        </div>
-                      ))}
+                    {!t.done &&
+                      clashes
+                        .filter((c) => c.task.id === t.id)
+                        .map((c) => (
+                          <div key={c.employeeId} className="row absent-mark">
+                            {shortName(c.employeeId)} отсутствует: {absenceType(c.absence.type).label.toLowerCase()} {fmtSpan(c.absence)}
+                            {c.absence.status === 'request' && ' (заявка)'}
+                          </div>
+                        ))}
                     <div className="meta">
                       <span>{t.assigneeIds.map(shortName).join(', ') || '—'}</span>
                       <span className="num">
@@ -126,9 +180,9 @@ export const Control = () => {
           );
         })}
       </div>
-      {buckets.later.length > 0 && (
+      {all.later.length > 0 && (
         <p className="help-note" style={{ marginTop: 16 }}>
-          Задач со сроком дальше квартала: <span className="num">{buckets.later.length}</span>. Они появятся на доске, когда срок приблизится, а пока видны в Календаре.
+          Задач со сроком дальше квартала: <span className="num">{all.later.length}</span>. Они появятся на доске, когда срок приблизится, а пока видны в Календаре.
         </p>
       )}
     </>
