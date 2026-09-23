@@ -355,6 +355,8 @@ h2 { font-size: 16px; font-weight: 700; margin: 0; color: var(--ink); }
   grid-template-columns: 1fr;
   border-top: 1px dashed var(--dash);
   border-bottom: 1px dashed var(--dash);
+  /* Небольшой отступ под строкой фильтров: содержимое не прилипает к пунктирной линии. */
+  margin-bottom: 10px;
 }
 .filter-card { padding: 10px 0; min-width: 0; }
 .filter-card + .filter-card { border-top: 1px dashed var(--dash); }
