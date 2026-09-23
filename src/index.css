@@ -1389,6 +1389,4 @@ a.label:hover { color: var(--accent); }
 .task-card.done .row, .task-card.done .meta { color: var(--ink-4); }
 .task-card.done:hover { opacity: 0.8; }
 .filters .dd--plain .dd-btn { font-size: 15px; }
-/* Календарь: фильтр категорий — выпадающий список рядом с кнопкой «Новая задача». */
-.cat-filter-dd { min-width: 190px; }
-.cat-filter-dd .dd--light .dd-btn { min-height: 34px; font-size: 13px; }
+

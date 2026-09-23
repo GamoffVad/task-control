@@ -125,17 +125,6 @@ export const Calendar = () => {
         subtitle="Задачи отдела во времени. Свободное время — новая задача, задача — открыть."
         actions={
           <>
-            {/* Категории — выпадающий список с отметками рядом с кнопкой: больше высоты остаётся календарю. */}
-            <div className="cat-filter-dd">
-              <MultiSelect<CatKey>
-                variant="light"
-                label="Категории мероприятий"
-                allLabel="все категории"
-                options={catOptions}
-                value={allCats.filter((k) => cats.has(k))}
-                onChange={(shown) => setHiddenCats(new Set(allCats.filter((k) => !shown.includes(k))))}
-              />
-            </div>
             <button type="button" className="btn btn--primary" onClick={() => create(nextQuarter())}>
               <Icon.Plus size={15} /> Новая задача
             </button>
@@ -154,6 +143,15 @@ export const Calendar = () => {
         </FilterCard>
         <FilterCard label="Поиск по содержанию">
           <SearchField value={query} onChange={setQuery} placeholder="Название, результат, документ…" label="Поиск мероприятий по содержанию" />
+        </FilterCard>
+        <FilterCard label="Категории">
+          <MultiSelect<CatKey>
+            label="Категории мероприятий"
+            allLabel="все категории"
+            options={catOptions}
+            value={allCats.filter((k) => cats.has(k))}
+            onChange={(shown) => setHiddenCats(new Set(allCats.filter((k) => !shown.includes(k))))}
+          />
         </FilterCard>
       </div>
 
