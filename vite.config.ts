@@ -16,6 +16,9 @@ const api = (): Plugin => ({
   },
 })
 
+/** Самые старые поддерживаемые браузеры: Chrome 109 — последний для Windows 7 и 8.1. */
+export const LEGACY_TARGET = ['chrome109', 'edge109', 'firefox115', 'safari16'];
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   // Переменные из .env (например, DATABASE_URL после `vercel env pull`) — для API в режиме разработки.
@@ -26,6 +29,8 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), api()],
     // Версия приложения из package.json — показывается в интерфейсе.
     define: { __APP_VERSION__: JSON.stringify(pkg.version) },
+    // Корпоративные компьютеры с Windows 7: последний Chrome для неё — 109. Vite 8 по умолчанию собирает под Chrome 111+.
+    build: { target: LEGACY_TARGET, cssTarget: LEGACY_TARGET },
     test: {
       environment: 'jsdom',
       globals: true,

@@ -9,8 +9,8 @@ import type { Category } from './types';
 /** Ключ фильтра: код категории или «none» — задачи без категории. */
 export type CatKey = Category | 'none';
 
-/** Цвет категории; для добавленной без цвета — цвет «Иного». */
-export const catColor = (key: CatKey) => ({ '--c': `var(--cat-${key}, var(--cat-none))` }) as CSSProperties;
+/** Цвет категории; для добавленной без цвета — цвет «Иного». --c-rgb — тот же цвет тройкой r, g, b для полупрозрачных оттенков. */
+export const catColor = (key: CatKey) => ({ '--c': `var(--cat-${key}, var(--cat-none))`, '--c-rgb': `var(--cat-${key}-rgb, var(--cat-none-rgb))` }) as CSSProperties;
 
 /** Отпечаток справочника «код:название|…»: по нему пересчитываются списки. */
 const categoriesKey = () => CATEGORIES.map((c) => `${c.key}:${c.label}`).join('|');

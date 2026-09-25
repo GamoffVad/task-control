@@ -596,6 +596,8 @@ describe('администрирование', () => {
     await user.click(within(colorDialog).getByRole('button', { name: 'Сохранить' }));
     expect(screen.getByText('#2C6B45')).toBeInTheDocument();
     expect([...document.querySelectorAll('style')].some((st) => st.textContent?.includes('--abs-vacation: #2C6B45'))).toBe(true);
+    // «Двойник» для полупрозрачных оттенков и высветленный цвет тёмной темы (58% цвета, 42% белого).
+    expect([...document.querySelectorAll('style')].some((st) => st.textContent?.includes('--abs-vacation-rgb: 44, 107, 69;') && st.textContent.includes('--abs-vacation: #85A993;'))).toBe(true);
     // Категории задач: цвет применяется к --cat-<код> (карточки Календаря, точки, фильтр).
     await user.click(screen.getByText('Категории задач'));
     await user.click(screen.getByRole('button', { name: 'Изменить значение Доклад руководству отдела' }));
@@ -637,7 +639,8 @@ describe('администрирование', () => {
     renderAt('/admin', executorIn());
     expect(screen.getByRole('heading', { name: 'Календарь' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Администрирование' })).not.toBeInTheDocument();
-  });
+  // Длинный сценарий: десятки действий в формах — на загруженной машине дольше стандартных 5 секунд.
+  }, 20_000);
 });
 
 describe('версия', () => {
