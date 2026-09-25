@@ -8,3 +8,8 @@
 *.ico binary
 *.woff binary
 *.woff2 binary
+
+# Сценарии Windows: cmd.exe с переводами строк LF неверно выполняет метки и goto.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

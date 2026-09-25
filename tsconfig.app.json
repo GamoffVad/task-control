@@ -31,6 +31,7 @@
   "exclude": [
     "src/test/server.test.ts",
     "src/test/pg.test.ts",
+    "src/test/mssql.test.ts",
     "src/test/notices.test.ts"
   ]
 }

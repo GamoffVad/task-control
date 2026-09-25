@@ -229,6 +229,8 @@ public/       значки, Service Worker уведомлений, PDF-руко�
 
 - Хранилище — PostgreSQL (проверено на Neon). Строка подключения — переменная `DATABASE_URL`;
   таблицы создаются при первом запросе, пустая база заполняется демонстрационными данными.
+  В IIS корпоративной сети — SQL Server (`server/mssqlRepo.ts`, строка ODBC `MSSQL_CONNECTION_STRING`);
+  тест на настоящем сервере: `MSSQL_TEST_SERVER="(local)" npx vitest run src/test/mssql.test.ts`.
 - API: `POST /api/login`, `POST /api/windows-login`, `GET /api/state`, `POST /api/action`,
   `GET /api/notices`, `GET /api/authentication`, `GET /api/directory-users`, `GET /api/health`.
 - Сеанс — подписанный токен (HMAC-SHA256) на 7 дней; секрет — `AUTH_SECRET`.
@@ -256,7 +258,8 @@ Vercel (ответ «Not authorized»); без метаданных Git пров
 учётную запись GitHub с Vercel в настройках аутентификации.
 
 Для корпоративной сети без интернета — [docs/corporate-offline.md](docs/corporate-offline.md):
-работа за IIS, вход через Windows, Active Directory и установка без обращений наружу.
+автономный пакет для IIS с базой SQL Server (`publish-iis.bat` → `install.bat` на сервере),
+вход через Windows, Active Directory и установка без обращений наружу.
 
 ## Документация
 

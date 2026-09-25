@@ -34,3 +34,6 @@ dist-ssr
 .ui-audit
 .agents
 .claude/settings.local.json
+
+# Пакет для IIS (npm run build:iis)
+deploy/out

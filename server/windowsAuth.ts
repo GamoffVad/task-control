@@ -16,7 +16,17 @@ export const windowsIdentityFromEnv = (env: Record<string, string | undefined>) 
     const expected = Buffer.from(secret);
     const supplied = Buffer.from(suppliedSecret);
     if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) return null;
-    const value = req.headers[header];
-    return typeof value === 'string' && value.trim() ? value.trim() : null;
+    const raw = req.headers[header];
+    if (typeof raw !== 'string') return null;
+    // Прокси IIS (deploy/iis/PlanHost.cs) кодирует логин: в заголовке допустимы только символы ASCII, а логин может быть кириллическим.
+    let value = raw;
+    if (req.headers['x-windows-auth-encoding'] === 'uri') {
+      try {
+        value = decodeURIComponent(raw);
+      } catch {
+        return null;
+      }
+    }
+    return value.trim() ? value.trim() : null;
   };
 };
