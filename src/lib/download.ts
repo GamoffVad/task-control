@@ -1,5 +1,5 @@
-/** Скачивание файла из браузера: текст → Blob → ссылка. */
-export const saveFile = (name: string, content: string, type: string) => {
+/** Скачивание файла из браузера: текст или байты → Blob → ссылка. */
+export const saveFile = (name: string, content: BlobPart, type: string) => {
   const url = URL.createObjectURL(new Blob([content], { type }));
   const a = document.createElement('a');
   a.href = url;

@@ -22,9 +22,11 @@ import {
   type AbsenceDraft,
   type Clash,
 } from '../lib/absences';
-import { ABSENCE_TYPES, absenceType, employees, groupMembers, shortName } from '../lib/data';
+import { ABSENCE_TYPES, absenceType, department, employees, groupMembers, shortName } from '../lib/data';
 import { addDays, addMonths, fmtDate, fmtMonthYear, fmtWeekday, isSameDay, plural, startOfDay, toDateKey } from '../lib/dates';
+import { saveFile } from '../lib/download';
 import { isManager } from '../lib/permissions';
+import { tetrisFileName, tetrisWorkbook } from '../lib/tetrisExport';
 import { visibleBottom } from '../lib/viewport';
 import { useStore } from '../lib/store';
 import type { Absence, AbsenceType, Task } from '../lib/types';
@@ -90,6 +92,29 @@ export const Absences = () => {
   });
 
 
+  // Выгрузка в Excel: выбранный месяц, группа и виды событий — как на графике.
+  const exportExcel = () => {
+    const balances = new Map(
+      people
+        .filter((e) => manager || e.id === me)
+        .map((e) => {
+          const bal = balanceFor(state.absences, state.entitlements, e.id, year);
+          return [e.id, { vacation: bal.vacation.left, dayoff: bal.dayoff.left }] as const;
+        }),
+    );
+    const bytes = tetrisWorkbook({
+      month,
+      people,
+      absences: state.absences,
+      hidden,
+      tasks: state.tasks,
+      dictionaries: state.dictionaries,
+      groupLabel: group === 'all' ? 'весь отдел' : (department.groups.find((g) => g.id === group)?.name ?? group),
+      balances: balances.size ? balances : undefined,
+    });
+    saveFile(tetrisFileName(month), bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  };
+
   const canCreateFor = (employeeId: number) => manager || employeeId === me;
   const create = (employeeId: number, day?: Date) =>
     setEditing({ defaults: { employeeId, from: toDateKey(day ?? today), to: toDateKey(day ?? today) } });
@@ -134,6 +159,9 @@ export const Absences = () => {
             <span className="caps">Группа</span>
             <GroupFilter value={group} onChange={setGroup} />
           </div>
+          <button type="button" className="btn" onClick={exportExcel} data-tip="Матрица выбранного месяца, список событий и сроки задач">
+            <Icon.Download size={15} /> Выгрузить в Excel
+          </button>
           <button type="button" className="btn btn--primary" onClick={() => create(me)}>
             <Icon.Plus size={15} /> {manager ? 'Событие' : 'Заявка на событие'}
           </button>

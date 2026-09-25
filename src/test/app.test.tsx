@@ -745,6 +745,29 @@ describe('отсутствия', () => {
     expect(cells[0]).toHaveTextContent('—');
   });
 
+  it('кнопка выгрузки в Excel сохраняет книгу выбранного месяца', async () => {
+    const user = userEvent.setup();
+    const saved: string[] = [];
+    const blobs: Blob[] = [];
+    const click = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+      saved.push(this.download);
+    };
+    URL.createObjectURL = (blob: Blob | MediaSource) => (blobs.push(blob as Blob), 'blob:test');
+    URL.revokeObjectURL = () => undefined;
+    try {
+      renderAt('/tetris');
+      const month = new Date();
+      await user.click(screen.getByRole('button', { name: /Выгрузить в Excel/ }));
+      const key = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
+      expect(saved).toEqual([`tetris-${key}.xlsx`]);
+      expect(blobs[0].type).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      expect(blobs[0].size).toBeGreaterThan(5000);
+    } finally {
+      HTMLAnchorElement.prototype.click = click;
+    }
+  });
+
   it('раздел называется «Тетрис», старый адрес /absences ведёт в него', () => {
     renderAt('/absences');
     expect(screen.getByRole('heading', { level: 1, name: 'Тетрис' })).toBeInTheDocument();
