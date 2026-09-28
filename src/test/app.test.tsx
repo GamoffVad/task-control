@@ -444,6 +444,34 @@ describe('календарь: поиск и категории', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
+  it('состояние мероприятия видно по классам: исполнено, просрочено, исполнитель отсутствует', () => {
+    renderAt('/calendar');
+    const events = [...document.querySelectorAll('.cal-event')];
+    expect(events.length).toBeGreaterThan(0);
+    // Исполнено и просрочено исключают друг друга: у события не может быть обоих состояний.
+    expect(events.every((e) => !(e.classList.contains('done') && e.classList.contains('overdue')))).toBe(true);
+    // Отсутствие исполнителя отмечается только у неисполненных.
+    expect(events.filter((e) => e.classList.contains('absent')).every((e) => !e.classList.contains('done'))).toBe(true);
+  });
+
+  it('исполнитель виден на каждом мероприятии календаря', () => {
+    renderAt('/calendar');
+    const events = [...document.querySelectorAll('.cal-event')];
+    expect(events.length).toBeGreaterThan(0);
+    for (const event of events) {
+      const who = event.querySelector('.who');
+      expect(who).not.toBeNull();
+      expect(who!.textContent!.replace(/[·\s]/g, '').length).toBeGreaterThan(3);
+    }
+  });
+
+  it('подсказка мероприятия называет исполнителя и состояние', () => {
+    renderAt('/calendar');
+    const tips = [...document.querySelectorAll('.cal-event')].map((e) => e.getAttribute('data-tip') ?? '');
+    expect(tips.some((t) => t.includes('Просрочено'))).toBe(true);
+    expect(tips.every((t) => t.includes(' · '))).toBe(true);
+  });
+
   it('задаёт категорию в карточке задачи', async () => {
     const user = userEvent.setup();
     renderAt('/calendar');

@@ -37,6 +37,11 @@ const VIEWS: { value: CalendarView; label: string }[] = [
 
 const catStyle = (t: Pick<Task, 'category'>) => catColor(t.category ?? 'none');
 const stateClass = (t: Task, now: Date) => (t.done ? ' done' : isOverdue(t, now) ? ' overdue' : '');
+/** Исполнители мероприятия: в узком событии — первый и «+N», иначе все. */
+const whoOf = (t: Task, short = false) => {
+  const names = t.assigneeIds.map(shortName);
+  return short && names.length > 1 ? `${names[0]} +${names.length - 1}` : names.join(', ');
+};
 
 /** Значок состояния: цвет события занят категорией, поэтому исполнение и просрочка — знаком. */
 const StateMark = ({ task, now }: { task: Task; now: Date }) =>
@@ -183,7 +188,7 @@ export const Calendar = () => {
       )}
 
       {view === 'month' ? (
-        <MonthView cursor={cursor} tasks={tasks} now={now} onCreate={(d) => { const s = new Date(d); s.setHours(10, 0, 0, 0); create(s); }} onOpen={(t) => openTask({ task: t })} />
+        <MonthView cursor={cursor} tasks={tasks} now={now} clashes={clashes} onCreate={(d) => { const s = new Date(d); s.setHours(10, 0, 0, 0); create(s); }} onOpen={(t) => openTask({ task: t })} />
       ) : (
         <div className="cal">
           <div className="cal-scroll">
@@ -212,8 +217,9 @@ export const Calendar = () => {
           <span key={c.key}><i className="cat" style={catColor(c.key)} />{c.short}</span>
         ))}
         <span><i className="cat" style={catColor('none')} />иное</span>
-        <span><span className="state ok">✓</span>исполнено</span>
-        <span><span className="state bad">!</span>просрочено (красная рамка)</span>
+        <span><span className="state ok">✓</span>исполнено (зелёная полоса справа)</span>
+        <span><span className="state bad">!</span>просрочено (красная полоса и рамка)</span>
+        <span><i className="legend-bar" aria-hidden />отсутствует в день срока</span>
       </div>
     </div>
   );
@@ -267,7 +273,7 @@ const DayColumn = ({ day, tasks, now, clashes, onCreate, onOpen }: {
             right: 'auto',
           }}
           onClick={() => onOpen(task)}
-          data-tip={`${fmtTime(new Date(task.start))}–${fmtTime(new Date(task.end))} ${task.title}${task.category ? ` — ${categoryLabel(task.category)}` : ''}${clashes.some((c) => c.task.id === task.id) ? '. Исполнитель отсутствует в день срока' : ''}`}
+          data-tip={`${fmtTime(new Date(task.start))}–${fmtTime(new Date(task.end))} ${task.title}${task.category ? ` — ${categoryLabel(task.category)}` : ''} · ${whoOf(task)}${task.done ? '. Исполнено' : isOverdue(task, now) ? '. Просрочено' : ''}${clashes.some((c) => c.task.id === task.id) ? '. Исполнитель отсутствует в день срока' : ''}`}
         >
           {/* В коротком событии время стоит в строке с названием, чтобы название поместилось. */}
           <span className="ti">
@@ -281,7 +287,8 @@ const DayColumn = ({ day, tasks, now, clashes, onCreate, onOpen }: {
             <StateMark task={task} now={now} />
             {task.title}
           </span>
-          {height >= 1.4 && <span className="who">{task.assigneeIds.map(shortName).join(', ')}</span>}
+          {/* Исполнитель виден всегда: в низком событии — в одну строку с названием. */}
+          {height >= 1.4 ? <span className="who">{whoOf(task)}</span> : <span className="who inline"> · {whoOf(task, true)}</span>}
         </button>
       ))}
       {today && nowOffset >= 0 && nowOffset <= LAST_HOUR - FIRST_HOUR && (
@@ -291,10 +298,11 @@ const DayColumn = ({ day, tasks, now, clashes, onCreate, onOpen }: {
   );
 };
 
-const MonthView = ({ cursor, tasks, now, onCreate, onOpen }: {
+const MonthView = ({ cursor, tasks, now, clashes, onCreate, onOpen }: {
   cursor: Date;
   tasks: Task[];
   now: Date;
+  clashes: Clash[];
   onCreate: (d: Date) => void;
   onOpen: (t: Task) => void;
 }) => {
@@ -341,13 +349,13 @@ const MonthView = ({ cursor, tasks, now, onCreate, onOpen }: {
                   <button
                     key={t.id}
                     type="button"
-                    className={`chip cat${stateClass(t, now)}`}
+                    className={`chip cat${stateClass(t, now)}${clashes.some((c) => c.task.id === t.id) ? ' absent' : ''}`}
                     style={catStyle(t)}
                     onClick={(e) => {
                       e.stopPropagation();
                       onOpen(t);
                     }}
-                    data-tip={`${t.title}${t.category ? ` — ${categoryLabel(t.category)}` : ''}`}
+                    data-tip={`${t.title}${t.category ? ` — ${categoryLabel(t.category)}` : ''} · ${whoOf(t)}${t.done ? '. Исполнено' : isOverdue(t, now) ? '. Просрочено' : ''}${clashes.some((c) => c.task.id === t.id) ? '. Исполнитель отсутствует в день срока' : ''}`}
                   >
                     <span className="num" style={{ fontSize: 10.5, color: 'var(--ink-3)', marginRight: 4 }}>{fmtTime(new Date(t.start))}</span>
                     <StateMark task={t} now={now} />

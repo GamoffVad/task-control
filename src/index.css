@@ -755,6 +755,10 @@ td.name { color: var(--ink); font-weight: 600; }
 .cal-event .t { white-space: nowrap; }
 .cal-event .t.inline { display: inline; margin-right: 4px; }
 .cal-event .who { display: block; color: var(--ink-3); font-size: 10px; font-weight: 400; margin-top: 4px; }
+/* В низком событии исполнитель идёт в строке с названием, иначе он не поместится. */
+.cal-event .who.inline { display: inline; margin-top: 0; white-space: nowrap; }
+/* Образец красной полосы в легенде — как правый край мероприятия. */
+.legend .legend-bar { display: inline-block; width: 3px; height: 11px; background: var(--danger); border-radius: 0; vertical-align: -1px; }
 .cal-event .state { font-size: 10px; margin-right: 2px; }
 /* Цвет — категория; состояние — значок и обводка. */
 .cal-event.cat {
@@ -768,10 +772,14 @@ td.name { color: var(--ink); font-weight: 600; }
 }
 .chip.cat { border: 1px solid rgb(var(--c-rgb) / var(--cal-event-edge)); background: var(--cal-event-surface); }
 .chip.cat:hover { background: rgb(var(--c-rgb) / var(--cal-event-mix-hover)); border-color: var(--c); }
-.cal-event.cat.overdue, .chip.cat.overdue { border-color: var(--danger); box-shadow: none; }
+.cal-event.cat.overdue, .chip.cat.overdue { border-color: var(--danger); }
 .cal-event.done, .chip.cat.done { opacity: 1; }
-.cal-event.overdue, .chip.cat.overdue { box-shadow: inset 0 0 0 1px var(--danger); }
 .cal-event.overdue .t, .chip.cat.overdue .num { color: var(--danger); font-weight: 500; }
+/* Правый край — состояние мероприятия: зелёный «исполнено», красный «просрочено».
+   Исполнено и просрочено исключают друг друга, поэтому полоса всегда одна.
+   Селекторы с .cat — чтобы полосу не перебило правило цвета категории с той же весомостью. */
+.cal-event.cat.done, .chip.cat.done { box-shadow: inset -3px 0 0 var(--ok); }
+.cal-event.cat.overdue, .chip.cat.overdue { box-shadow: inset 0 0 0 1px var(--danger), inset -3px 0 0 var(--danger); }
 .state { font-weight: 700; margin-right: 3px; }
 .state.ok { color: var(--ok); }
 .state.bad { color: var(--danger); }
@@ -1216,8 +1224,9 @@ a.label:hover { color: var(--accent); }
 
 /* Пометка «исполнитель отсутствует» в других разделах */
 .absent-mark { color: var(--danger); font-weight: 600; }
-.cal-event.absent { box-shadow: inset -3px 0 0 var(--danger); }
-.cal-event.absent.overdue { box-shadow: inset 0 0 0 1px var(--danger), inset -3px 0 0 var(--danger); }
+/* Отсутствие исполнителя — та же красная полоса; вместе с просрочкой добавляется обводка. */
+.cal-event.cat.absent, .chip.cat.absent { box-shadow: inset -3px 0 0 var(--danger); }
+.cal-event.cat.absent.overdue, .chip.cat.absent.overdue { box-shadow: inset 0 0 0 1px var(--danger), inset -3px 0 0 var(--danger); }
 .sync-state { display: inline-flex; gap: 6px; align-items: center; margin-left: 12px; }
 .sync-state i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
 .sync-state.saving i { background: var(--amber); }
