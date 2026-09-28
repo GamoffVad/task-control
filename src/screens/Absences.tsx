@@ -26,6 +26,8 @@ import { ABSENCE_TYPES, absenceType, employees, groupMembers, shortName } from '
 import { addDays, addMonths, fmtDate, fmtMonthYear, fmtWeekday, isSameDay, plural, startOfDay, toDateKey } from '../lib/dates';
 import { isManager } from '../lib/permissions';
 import { visibleBottom } from '../lib/viewport';
+import { tetrisXlsx } from '../lib/tetrisExport';
+import { saveBlob } from '../lib/download';
 import { useStore } from '../lib/store';
 import type { Absence, AbsenceType, Task } from '../lib/types';
 
@@ -90,6 +92,27 @@ export const Absences = () => {
   });
 
 
+  // Выгрузка матрицы месяца: те же сотрудники, дни и цвета видов, что на графике.
+  const exportExcel = () => {
+    const file = tetrisXlsx({
+      month,
+      days,
+      people,
+      absences: state.absences.filter((a) => !hidden.has(a.type)),
+      tasks: state.tasks,
+      dictionaries: state.dictionaries,
+      types: ABSENCE_TYPES.map((t) => ({ key: t.key, label: t.label, full: t.full })),
+      balance: (employeeId) => {
+        if (!manager && employeeId !== me) return null;
+        const bal = balanceFor(state.absences, state.entitlements, employeeId, year);
+        return { vacation: bal.vacation.left, dayoff: bal.dayoff.left };
+      },
+      clashTaskIds: new Set(clashes.map((c) => c.task.id)),
+      today,
+    });
+    saveBlob(`tetris-${toDateKey(month).slice(0, 7)}.xlsx`, file);
+  };
+
   const canCreateFor = (employeeId: number) => manager || employeeId === me;
   const create = (employeeId: number, day?: Date) =>
     setEditing({ defaults: { employeeId, from: toDateKey(day ?? today), to: toDateKey(day ?? today) } });
@@ -134,6 +157,9 @@ export const Absences = () => {
             <span className="caps">Группа</span>
             <GroupFilter value={group} onChange={setGroup} />
           </div>
+          <button type="button" className="btn" onClick={exportExcel}>
+            <Icon.Download size={15} /> Выгрузить в Excel
+          </button>
           <button type="button" className="btn btn--primary" onClick={() => create(me)}>
             <Icon.Plus size={15} /> {manager ? 'Событие' : 'Заявка на событие'}
           </button>

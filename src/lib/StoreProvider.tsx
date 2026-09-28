@@ -40,7 +40,7 @@ const LocalStore = ({ children, initial }: { children: ReactNode; initial?: AppS
   // Состав сотрудников и отделений — из пользователей и подразделений (до отрисовки экранов).
   syncStaff(state.users, state.units);
   syncCategories(state.dictionaries);
-  const value = useMemo(() => ({ state, dispatch, signIn, signInWindows, windowsAuthAvailable: false, authenticationReady: true, directoryAvailable: true, searchDirectory, sync, reload: () => undefined, fetchNotices: null }), [state, signIn, signInWindows, searchDirectory, sync]);
+  const value = useMemo(() => ({ state, dispatch, signIn, signInWindows, windowsAuthAvailable: false, authenticationReady: true, directoryAvailable: true, searchDirectory, sync, reload: () => undefined, fetchNotices: null, checkWindows: null }), [state, signIn, signInWindows, searchDirectory, sync]);
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 };
 
@@ -177,8 +177,14 @@ const RemoteStore = ({ children }: { children: ReactNode }) => {
     return api.notices(token, since);
   }, []);
 
+  const checkWindows = useCallback(async () => {
+    const token = session.current?.token;
+    if (!token) throw new Error('Войдите в систему.');
+    return api.windowsCheck(token);
+  }, []);
+
   syncStaff(state.users, state.units);
   syncCategories(state.dictionaries);
-  const value = useMemo(() => ({ state, dispatch, signIn, signInWindows, windowsAuthAvailable, authenticationReady, directoryAvailable, searchDirectory, sync, reload: () => void load(), fetchNotices }), [state, dispatch, signIn, signInWindows, windowsAuthAvailable, authenticationReady, directoryAvailable, searchDirectory, sync, load, fetchNotices]);
+  const value = useMemo(() => ({ state, dispatch, signIn, signInWindows, windowsAuthAvailable, authenticationReady, directoryAvailable, searchDirectory, sync, reload: () => void load(), fetchNotices, checkWindows }), [state, dispatch, signIn, signInWindows, windowsAuthAvailable, authenticationReady, directoryAvailable, searchDirectory, sync, load, fetchNotices, checkWindows]);
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 };

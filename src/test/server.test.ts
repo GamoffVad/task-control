@@ -80,10 +80,13 @@ describe('API', () => {
     expect(windows.status).toBe(200);
     expect(windows.json.user).toMatchObject({ employeeId: 3, role: 'executor' });
 
-    const formExecutor = await call('/api/login', { method: 'POST', body: { email: 'sidorov@example.com', password: '123456' } });
+    // Прокси передал доменного пользователя — бесшовный вход работает, значит форма закрыта для исполнителя.
+    const formExecutor = await call('/api/login', { method: 'POST', body: { email: 'sidorov@example.com', password: '123456' }, windowsUser: 'DOMAIN\\sidorov' });
     expect(formExecutor.status).toBe(403);
-    const emergencyAdmin = await call('/api/login', { method: 'POST', body: { email: 'user@example.com', password: '123456' } });
+    const emergencyAdmin = await call('/api/login', { method: 'POST', body: { email: 'user@example.com', password: '123456' }, windowsUser: 'DOMAIN\\user' });
     expect(emergencyAdmin.status).toBe(200);
+    // Прокси молчит — вход по паролю остаётся доступным всем, чтобы неверная настройка не заперла отдел.
+    expect((await call('/api/login', { method: 'POST', body: { email: 'sidorov@example.com', password: '123456' } })).status).toBe(200);
   });
 
   it('ищет сотрудника в каталоге и добавляет пользователя с доменным логином', async () => {

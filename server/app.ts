@@ -4,6 +4,7 @@
 //   POST /api/action  { action }           → { data }
 //   GET  /api/health                       → { ok, storage }
 //   GET  /api/notices?since=ISO            → { notices, now } — новые уведомления вошедшего сотрудника
+//   GET  /api/windows-check                → что сервер видит в запросе для входа через Windows (администратору)
 // Изменения выполняет тот же редьюсер, что и в браузере, с пользователем из подписанного токена,
 // поэтому права проверяются на сервере независимо от интерфейса.
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -19,6 +20,7 @@ import type { Data, DictionaryKind, Entitlement, ManagedUser, Permission, Role, 
 import { signToken, verifyToken } from './auth';
 import type { Repo } from './repo';
 import type { ActiveDirectory } from './activeDirectory';
+import type { WindowsAuthCheck } from './windowsAuth';
 import { dayKey, detectEvents, hourOf, overdueNotice, type NoticeEvent } from '../src/lib/notify';
 import { newId } from '../src/lib/reducer';
 
@@ -36,6 +38,8 @@ type Options = {
   now?: () => Date;
   /** Returns an identity only after a trusted proxy has completed Windows authentication. */
   windowsIdentity?: (req: IncomingMessage) => string | null;
+  /** Разбор запроса для страницы проверки Windows-входа в администрировании. */
+  windowsCheck?: (req: IncomingMessage) => WindowsAuthCheck;
   directory?: ActiveDirectory;
 };
 
@@ -200,7 +204,20 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
       if (typeof a.employeeId !== 'number' || !data.users.some((user) => user.employeeId === a.employeeId)) bad('пользователь');
       if (!['administrator', 'manager', 'executor'].includes(a.role as string) || typeof a.active !== 'boolean' || (a.windowsLogin !== undefined && (!str(a.windowsLogin, 128) || !(a.windowsLogin as string).trim()))) bad('роль или Windows-логин пользователя');
       if (a.unitId !== undefined && (typeof a.unitId !== 'string' || (a.unitId !== '' && !(data.units ?? DEFAULT_UNITS).some((u) => u.id === a.unitId)))) bad('подразделение пользователя');
-      return { type: 'saveManagedUser', employeeId: a.employeeId as number, role: a.role as Role, active: a.active as boolean, ...(a.windowsLogin !== undefined ? { windowsLogin: a.windowsLogin as string } : {}), ...(a.unitId !== undefined ? { unitId: a.unitId as string } : {}) };
+      if (a.fullName !== undefined && (!str(a.fullName, 200) || !String(a.fullName).trim())) bad('ФИО сотрудника');
+      if (a.position !== undefined && !str(a.position, 200)) bad('должность сотрудника');
+      if (a.email !== undefined && (!str(a.email, 200) || !String(a.email).trim())) bad('электронную почту сотрудника');
+      return {
+        type: 'saveManagedUser',
+        employeeId: a.employeeId as number,
+        role: a.role as Role,
+        active: a.active as boolean,
+        ...(a.windowsLogin !== undefined ? { windowsLogin: a.windowsLogin as string } : {}),
+        ...(a.unitId !== undefined ? { unitId: a.unitId as string } : {}),
+        ...(a.fullName !== undefined ? { fullName: a.fullName as string } : {}),
+        ...(a.position !== undefined ? { position: a.position as string } : {}),
+        ...(a.email !== undefined ? { email: a.email as string } : {}),
+      };
     case 'addManagedUser': {
       if (!isObj(a.account)) bad('пользователь');
       const account = a.account as Record<string, unknown>;
@@ -257,10 +274,13 @@ const bearer = (req: IncomingMessage) => {
   return h?.startsWith('Bearer ') ? h.slice(7) : undefined;
 };
 
+/** Доменный логин в разных видах: «DOMAIN\ivanov», «ivanov@corp.local» и просто «ivanov». */
 const identityKeys = (value: string): string[] => {
   const normalized = value.trim().toLowerCase();
   const slash = normalized.lastIndexOf('\\');
-  return [...new Set([normalized, slash >= 0 ? normalized.slice(slash + 1) : normalized])];
+  const short = slash >= 0 ? normalized.slice(slash + 1) : normalized;
+  const at = short.indexOf('@');
+  return [...new Set([normalized, short, at > 0 ? short.slice(0, at) : short])];
 };
 
 const normalizeUsers = (users: ManagedUser[]): ManagedUser[] => users.map((user) => {
@@ -319,17 +339,14 @@ const forUser = (data: Data, user: User): Data => {
   return { ...rest, chatReads: (data.chatReads ?? []).filter((r) => r.employeeId === user.employeeId) };
 };
 
-export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentity, directory }: Options) => {
+export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentity, windowsCheck, directory }: Options) => {
   const normalizeData = (data: Data): Data => {
-    const storedAuthentication = data.authentication ?? { ...DEFAULT_AUTHENTICATION };
-    const authentication = storedAuthentication.mode === 'windows' && !windowsIdentity ? { ...storedAuthentication, mode: 'form' as const } : storedAuthentication;
-    const access = recoverAdministrativeAccess(normalizeUsers(data.users ?? DEFAULT_USERS), data.roles ?? DEFAULT_ROLES, authentication.mode === 'form');
-    return {
-      ...data,
-      ...access,
-      // На сервере без Windows-провайдера нельзя оставлять единственный недоступный способ входа.
-      authentication,
-    };
+    const authentication = data.authentication ?? { ...DEFAULT_AUTHENTICATION };
+    // Выбранный режим сохраняется как есть. Если сервер не умеет Windows-вход, приложение
+    // не переписывает настройку, а пускает по форме (см. POST /api/login) — иначе переключатель
+    // в администрировании «не держится», а причина остаётся неизвестной.
+    const access = recoverAdministrativeAccess(normalizeUsers(data.users ?? DEFAULT_USERS), data.roles ?? DEFAULT_ROLES, authentication.mode === 'form' || !windowsIdentity);
+    return { ...data, ...access, authentication };
   };
   /** Данные; пустая база заполняется демонстрационными данными. */
   const load = async (): Promise<Data> => {
@@ -357,6 +374,36 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
           const current = await load();
           return send(res, 200, { authentication: current.authentication, windowsAvailable: !!windowsIdentity, directoryAvailable: !!directory });
         }
+        case 'GET /api/windows-check': {
+          // Проверка настройки для администратора: что сервер видит в этом самом запросе.
+          const tokenUser = authed(req);
+          const current = await load();
+          const user = effectiveUser(tokenUser, current.users, current.roles);
+          if (!user) throw new HttpError(401, 'Учётная запись отключена.');
+          if (!hasPermission(user, 'authentication.manage')) throw new HttpError(403, 'Недостаточно прав для проверки способа входа.');
+          const check = windowsCheck?.(req) ?? {
+            enabled: false,
+            secretRequired: false,
+            secretOk: false,
+            seen: [],
+            identity: null,
+            problem: 'Windows-вход выключен на сервере: задайте переменную WINDOWS_AUTH_TRUST_PROXY=true и перезапустите приложение.',
+          };
+          // Сопоставление с пользователем приложения: без него вход не состоится даже при верном заголовке.
+          const keys = check.identity ? identityKeys(check.identity) : [];
+          const match = current.users.find((item) => keys.includes(item.windowsLogin.trim().toLowerCase()));
+          return send(res, 200, {
+            ...check,
+            matched: match ? { employeeId: match.employeeId, fullName: match.fullName, windowsLogin: match.windowsLogin, active: match.active } : null,
+            problem:
+              check.problem ??
+              (!match
+                ? `Доменный пользователь «${check.identity}» не сопоставлен: добавьте этот логин в столбец «Windows-логин» нужного сотрудника.`
+                : !match.active
+                  ? `Сотрудник ${match.fullName} отключён — включите учётную запись.`
+                  : null),
+          });
+        }
         case 'GET /api/directory-users': {
           const tokenUser = authed(req);
           const current = await load();
@@ -380,7 +427,10 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
           const current = await load();
           const account = authenticate(email, password, current.users, current.roles);
           if (!account) throw new HttpError(401, 'Неверный логин или пароль. Проверьте данные и повторите вход.');
-          if (current.authentication.mode === 'windows' && (!current.authentication.allowEmergencyForm || !hasPermission(account, 'admin.access'))) {
+          // Форма закрывается, только если прокси действительно передал доменного пользователя
+          // в этом же запросе: при неверной настройке IIS иначе никто не смог бы войти.
+          const seamless = !!windowsIdentity?.(req);
+          if (current.authentication.mode === 'windows' && seamless && (!current.authentication.allowEmergencyForm || !hasPermission(account, 'admin.access'))) {
             throw new HttpError(403, 'Включён вход через Windows. Используйте доменную учётную запись.');
           }
           const user: User = account;
@@ -442,8 +492,10 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
             const raw = cur ?? toData(createSeed(t));
             const current = normalizeData(raw);
             const action = parseAction(isObj(body) ? body.action : undefined, current, t);
-            if (action.type === 'saveAuthentication' && action.mode === 'windows' && !windowsIdentity) {
-              throw new HttpError(409, 'Сначала настройте Windows-аутентификацию на сервере.');
+            // Режим «Windows» разрешено включать заранее: пока сервер не настроен, вход идёт по форме,
+            // а в администрировании показывается, чего не хватает (GET /api/windows-check).
+            if (action.type === 'saveAuthentication' && action.mode === 'windows' && !action.allowEmergencyForm && !windowsIdentity) {
+              throw new HttpError(409, 'Windows-вход ещё не настроен на сервере: оставьте включённым резервный вход администратора по паролю.');
             }
             const user = effectiveUser(tokenUser, current.users, current.roles);
             if (!user) throw new HttpError(401, 'Учётная запись отключена.');

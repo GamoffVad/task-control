@@ -36,8 +36,20 @@ const wire = (a: Action) => {
   return rest;
 };
 
+/** Что сервер увидел в запросе для входа через Windows — проверка настройки в администрировании. */
+export type WindowsCheck = {
+  enabled: boolean;
+  secretRequired: boolean;
+  secretOk: boolean;
+  seen: { header: string; value: string }[];
+  identity: string | null;
+  matched: { employeeId: number; fullName: string; windowsLogin: string; active: boolean } | null;
+  problem: string | null;
+};
+
 export const api = {
   login: (email: string, password: string) => call<{ token: string; user: User }>('login', { method: 'POST', body: { email, password } }),
+  windowsCheck: (token: string) => call<WindowsCheck>('windows-check', { token }),
   windowsLogin: () => call<{ token: string; user: User }>('windows-login', { method: 'POST' }),
   authentication: () => call<{ authentication: AuthenticationSettings; windowsAvailable: boolean; directoryAvailable: boolean }>('authentication'),
   directoryUsers: (token: string, query: string) => call<{ users: DirectoryUser[] }>(`directory-users?q=${encodeURIComponent(query)}`, { token }),

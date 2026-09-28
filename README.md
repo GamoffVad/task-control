@@ -7,8 +7,8 @@
 **Планирование задач отдела и контроль исполнения:** календарь, недельная матрица плана, доска сроков,
 график событий сотрудников, недельные отчёты, показатели эффективности и уведомления — без обращений в интернет.
 
-[![версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-5.13.2-1F3A5F)](CHANGELOG.md)
-[![тесты](https://img.shields.io/badge/%D1%82%D0%B5%D1%81%D1%82%D1%8B-171-2C6B45)](#проверки)
+[![версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-5.14.0-1F3A5F)](CHANGELOG.md)
+[![тесты](https://img.shields.io/badge/%D1%82%D0%B5%D1%81%D1%82%D1%8B-186-2C6B45)](#проверки)
 [![стек](https://img.shields.io/badge/Vite%208%20%C2%B7%20React%2019%20%C2%B7%20TypeScript-1F2B3A)](#устройство-проекта)
 [![лицензия](https://img.shields.io/badge/%D0%BB%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F-MIT-5D6575)](LICENSE)
 
@@ -200,6 +200,8 @@ npm run dev
 | `npm run build` | проверка типов и сборка интерфейса в `dist/` |
 | `npm run build:vercel` | интерфейс и функции API в `.vercel/output` |
 | `npm run deploy` | публикация собранного каталога `.vercel/output` на Vercel |
+| `npm run build:iis` | комплект для публикации в IIS в `dist-iis/` |
+| `deploy-iis.bat` | публикация в IIS: копирование в `C:\inetpub\wwwroot\PLAN`, сайт, пул и Windows-аутентификация (от имени администратора) |
 | `npm run preview` | просмотр собранного интерфейса |
 | `npm test` | модульные, интерфейсные и серверные тесты (Vitest) |
 | `npm run lint` | статический анализ (oxlint) |
@@ -217,7 +219,7 @@ src/
   screens/    экраны разделов
   test/       тесты (Vitest + Testing Library)
 server/       HTTP API: маршруты, авторизация, PostgreSQL, вход через Windows
-scripts/      сборка для Vercel (Build Output API)
+scripts/      сборка для Vercel (Build Output API) и комплекта для IIS
 docs/         исходник руководства, скрипты съёмки и сборки PDF, скриншоты
 public/       значки, Service Worker уведомлений, PDF-руководство для скачивания
 ```
@@ -256,7 +258,8 @@ Vercel (ответ «Not authorized»); без метаданных Git пров
 учётную запись GitHub с Vercel в настройках аутентификации.
 
 Для корпоративной сети без интернета — [docs/corporate-offline.md](docs/corporate-offline.md):
-работа за IIS, вход через Windows, Active Directory и установка без обращений наружу.
+публикация в IIS файлом `deploy-iis.bat`, вход через Windows, Active Directory и установка без обращений наружу.
+Стили рассчитаны на Google Chrome 109 — последнюю версию для Windows 7 — и на все более новые браузеры.
 
 ## Документация
 
@@ -271,7 +274,7 @@ Vercel (ответ «Not authorized»); без метаданных Git пров
 
 | Проверка | Значение |
 |---|---|
-| Тесты (Vitest) | 171 — логика, права, интерфейс, API, PostgreSQL (PGlite), уведомления, логотип |
+| Тесты (Vitest) | 186 — логика, права, интерфейс, API, PostgreSQL (PGlite), уведомления, логотип, вход через Windows, выгрузка в Excel |
 | Типы | `tsc` без ошибок, строгий режим |
 | Линтер | oxlint без замечаний |
 | Браузер | `npm run docs` проходит разделы на ширинах 375, 768, 1024 и 1440 и сообщает об ошибках консоли, горизонтальной прокрутке и мелких кнопках |

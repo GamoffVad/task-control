@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, '.vercel', 'output');
-const ROUTES = ['login', 'windows-login', 'authentication', 'directory-users', 'state', 'action', 'health', 'notices'];
+const ROUTES = ['login', 'windows-login', 'authentication', 'directory-users', 'state', 'action', 'health', 'notices', 'windows-check'];
 
 execSync('npm run build', { cwd: root, stdio: 'inherit' });
 

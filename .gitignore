@@ -25,8 +25,9 @@ dist-ssr
 
 .vercel
 
-# Локальная база сервера разработки и сборка для Vercel
+# Локальная база сервера разработки, сборки для Vercel и IIS
 .data
+dist-iis
 .vercel
 .env*.local
 

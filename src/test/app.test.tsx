@@ -556,7 +556,7 @@ describe('администрирование', () => {
     expect(screen.getByRole('button', { name: 'Аутентификация' })).toBeInTheDocument();
     expect(screen.getByText('Иванов Алексей Борисович')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Добавить пользователя' }));
-    const addDialog = screen.getByRole('dialog');
+    const addDialog = screen.getByRole('dialog', { name: 'Добавить сотрудника' });
     await user.type(within(addDialog).getByRole('combobox', { name: /ФИО/ }), 'Кудр');
     await user.click(await within(addDialog).findByRole('option', { name: /Кудрявцев Олег Игоревич/ }));
     expect(within(addDialog).getByDisplayValue('kudryavtsev.oi')).toBeInTheDocument();
@@ -564,12 +564,22 @@ describe('администрирование', () => {
     expect(screen.getByText('Кудрявцев Олег Игоревич')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Редактировать пользователя Сидоров Дмитрий Евгеньевич' }));
-    const editDialog = screen.getByRole('dialog', { name: 'Редактировать пользователя' });
+    const editDialog = screen.getByRole('dialog', { name: 'Редактировать сотрудника' });
     const login = within(editDialog).getByLabelText('Windows-логин');
     await user.clear(login);
     await user.type(login, 'sidorov-ad');
+    // Правятся и личные данные: ФИО, должность и почта — без Active Directory.
+    const fullName = within(editDialog).getByLabelText('ФИО');
+    await user.clear(fullName);
+    await user.type(fullName, 'Сидоров Дмитрий Евгеньевич-Второй');
+    const position = within(editDialog).getByLabelText('Должность');
+    await user.clear(position);
+    await user.type(position, 'Главный специалист');
     await user.click(within(editDialog).getByRole('button', { name: 'Сохранить' }));
     expect(screen.getByText('sidorov-ad')).toBeInTheDocument();
+    expect(screen.getByText('Сидоров Дмитрий Евгеньевич-Второй')).toBeInTheDocument();
+    expect(screen.getByText('Главный специалист')).toBeInTheDocument();
+    expect(loadState().users.find((u) => u.employeeId === 3)).toMatchObject({ fullName: 'Сидоров Дмитрий Евгеньевич-Второй', position: 'Главный специалист', windowsLogin: 'sidorov-ad' });
 
     await user.click(screen.getByRole('button', { name: 'Удалить пользователя Кудрявцев Олег Игоревич' }));
     const deleteDialog = screen.getByRole('dialog', { name: 'Удалить пользователя?' });
@@ -579,7 +589,10 @@ describe('администрирование', () => {
 
     await user.click(screen.getByRole('button', { name: 'Аутентификация' }));
     expect(screen.getByRole('heading', { name: 'Способ входа' })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /Windows/ })).toBeDisabled();
+    // Режим Windows выбирается всегда; когда сервер не настроен, об этом пишет подсказка и проверка настройки.
+    expect(screen.getByRole('radio', { name: /Windows/ })).toBeEnabled();
+    expect(screen.getByText('Windows не настроен')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Проверить настройку' })).toBeDisabled();
     await user.click(screen.getByRole('button', { name: 'Словари' }));
     // Значения справочника добавляются и меняются через форму в окне.
     await user.click(screen.getByRole('button', { name: 'Добавить значение' }));

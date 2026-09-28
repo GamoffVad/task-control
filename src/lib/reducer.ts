@@ -49,7 +49,7 @@ export type Action =
   | { type: 'deleteDictionary'; id: string }
   | { type: 'savePlanRow'; draft: PlanRowDraft }
   | { type: 'deletePlanRow'; id: string }
-  | { type: 'saveManagedUser'; employeeId: number; role: Role; active: boolean; windowsLogin?: string; unitId?: string }
+  | { type: 'saveManagedUser'; employeeId: number; role: Role; active: boolean; windowsLogin?: string; unitId?: string; fullName?: string; position?: string; email?: string }
   | { type: 'saveUnit'; draft: UnitDraft }
   | { type: 'saveTemplate'; draft: { id?: string; name: string; body: string; scope: TemplateScope } }
   | { type: 'deleteTemplate'; id: string }
@@ -274,7 +274,14 @@ export const reducer = (state: AppState, action: Action): AppState => {
       if (!windowsLogin || state.users.some((item) => item.employeeId !== action.employeeId && item.windowsLogin.toLowerCase() === windowsLogin.toLowerCase())) return state;
       if (action.unitId !== undefined && action.unitId !== '' && !state.units.some((u) => u.id === action.unitId)) return state;
       const unitId = action.unitId === undefined ? current.unitId : action.unitId || undefined;
-      const users = state.users.map((item) => item.employeeId === action.employeeId ? { ...item, role: action.role, active: action.active, windowsLogin, unitId } : item);
+      // ФИО, должность и почта правятся здесь же: данные сотрудника ведёт администратор,
+      // независимо от способа входа и наличия Active Directory.
+      const fullName = (action.fullName ?? current.fullName).trim().slice(0, 200);
+      const position = (action.position ?? current.position).trim().slice(0, 200);
+      const email = (action.email ?? current.email).trim().toLowerCase().slice(0, 200);
+      if (!fullName || !email) return state;
+      if (state.users.some((item) => item.employeeId !== action.employeeId && item.email.toLowerCase() === email)) return state;
+      const users = state.users.map((item) => item.employeeId === action.employeeId ? { ...item, role: action.role, active: action.active, windowsLogin, unitId, fullName, position, email } : item);
       const hasAdmin = users.some((item) => item.active && ['admin.access', 'users.manage', 'roles.manage'].every((permission) => permissionsFor(item.role, state.roles).includes(permission as Permission)));
       if (!hasAdmin) return state;
       const user = effectiveUser(state.user, users, state.roles);

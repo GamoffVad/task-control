@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Icon } from '../components/Icons';
 import { DirectoryUserAutocomplete } from '../components/DirectoryUserAutocomplete';
 import { Button, Checkbox, ColorField, Dialog, PageHeader, Segmented, Select, TextArea, TextInput } from '../kit';
@@ -9,6 +9,7 @@ import { addDays, fmtRange, planWeekStart } from '../lib/dates';
 import { PERMISSIONS, hasPermission, permissionsFor } from '../lib/access';
 import { DEFAULT_DICTIONARIES } from '../lib/seed';
 import { useStore } from '../lib/store';
+import type { WindowsCheck } from '../lib/api';
 import type { AuthenticationMode, DictionaryEntry, DictionaryKind, DirectoryUser, DocumentTemplate, ManagedUser, TemplateScope, Permission, PlanRow, Role, Unit, UnitKind } from '../lib/types';
 import { PARENT_KIND, UNIT_KINDS, unitKindLabel, unitPath, unitTree, unitWithDescendants } from '../lib/units';
 import { unitOf } from '../lib/data';
@@ -60,12 +61,13 @@ export const Admin = () => {
 };
 
 const UsersTab = ({ state, dispatch }: TabProps) => {
+  const { directoryAvailable } = useStore();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<ManagedUser | null>(null);
   const [deleting, setDeleting] = useState<ManagedUser | null>(null);
   return <div className="admin-section">
     <div className="card-head admin-content-head">
-      <div><h2>Пользователи</h2><p className="subtitle">Роль определяет разрешения пользователя. Отключённый пользователь не сможет войти.</p></div>
+      <div><h2>Пользователи</h2><p className="subtitle">Данные сотрудника — ФИО, должность, почта, Windows-логин, подразделение и роль — правятся здесь. Отключённый пользователь не сможет войти.</p></div>
       <div className="admin-users-actions"><span className="faint num">{state.users.filter((item) => item.active).length} активн.</span><Button variant="primary" icon={<Icon.Plus size={15} />} onClick={() => setAdding(true)}>Добавить пользователя</Button></div>
     </div>
     <div className="table-scroll admin-table-wrap">
@@ -91,31 +93,83 @@ const UsersTab = ({ state, dispatch }: TabProps) => {
       </table>
     </div>
     <p className="help-note">Windows-логин указывается без пароля: например, ivanov или DOMAIN\ivanov. В системе всегда сохраняется хотя бы один активный пользователь с правами управления.</p>
-    {adding && <AddUserDialog users={state.users} units={state.units} onClose={() => setAdding(false)} onSave={(account) => { dispatch({ type: 'addManagedUser', account }); setAdding(false); }} />}
-    {editing && <EditUserDialog account={editing} users={state.users} units={state.units} protectedAccount={editing.active && canAdminister(editing.role, state.roles) && state.users.filter((item) => item.active && canAdminister(item.role, state.roles)).length === 1} onClose={() => setEditing(null)} onSave={(role, active, windowsLogin, unitId) => { dispatch({ type: 'saveManagedUser', employeeId: editing.employeeId, role, active, windowsLogin, unitId }); setEditing(null); }} />}
+    {adding && <AddUserDialog users={state.users} units={state.units} directoryAvailable={directoryAvailable} onClose={() => setAdding(false)} onSave={(account) => { dispatch({ type: 'addManagedUser', account }); setAdding(false); }} />}
+    {editing && <EditUserDialog account={editing} users={state.users} units={state.units} protectedAccount={editing.active && canAdminister(editing.role, state.roles) && state.users.filter((item) => item.active && canAdminister(item.role, state.roles)).length === 1} onClose={() => setEditing(null)} onSave={(draft) => { dispatch({ type: 'saveManagedUser', employeeId: editing.employeeId, role: draft.role, active: draft.active, windowsLogin: draft.windowsLogin, unitId: draft.unitId, fullName: draft.fullName, position: draft.position, email: draft.email }); setEditing(null); }} />}
     {deleting && <DeleteUserDialog account={deleting} onClose={() => setDeleting(null)} onConfirm={() => { dispatch({ type: 'deleteManagedUser', employeeId: deleting.employeeId }); setDeleting(null); }} />}
   </div>;
 };
 
-const EditUserDialog = ({ account, users, units, protectedAccount, onClose, onSave }: { account: ManagedUser; users: ManagedUser[]; units: Unit[]; protectedAccount: boolean; onClose: () => void; onSave: (role: Role, active: boolean, windowsLogin: string, unitId: string) => void }) => {
-  const [unitId, setUnitId] = useState(unitOf(account) ?? '');
-  const [windowsLogin, setWindowsLogin] = useState(account.windowsLogin);
-  const [role, setRole] = useState(account.role);
-  const [active, setActive] = useState(account.active);
+/** Поля сотрудника: одинаковые в добавлении и редактировании. */
+type PersonDraft = { fullName: string; position: string; email: string; windowsLogin: string; unitId: string; role: Role; active: boolean };
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Проверка полей: ФИО, почта и Windows-логин обязательны и не повторяются у других сотрудников. */
+const checkPerson = (draft: PersonDraft, users: ManagedUser[], employeeId: number | null): string => {
+  if (draft.fullName.trim().split(/\s+/).filter(Boolean).length < 2) return 'Укажите фамилию и имя сотрудника.';
+  if (!EMAIL_RE.test(draft.email.trim())) return 'Укажите рабочую почту в виде ivanov@example.com.';
+  if (!draft.windowsLogin.trim()) return 'Укажите Windows-логин: например, ivanov или DOMAIN\\ivanov.';
+  const other = users.filter((u) => u.employeeId !== employeeId);
+  if (other.some((u) => u.email.toLowerCase() === draft.email.trim().toLowerCase())) return 'Эта почта уже указана у другого сотрудника.';
+  if (other.some((u) => u.windowsLogin.toLowerCase() === draft.windowsLogin.trim().toLowerCase())) return 'Этот Windows-логин уже назначен другому пользователю.';
+  return '';
+};
+
+/** Общие поля сотрудника. Все доступны для правки независимо от способа входа и настройки Active Directory. */
+const PersonFields = ({ draft, set, units, disabledRole, nameSlot }: { draft: PersonDraft; set: <K extends keyof PersonDraft>(key: K, value: PersonDraft[K]) => void; units: Unit[]; disabledRole?: boolean; nameSlot?: ReactNode }) => (
+  <>
+    {nameSlot ?? (
+      <label className="field"><span className="caps">ФИО</span>
+        <TextInput value={draft.fullName} onChange={(e) => set('fullName', e.target.value)} placeholder="Иванов Алексей Борисович" maxLength={200} />
+      </label>
+    )}
+    <div className="field-row">
+      <label className="field"><span className="caps">Должность</span>
+        <TextInput value={draft.position} onChange={(e) => set('position', e.target.value)} placeholder="Ведущий специалист" maxLength={200} />
+      </label>
+      <label className="field"><span className="caps">Электронная почта</span>
+        <TextInput value={draft.email} onChange={(e) => set('email', e.target.value)} placeholder="ivanov@example.com" maxLength={200} />
+      </label>
+    </div>
+    <div className="field-row">
+      <label className="field"><span className="caps">Windows-логин</span>
+        <TextInput value={draft.windowsLogin} onChange={(e) => set('windowsLogin', e.target.value)} placeholder="ivanov" mono maxLength={128} />
+      </label>
+      <div className="field"><span className="caps">Подразделение</span>
+        <Select<string> variant="light" label="Подразделение сотрудника" value={draft.unitId} options={unitOptions(units)} onChange={(v) => set('unitId', v)} />
+      </div>
+    </div>
+    <label className="field"><span className="caps">Роль</span>
+      <Select<Role> value={draft.role} options={ROLE_OPTIONS} disabled={disabledRole} label="Роль сотрудника" onChange={(v) => set('role', v)} />
+    </label>
+  </>
+);
+
+const EditUserDialog = ({ account, users, units, protectedAccount, onClose, onSave }: { account: ManagedUser; users: ManagedUser[]; units: Unit[]; protectedAccount: boolean; onClose: () => void; onSave: (draft: PersonDraft) => void }) => {
+  const [draft, setDraft] = useState<PersonDraft>({
+    fullName: account.fullName,
+    position: account.position,
+    email: account.email,
+    windowsLogin: account.windowsLogin,
+    unitId: unitOf(account) ?? '',
+    role: account.role,
+    active: account.active,
+  });
   const [error, setError] = useState('');
-  const submit = () => {
-    const login = windowsLogin.trim();
-    if (!login) return setError('Укажите Windows-логин.');
-    if (users.some((user) => user.employeeId !== account.employeeId && user.windowsLogin.toLowerCase() === login.toLowerCase())) return setError('Этот Windows-логин уже назначен другому пользователю.');
-    onSave(role, active, login, unitId);
+  const set = <K extends keyof PersonDraft>(key: K, value: PersonDraft[K]) => {
+    setDraft((prev) => ({ ...prev, [key]: value }));
+    setError('');
   };
-  return <Dialog title="Редактировать пользователя" context={account.fullName} onClose={onClose}>
+  const submit = () => {
+    const problem = checkPerson(draft, users, account.employeeId);
+    if (problem) return setError(problem);
+    onSave({ ...draft, fullName: draft.fullName.trim(), position: draft.position.trim(), email: draft.email.trim(), windowsLogin: draft.windowsLogin.trim() });
+  };
+  return <Dialog title="Редактировать сотрудника" context={account.fullName} onClose={onClose} wide>
     <form className="form-stack edit-user-form" onSubmit={(event) => { event.preventDefault(); submit(); }} noValidate>
-      <div className="user-identity-summary"><strong>{account.fullName}</strong><span>{account.position || 'Сотрудник'} · {account.email}</span></div>
-      <label className="field"><span className="caps">Windows-логин</span><TextInput value={windowsLogin} onChange={(event) => { setWindowsLogin(event.target.value); setError(''); }} invalid={!!error} mono maxLength={128} /></label>
-      <div className="field"><span className="caps">Подразделение</span><Select<string> variant="light" label={`Подразделение пользователя ${account.fullName}`} value={unitId} options={unitOptions(units)} onChange={setUnitId} /></div>
-      <label className="field"><span className="caps">Роль</span><Select<Role> value={role} options={ROLE_OPTIONS} disabled={protectedAccount} label={`Роль пользователя ${account.fullName}`} onChange={setRole} /></label>
-      <Checkbox checked={active} disabled={protectedAccount} onChange={setActive}>{protectedAccount ? 'Основной администратор должен оставаться активным' : 'Разрешить вход в приложение'}</Checkbox>
+      <PersonFields draft={draft} set={set} units={units} disabledRole={protectedAccount} />
+      <Checkbox checked={draft.active} disabled={protectedAccount} onChange={(v) => set('active', v)}>{protectedAccount ? 'Основной администратор должен оставаться активным' : 'Разрешить вход в приложение'}</Checkbox>
+      <p className="field-hint">ФИО, должность и почта хранятся в приложении и правятся здесь независимо от способа входа и настройки Active Directory.</p>
       {error && <p className="field-error" role="alert">{error}</p>}
       <div className="form-actions"><Button type="submit" variant="primary" icon={<Icon.Save size={15} />}>Сохранить</Button><Button onClick={onClose}>Отмена</Button></div>
     </form>
@@ -129,31 +183,51 @@ const DeleteUserDialog = ({ account, onClose, onConfirm }: { account: ManagedUse
   </div>
 </Dialog>;
 
-const AddUserDialog = ({ users, units, onClose, onSave }: { users: ManagedUser[]; units: Unit[]; onClose: () => void; onSave: (account: ManagedUser) => void }) => {
-  const [unitId, setUnitId] = useState('');
-  const [person, setPerson] = useState<DirectoryUser | null>(null);
-  const [query, setQuery] = useState('');
-  const [role, setRole] = useState<Role>('executor');
-  const [active, setActive] = useState(true);
+const AddUserDialog = ({ users, units, directoryAvailable, onClose, onSave }: { users: ManagedUser[]; units: Unit[]; directoryAvailable: boolean; onClose: () => void; onSave: (account: ManagedUser) => void }) => {
+  const [draft, setDraft] = useState<PersonDraft>({ fullName: '', position: '', email: '', windowsLogin: '', unitId: '', role: 'executor', active: true });
   const [error, setError] = useState('');
-  const select = (user: DirectoryUser) => { setPerson(user); setQuery(user.fullName); setError(''); };
-  const submit = () => {
-    if (!person || query !== person.fullName) return setError('Выберите сотрудника из результатов Active Directory.');
-    if (users.some((user) => user.windowsLogin.toLowerCase() === person.login.toLowerCase())) return setError('Этот доменный пользователь уже добавлен.');
-    const employeeId = Math.max(1000, ...users.map((user) => user.employeeId)) + 1;
-    onSave({ employeeId, fullName: person.fullName, position: person.position, windowsLogin: person.login, email: person.email, role, active, ...(unitId ? { unitId } : {}) });
+  const set = <K extends keyof PersonDraft>(key: K, value: PersonDraft[K]) => {
+    setDraft((prev) => ({ ...prev, [key]: value }));
+    setError('');
   };
-  return <Dialog title="Добавить пользователя" context="Поиск сотрудника в Active Directory" onClose={onClose}>
+  // Поиск в каталоге только заполняет поля; без Active Directory сотрудник заводится вручную.
+  const select = (user: DirectoryUser) => {
+    setDraft((prev) => ({ ...prev, fullName: user.fullName, position: user.position, email: user.email, windowsLogin: user.login }));
+    setError('');
+  };
+  const submit = () => {
+    const problem = checkPerson(draft, users, null);
+    if (problem) return setError(problem);
+    const employeeId = Math.max(1000, ...users.map((user) => user.employeeId)) + 1;
+    onSave({
+      employeeId,
+      fullName: draft.fullName.trim(),
+      position: draft.position.trim(),
+      windowsLogin: draft.windowsLogin.trim(),
+      email: draft.email.trim(),
+      role: draft.role,
+      active: draft.active,
+      ...(draft.unitId ? { unitId: draft.unitId } : {}),
+    });
+  };
+  const nameSlot = (
+    <label className="field"><span className="caps">ФИО</span>
+      {directoryAvailable ? (
+        <DirectoryUserAutocomplete value={draft.fullName} invalid={!!error} onChange={(value) => set('fullName', value)} onSelect={select} />
+      ) : (
+        <TextInput value={draft.fullName} onChange={(e) => set('fullName', e.target.value)} placeholder="Иванов Алексей Борисович" maxLength={200} />
+      )}
+      <span className="field-hint">
+        {directoryAvailable
+          ? 'Введите две буквы фамилии и выберите сотрудника — поля заполнятся сами; их можно исправить.'
+          : 'Active Directory не настроен — заполните данные вручную.'}
+      </span>
+    </label>
+  );
+  return <Dialog title="Добавить сотрудника" context={directoryAvailable ? 'Поиск в Active Directory или ввод вручную' : 'Ввод данных вручную'} onClose={onClose} wide>
     <form className="form-stack add-user-form" onSubmit={(event) => { event.preventDefault(); submit(); }} noValidate>
-      <label className="field"><span className="caps">ФИО</span><DirectoryUserAutocomplete value={query} invalid={!!error} onChange={(value) => { setQuery(value); setPerson(null); setError(''); }} onSelect={select} /><span className="field-hint">Введите не менее двух букв фамилии и выберите сотрудника.</span></label>
-      <div className="field-row">
-        <label className="field"><span className="caps">Логин</span><TextInput value={person?.login ?? ''} readOnly mono placeholder="Заполнится автоматически" /></label>
-        <label className="field"><span className="caps">Электронная почта</span><TextInput value={person?.email ?? ''} readOnly placeholder="Заполнится автоматически" /></label>
-      </div>
-      <label className="field"><span className="caps">Должность</span><TextInput value={person?.position ?? ''} readOnly placeholder="Заполнится автоматически" /></label>
-      <div className="field"><span className="caps">Подразделение</span><Select<string> variant="light" label="Подразделение нового пользователя" value={unitId} options={unitOptions(units)} onChange={setUnitId} /></div>
-      <label className="field"><span className="caps">Роль</span><Select<Role> value={role} options={ROLE_OPTIONS} label="Роль нового пользователя" onChange={setRole} /></label>
-      <Checkbox checked={active} onChange={setActive}>Разрешить вход в приложение</Checkbox>
+      <PersonFields draft={draft} set={set} units={units} nameSlot={nameSlot} />
+      <Checkbox checked={draft.active} onChange={(v) => set('active', v)}>Разрешить вход в приложение</Checkbox>
       {error && <p className="field-error" role="alert">{error}</p>}
       <div className="form-actions"><Button type="submit" variant="primary" icon={<Icon.Plus size={15} />}>Добавить</Button><Button onClick={onClose}>Отмена</Button></div>
     </form>
@@ -161,10 +235,26 @@ const AddUserDialog = ({ users, units, onClose, onSave }: { users: ManagedUser[]
 };
 
 const AuthenticationTab = () => {
-  const { state, dispatch, windowsAuthAvailable, directoryAvailable, sync } = useStore();
+  const { state, dispatch, windowsAuthAvailable, directoryAvailable, checkWindows, sync } = useStore();
+  const [check, setCheck] = useState<WindowsCheck | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [checkError, setCheckError] = useState('');
+  const windows = state.authentication.mode === 'windows';
   const choose = (mode: AuthenticationMode) => {
-    if (mode === 'windows' && !windowsAuthAvailable) return;
-    dispatch({ type: 'saveAuthentication', mode, allowEmergencyForm: state.authentication.allowEmergencyForm });
+    // Режим переключается всегда: пока сервер не настроен, вход идёт по форме, а проверка ниже покажет, чего не хватает.
+    dispatch({ type: 'saveAuthentication', mode, allowEmergencyForm: mode === 'windows' && !windowsAuthAvailable ? true : state.authentication.allowEmergencyForm });
+  };
+  const runCheck = async () => {
+    if (!checkWindows) return;
+    setChecking(true);
+    setCheckError('');
+    try {
+      setCheck(await checkWindows());
+    } catch (e) {
+      setCheckError(e instanceof Error ? e.message : 'Не удалось выполнить проверку.');
+    } finally {
+      setChecking(false);
+    }
   };
   return <div className="admin-section auth-settings">
     <div className="card-head admin-content-head">
@@ -172,19 +262,59 @@ const AuthenticationTab = () => {
       <span className={`auth-readiness ${windowsAuthAvailable ? 'ready' : ''}`}>{windowsAuthAvailable ? 'Windows готов' : 'Windows не настроен'}</span>
     </div>
     <div className="auth-choice-grid" role="radiogroup" aria-label="Способ входа">
-      <button type="button" role="radio" aria-checked={state.authentication.mode === 'form'} onClick={() => choose('form')}>
+      <button type="button" role="radio" aria-checked={!windows} onClick={() => choose('form')}>
         <strong>Форма входа</strong><span>Рабочая почта и пароль приложения.</span>
       </button>
-      <button type="button" role="radio" aria-checked={state.authentication.mode === 'windows'} disabled={!windowsAuthAvailable} onClick={() => choose('windows')}>
+      <button type="button" role="radio" aria-checked={windows} onClick={() => choose('windows')}>
         <strong>Windows</strong><span>Бесшовный вход при открытии приложения, без формы и пароля.</span>
       </button>
     </div>
     <div className="auth-emergency">
-      <Checkbox checked={state.authentication.allowEmergencyForm} disabled={state.authentication.mode !== 'windows'} onChange={(allowEmergencyForm) => dispatch({ type: 'saveAuthentication', mode: state.authentication.mode, allowEmergencyForm })}>Разрешить резервный вход администратора по паролю</Checkbox>
-      <p>Рекомендуется оставить включённым на случай недоступности домена или reverse proxy.</p>
+      <Checkbox
+        checked={state.authentication.allowEmergencyForm}
+        disabled={!windows || !windowsAuthAvailable}
+        onChange={(allowEmergencyForm) => dispatch({ type: 'saveAuthentication', mode: state.authentication.mode, allowEmergencyForm })}
+      >
+        Разрешить резервный вход администратора по паролю
+      </Checkbox>
+      <p>Рекомендуется оставить включённым на случай недоступности домена или reverse proxy. Пока Windows-вход не работает на сервере, резервный вход выключить нельзя.</p>
     </div>
-    {!windowsAuthAvailable && <p className="help-note amber">Для бесшовного входа сервер должен работать за IIS или доверенным reverse proxy с Kerberos/NTLM. Настройте доверенный заголовок Windows-пользователя и общий секрет прокси. Приложение само не отправляет заголовок <span className="num">WWW-Authenticate</span>, поэтому не вызывает браузерное окно логина.</p>}
-    {windowsAuthAvailable && <p className="help-note">При открытии приложения сервер автоматически сопоставляет подтверждённый доменный логин со столбцом «Windows-логин». Отдельный экран входа пользователю не показывается.</p>}
+    {windows && !windowsAuthAvailable && (
+      <p className="help-note amber">
+        Режим выбран, но сервер пока не получает доменного пользователя, поэтому вход идёт по форме. Задайте на сервере приложения
+        <span className="num"> WINDOWS_AUTH_TRUST_PROXY=true</span>, настройте IIS и нажмите «Проверить настройку» — проверка покажет, чего не хватает.
+      </p>
+    )}
+    {windowsAuthAvailable && <p className="help-note">При открытии приложения сервер сопоставляет подтверждённый доменный логин со столбцом «Windows-логин». Отдельный экран входа пользователю не показывается.</p>}
+
+    <div className="auth-check">
+      <div className="card-head admin-content-head">
+        <div><h3>Проверка Windows-входа</h3><p className="subtitle">Показывает, что сервер видит именно в вашем запросе: заголовки прокси, доменный логин и сопоставленного сотрудника.</p></div>
+        <Button onClick={runCheck} disabled={!checkWindows || checking}>{checking ? 'Проверяем…' : 'Проверить настройку'}</Button>
+      </div>
+      {checkError && <p className="field-error" role="alert">{checkError}</p>}
+      {check && (
+        <div className="auth-check-result" role="status">
+          <table className="admin-table">
+            <tbody>
+              <tr><td>Доверие прокси (WINDOWS_AUTH_TRUST_PROXY)</td><td>{check.enabled ? 'включено' : 'выключено'}</td></tr>
+              <tr><td>Общий секрет прокси</td><td>{check.secretRequired ? (check.secretOk ? 'задан и совпал' : 'задан, но не получен от прокси') : 'не задан (не проверяется)'}</td></tr>
+              <tr>
+                <td>Заголовки с доменным пользователем</td>
+                <td>{check.seen.length ? check.seen.map((s) => `${s.header}: ${s.value}`).join('; ') : 'не получены'}</td>
+              </tr>
+              <tr><td>Доменный пользователь</td><td>{check.identity ?? '—'}</td></tr>
+              <tr>
+                <td>Сотрудник приложения</td>
+                <td>{check.matched ? `${check.matched.fullName} (${check.matched.windowsLogin})${check.matched.active ? '' : ' — отключён'}` : 'не сопоставлен'}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p className={check.problem ? 'help-note amber' : 'help-note'}>{check.problem ?? 'Всё готово: вход через Windows выполнится автоматически.'}</p>
+        </div>
+      )}
+    </div>
+
     <p className={`auth-directory-state ${directoryAvailable ? 'ready' : ''}`}>Active Directory: {directoryAvailable ? 'поиск сотрудников доступен' : 'поиск не настроен'}</p>
     {sync.error && <p className="field-error" role="alert">{sync.error}</p>}
   </div>;

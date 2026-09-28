@@ -10,7 +10,9 @@ import type { Category } from './types';
 export type CatKey = Category | 'none';
 
 /** Цвет категории; для добавленной без цвета — цвет «Иного». */
-export const catColor = (key: CatKey) => ({ '--c': `var(--cat-${key}, var(--cat-none))` }) as CSSProperties;
+// Каналы цвета нужны для rgb(var(--c-rgb) / доля): color-mix() не поддерживает Chrome 109 (Windows 7).
+export const catColor = (key: CatKey) =>
+  ({ '--c': `var(--cat-${key}, var(--cat-none))`, '--c-rgb': `var(--cat-${key}-rgb, var(--cat-none-rgb))` }) as CSSProperties;
 
 /** Отпечаток справочника «код:название|…»: по нему пересчитываются списки. */
 const categoriesKey = () => CATEGORIES.map((c) => `${c.key}:${c.label}`).join('|');

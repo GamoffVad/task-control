@@ -58,6 +58,8 @@ export type StoreCtx = {
   reload: () => void;
   /** Новые уведомления вошедшего сотрудника с момента since; null — уведомлений нет (работа без сервера). */
   fetchNotices: ((since: string | null) => Promise<{ notices: import('./notices').ServerNotice[]; now: string }>) | null;
+  /** Проверка настройки Windows-входа; null — работа без сервера. */
+  checkWindows: (() => Promise<import('./api').WindowsCheck>) | null;
 };
 export const StoreContext = createContext<StoreCtx | null>(null);
 

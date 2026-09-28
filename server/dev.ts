@@ -5,7 +5,7 @@ import { createApi } from './app';
 import { secretFromEnv } from './auth';
 import { createPgRepo } from './pgRepo';
 import { createMemoryRepo } from './repo';
-import { windowsIdentityFromEnv } from './windowsAuth';
+import { inspectWindowsRequest, windowsIdentityFromEnv } from './windowsAuth';
 import { activeDirectoryFromEnv, demoActiveDirectory } from './activeDirectory';
 
 const url = process.env.DATABASE_URL;
@@ -19,5 +19,6 @@ export const handle = createApi({
   secret: secretFromEnv(process.env),
   now: fixed ? () => new Date(fixed + (Date.now() - started)) : undefined,
   windowsIdentity: windowsIdentityFromEnv(process.env),
+  windowsCheck: (req) => inspectWindowsRequest(req, process.env),
   directory: activeDirectoryFromEnv(process.env) ?? demoActiveDirectory,
 });

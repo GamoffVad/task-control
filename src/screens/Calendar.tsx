@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTaskEditor } from '../components/taskEditor';
 import { EmployeeFilter } from '../components/ui';
 import { FilterCard, MultiSelect, PageHeader, SearchField, Segmented, Stepper } from '../kit';
@@ -211,7 +211,7 @@ export const Calendar = () => {
         {CATEGORIES.map((c) => (
           <span key={c.key}><i className="cat" style={catColor(c.key)} />{c.short}</span>
         ))}
-        <span><i className="cat" style={{ '--c': 'var(--cat-none)' } as CSSProperties} />иное</span>
+        <span><i className="cat" style={catColor('none')} />иное</span>
         <span><span className="state ok">✓</span>исполнено</span>
         <span><span className="state bad">!</span>просрочено (красная рамка)</span>
       </div>

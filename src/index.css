@@ -9,8 +9,8 @@
   --dash: #C9C6BD;
   --line: #DDD9D0;
   /* Линии сетки таблиц и календаря — бледнее разделителей. */
-  --grid-line: color-mix(in srgb, var(--line) 50%, transparent);
-  --grid-line-soft: color-mix(in srgb, var(--line) 28%, transparent);
+  --grid-line: rgb(var(--line-rgb) / 50%);
+  --grid-line-soft: rgb(var(--line-rgb) / 28%);
   --accent: #1F3A5F;
   --accent-2: #2F5480;
   --accent-hover: #16293F;
@@ -64,6 +64,24 @@
   --weekend: rgba(31, 43, 58, 0.035);
 
   color-scheme: light;
+
+  /* Каналы цветов: нужны для rgb(var(--…-rgb) / доля) вместо color-mix() — его нет в Chrome 109 (Windows 7). */
+  --ink-rgb: 31 43 58;
+  --ink-3-rgb: 93 101 117;
+  --line-rgb: 221 217 208;
+  --accent-rgb: 31 58 95;
+  --amber-rgb: 122 83 18;
+  --danger-rgb: 163 45 34;
+  --cat-none-rgb: 140 129 108;
+  --cat-reportDept-rgb: 47 84 128;
+  --cat-reportDirectorate-rgb: 106 76 147;
+  --cat-reportAgency-rgb: 152 58 110;
+  --cat-interim-rgb: 30 114 104;
+  --abs-vacation-rgb: 154 107 18;
+  --abs-trip-rgb: 47 84 128;
+  --abs-dayoff-rgb: 106 76 147;
+  --abs-sick-rgb: 152 58 110;
+  --abs-study-rgb: 30 114 104;
 }
 
 /* Тёмная тема — основная. Тот же «лист», но ночью: тёплый графит, светлые чернила, один акцент. */
@@ -118,6 +136,24 @@
   --weekend: rgba(255, 255, 255, 0.025);
 
   color-scheme: dark;
+
+  /* Каналы цветов: нужны для rgb(var(--…-rgb) / доля) вместо color-mix() — его нет в Chrome 109 (Windows 7). */
+  --ink-rgb: 234 240 250;
+  --ink-3-rgb: 170 187 208;
+  --line-rgb: 49 71 95;
+  --accent-rgb: 147 185 240;
+  --amber-rgb: 225 179 106;
+  --danger-rgb: 255 132 125;
+  --cat-none-rgb: 168 163 151;
+  --cat-reportDept-rgb: 142 178 222;
+  --cat-reportDirectorate-rgb: 184 157 227;
+  --cat-reportAgency-rgb: 226 141 188;
+  --cat-interim-rgb: 111 200 185;
+  --abs-vacation-rgb: 216 166 86;
+  --abs-trip-rgb: 142 178 222;
+  --abs-dayoff-rgb: 184 157 227;
+  --abs-sick-rgb: 226 141 188;
+  --abs-study-rgb: 111 200 185;
 }
 
 @media (min-width: 768px) {
@@ -723,15 +759,15 @@ td.name { color: var(--ink); font-weight: 600; }
 /* Цвет — категория; состояние — значок и обводка. */
 .cal-event.cat {
   /* Стиль «Контур с точкой»: фон бумаги, тонкая рамка в цвет категории, цветная точка у времени. */
-  border: 1px solid color-mix(in srgb, var(--c) var(--cal-event-edge), transparent);
+  border: 1px solid rgb(var(--c-rgb) / var(--cal-event-edge));
   background: var(--cal-event-surface);
 }
-.cal-event.cat:hover { background: color-mix(in srgb, var(--c) var(--cal-event-mix-hover), var(--cal-event-surface)); border-color: var(--c); }
+.cal-event.cat:hover { background: rgb(var(--c-rgb) / var(--cal-event-mix-hover)); border-color: var(--c); }
 .cal-event.cat .t:first-of-type::before, .chip.cat > .num:first-child::before {
   content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--c); margin-right: 5px; vertical-align: 0;
 }
-.chip.cat { border: 1px solid color-mix(in srgb, var(--c) var(--cal-event-edge), transparent); background: var(--cal-event-surface); }
-.chip.cat:hover { background: color-mix(in srgb, var(--c) var(--cal-event-mix-hover), var(--cal-event-surface)); border-color: var(--c); }
+.chip.cat { border: 1px solid rgb(var(--c-rgb) / var(--cal-event-edge)); background: var(--cal-event-surface); }
+.chip.cat:hover { background: rgb(var(--c-rgb) / var(--cal-event-mix-hover)); border-color: var(--c); }
 .cal-event.cat.overdue, .chip.cat.overdue { border-color: var(--danger); box-shadow: none; }
 .cal-event.done, .chip.cat.done { opacity: 1; }
 .cal-event.overdue, .chip.cat.overdue { box-shadow: inset 0 0 0 1px var(--danger); }
@@ -775,7 +811,7 @@ td.name { color: var(--ink); font-weight: 600; }
   cursor: pointer;
 }
 .cat-toggle i { width: 10px; height: 10px; border-radius: 1px; background: var(--c); opacity: 0.35; }
-.cat-toggle[aria-pressed='true'] { color: var(--ink); border: 1px solid color-mix(in srgb, var(--c) 60%, transparent); background: color-mix(in srgb, var(--c) 12%, transparent); }
+.cat-toggle[aria-pressed='true'] { color: var(--ink); border: 1px solid rgb(var(--c-rgb) / 60%); background: rgb(var(--c-rgb) / 12%); }
 .cat-toggle[aria-pressed='true'] i { opacity: 1; }
 .search-results { border-bottom: 1px dashed var(--dash); padding: 6px 0 10px; }
 .search-results ul { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow: auto; }
@@ -796,7 +832,7 @@ td.name { color: var(--ink); font-weight: 600; }
 }
 .search-results li button:hover { background: var(--soft); color: var(--accent); }
 .search-results li i { width: 10px; height: 10px; background: var(--c); border-radius: 1px; align-self: center; }
-.search-results mark { background: color-mix(in srgb, var(--amber) 30%, transparent); color: inherit; padding: 0 1px; }
+.search-results mark { background: rgb(var(--amber-rgb) / 30%); color: inherit; padding: 0 1px; }
 @media (max-width: 767px) {
   .cat-filter { flex-wrap: nowrap; overflow-x: auto; padding: 4px 0 8px; margin: 8px 0; scrollbar-width: thin; }
   .cat-filter > * { flex: none; }
@@ -1076,7 +1112,7 @@ a.label:hover { color: var(--accent); }
 .abs-types { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 4px; }
 .abs-type {
   display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; min-height: var(--tap-min); border-radius: 2px; cursor: pointer;
-  border: 1px solid color-mix(in srgb, var(--c) 55%, transparent); background: color-mix(in srgb, var(--c) 12%, transparent);
+  border: 1px solid rgb(var(--c-rgb) / 55%); background: rgb(var(--c-rgb) / 12%);
   font-size: 12px; color: var(--ink);
 }
 .abs-type i { width: 9px; height: 9px; border-radius: 1px; background: var(--c); }
@@ -1113,13 +1149,13 @@ a.label:hover { color: var(--accent); }
 .tl-bar {
   /* Полоса у верха строки, ромбы сроков — у низа: в строке 40 px они не перекрываются. */
   grid-row: 1; align-self: start; height: 25px; margin: 3px 2px 0; z-index: 1; min-width: 0; overflow: hidden; position: relative;
-  border: none; border-left: 3px solid var(--c); background: color-mix(in srgb, var(--c) var(--abs-mix), var(--paper));
+  border: none; border-left: 3px solid var(--c); background: rgb(var(--c-rgb) / var(--abs-mix));
   border-radius: 0 2px 2px 0; padding: 2px 6px; font-size: 10.5px; line-height: 1.15; color: var(--ink); cursor: pointer; text-align: left; white-space: nowrap;
 }
 .tl-bar small { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: var(--ink-3); }
 .tl-bar.request {
-  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 24%, transparent) 0 1px, transparent 1px 5px);
-  outline: 1px dashed color-mix(in srgb, var(--c) 75%, transparent);
+  background: repeating-linear-gradient(135deg, rgb(var(--c-rgb) / 24%) 0 1px, transparent 1px 5px);
+  outline: 1px dashed rgb(var(--c-rgb) / 75%);
   outline-offset: -1px;
 }
 .tl-bar.open { border-right: 2px dotted var(--c); }
@@ -1134,10 +1170,10 @@ a.label:hover { color: var(--accent); }
 .tl-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--ink-3); align-items: center; }
 .tl-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .tl-legend-title { color: var(--ink-2); font-weight: 600; }
-.tl-legend .lg-bar { width: 18px; height: 10px; border-left: 3px solid var(--abs-vacation); background: color-mix(in srgb, var(--abs-vacation) var(--abs-mix), var(--paper)); }
+.tl-legend .lg-bar { width: 18px; height: 10px; border-left: 3px solid var(--abs-vacation); background: rgb(var(--abs-vacation-rgb) / var(--abs-mix)); }
 .tl-legend .lg-req {
   width: 18px; height: 10px; border: 1px dashed var(--ink-3);
-  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink-3) 28%, transparent) 0 1px, transparent 1px 5px);
+  background: repeating-linear-gradient(135deg, rgb(var(--ink-3-rgb) / 28%) 0 1px, transparent 1px 5px);
 }
 .tl-legend .lg-dl { width: 9px; height: 9px; border: 2px solid var(--paper); border-radius: 50%; background: var(--accent); }
 .tl-legend .lg-dl.done { background: var(--ok); }
@@ -1172,7 +1208,7 @@ a.label:hover { color: var(--accent); }
 .bal-track { display: flex; height: 10px; background: var(--line); border-radius: 1px; overflow: hidden; margin: 8px 0 6px; }
 .bal-track i { display: block; height: 100%; }
 .bal-track .used { background: var(--c); }
-.bal-track .plan { background: color-mix(in srgb, var(--c) 45%, transparent); }
+.bal-track .plan { background: rgb(var(--c-rgb) / 45%); }
 .bal-keys { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 11.5px; color: var(--ink-3); }
 .bal-keys .num { color: var(--ink-2); }
 .norms { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; margin-top: 14px; }
@@ -1261,7 +1297,7 @@ a.label:hover { color: var(--accent); }
 .add-user-form { padding-top: 4px; }
 .directory-autocomplete { position: relative; }
 .directory-search-state { position: absolute; right: 12px; top: 50%; translate: 0 -50%; color: var(--ink-4); font-size: 12px; pointer-events: none; }
-.directory-options { position: absolute; z-index: 80; top: calc(100% + 4px); left: 0; right: 0; max-height: min(320px, 42vh); overflow-y: auto; border: 1px solid var(--line); background: var(--sheet); box-shadow: 0 12px 28px color-mix(in srgb, var(--paper) 62%, transparent); }
+.directory-options { position: absolute; z-index: 80; top: calc(100% + 4px); left: 0; right: 0; max-height: min(320px, 42vh); overflow-y: auto; border: 1px solid var(--line); background: var(--sheet); box-shadow: 0 12px 28px rgb(var(--paper-rgb) / 62%); }
 .directory-options button { display: block; width: 100%; min-height: 52px; padding: 9px 12px; border: none; border-bottom: 1px dashed var(--dash); background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
 .directory-options button:last-child { border-bottom: none; }
 .directory-options button:hover, .directory-options button[aria-selected='true'] { background: var(--soft); color: var(--accent); }
@@ -1322,11 +1358,11 @@ a.label:hover { color: var(--accent); }
 .tt-stat.warn .num { color: var(--amber); }
 .tt-warn { margin: 8px 0 0; padding: 6px 12px; border-left: 3px solid var(--danger); background: var(--danger-bg); font-size: 13px; color: var(--ink-2); }
 .tt-warn b { color: var(--danger); }
-.tt-warn.soft { border-left-color: var(--amber); background: color-mix(in srgb, var(--amber) 12%, transparent); }
+.tt-warn.soft { border-left-color: var(--amber); background: rgb(var(--amber-rgb) / 12%); }
 .tt-warn.soft b { color: var(--amber); }
 /* Дни, когда в отпуске больше порога: красная (согласовано) или янтарная (с заявками) метка над днём. */
 .tl-dh.over { box-shadow: inset 0 3px 0 var(--danger); background: var(--danger-bg); }
-.tl-dh.over-req { box-shadow: inset 0 3px 0 var(--amber); background: linear-gradient(color-mix(in srgb, var(--amber) 12%, transparent), color-mix(in srgb, var(--amber) 12%, transparent)), var(--paper); }
+.tl-dh.over-req { box-shadow: inset 0 3px 0 var(--amber); background: linear-gradient(rgb(var(--amber-rgb) / 12%), rgb(var(--amber-rgb) / 12%)), var(--paper); }
 .tl-dh.today.over, .tl-dh.today.over-req { box-shadow: inset 0 3px 0 var(--danger), inset 0 -2px 0 var(--danger); }
 /* Итоговая строка «Тетриса»: процент отсутствующих по дням. */
 .tl-foot-label { grid-column: 1; position: sticky; left: 0; bottom: 0; z-index: 5; background: var(--paper); border-right: 1px dashed var(--dash); border-top: 1px solid var(--accent); padding: 7px 12px 7px 0; display: flex; align-items: center; }
@@ -1390,3 +1426,9 @@ a.label:hover { color: var(--accent); }
 .task-card.done:hover { opacity: 0.8; }
 .filters .dd--plain .dd-btn { font-size: 15px; }
 
+
+/* Администрирование: проверка настройки Windows-входа. */
+.auth-check { border-top: 1px dashed var(--dash); margin-top: 16px; padding-top: 12px; }
+.auth-check h3 { font-size: 15px; margin: 0; }
+.auth-check-result { margin-top: 10px; }
+.auth-check-result .admin-table td:first-child { width: 42%; color: var(--ink-3); font-weight: 400; }

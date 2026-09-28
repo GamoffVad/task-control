@@ -26,6 +26,7 @@
     "server",
     "src/test/server.test.ts",
     "src/test/pg.test.ts",
-    "src/test/notices.test.ts"
+    "src/test/notices.test.ts",
+    "src/test/windowsAuth.test.ts"
   ]
 }

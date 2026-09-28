@@ -65,7 +65,9 @@ export const Login = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authenticationReady, state.authentication.mode, state.user, windowsAuthAvailable]);
 
-  const showForm = state.authentication.mode === 'form' || emergency;
+  // Режим Windows выбран, но сервер его не выполняет: пускаем по форме, иначе войти было бы нельзя.
+  const windowsFallback = state.authentication.mode === 'windows' && authenticationReady && !windowsAuthAvailable;
+  const showForm = state.authentication.mode === 'form' || emergency || windowsFallback;
 
   if (state.user) return <Navigate to={from} replace />;
   if (!authenticationReady) return <div className="login-page"><div className="login-side"><p className="loading-screen" role="status">Проверка способа входа…</p></div></div>;
@@ -86,6 +88,10 @@ export const Login = () => {
             {error && <p className="field-error" role="alert">{error}</p>}
             {state.authentication.allowEmergencyForm && <button type="button" className="text-action" onClick={() => { setEmergency(true); setError(''); }}>Резервный вход администратора</button>}
           </div>}
+          {windowsFallback && <p className="help-note amber" style={{ marginTop: 16 }}>
+            Администратор выбрал вход через Windows, но сервер пока не получает доменного пользователя, поэтому вход выполняется по логину и паролю.
+            Настройку можно проверить в разделе «Администрирование» → «Аутентификация».
+          </p>}
           {showForm && <form className="form-stack" style={{ marginTop: 20 }} onSubmit={submit} noValidate>
             <label className="field">
               <span className="caps">Логин</span>
