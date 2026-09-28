@@ -1,1 +1,13 @@
+# Единые переводы строк в репозитории: LF в истории, в рабочей копии — как принято в системе.
+* text=auto eol=lf
+
+# Двоичные файлы не трогать.
+*.png binary
+*.jpg binary
+*.pdf binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+
+# Пакетный файл публикации запускает cmd.exe: только переводы строк Windows.
 *.bat text eol=crlf
