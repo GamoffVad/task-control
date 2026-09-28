@@ -76,14 +76,20 @@ const masterConfig = (): sql.config => ({
 });
 
 /** Прямой запрос в обход хранилища: для подготовки «старой» базы. */
-const raw = async (text: string, db = database) => {
-  const pool = new sql.ConnectionPool({ ...masterConfig(), database: db });
-  await pool.connect();
-  try {
-    return await pool.request().query(text);
-  } finally {
-    await pool.close();
+// Соединения переиспользуются: на каждый оператор схемы новый пул открывался бы дольше, чем идёт тест.
+const pools = new Map<string, Promise<sql.ConnectionPool>>();
+const poolFor = (db: string) => {
+  let pool = pools.get(db);
+  if (!pool) {
+    pool = new sql.ConnectionPool({ ...masterConfig(), database: db }).connect();
+    pools.set(db, pool);
   }
+  return pool;
+};
+const raw = async (text: string, db = database) => (await poolFor(db)).request().query(text);
+const closePools = async () => {
+  for (const pool of pools.values()) await (await pool).close().catch(() => undefined);
+  pools.clear();
 };
 
 let repo: Repo;
@@ -95,7 +101,10 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
 
   afterAll(async () => {
     await repo?.close?.();
+    await pools.get(database)?.then((p) => p.close()).catch(() => undefined);
+    pools.delete(database);
     await raw(`if db_id(N'${database}') is not null begin alter database [${database}] set single_user with rollback immediate; drop database [${database}]; end`, 'master');
+    await closePools();
   }, 120_000);
 
   it('создаёт базу и таблицы сама; пустая база читается как null', async () => {
@@ -127,7 +136,7 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
   it('повторное создание схемы ничего не ломает', async () => {
     for (const statement of SCHEMA) await raw(statement);
     expect((await repo.read())!.tasks.length).toBeGreaterThan(0);
-  });
+  }, 30_000);
 
   it('даты отсутствий не сдвигаются часовым поясом', async () => {
     const before = (await repo.read())!;

@@ -2,7 +2,7 @@
 //   POST /api/login   { email, password }  → { token, user }
 //   GET  /api/state                        → { data }
 //   POST /api/action  { action }           → { data }
-//   GET  /api/health                       → { ok, storage }
+//   GET  /api/health                       → { ok, storage } либо 503, если база не отвечает
 //   GET  /api/notices?since=ISO            → { notices, now } — новые уведомления вошедшего сотрудника
 //   GET  /api/windows-check                → что сервер видит в запросе для входа через Windows (администратору)
 // Изменения выполняет тот же редьюсер, что и в браузере, с пользователем из подписанного токена,
@@ -368,8 +368,16 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
       const url = new URL(req.url ?? '/', 'http://localhost');
       const route = `${req.method} ${url.pathname.replace(/\/+$/, '')}`;
       switch (route) {
-        case 'GET /api/health':
+        case 'GET /api/health': {
+          // Проверяем само соединение: настроенная, но недоступная база — частая причина «белого экрана».
+          try {
+            await repo.ping?.();
+          } catch (e) {
+            console.error('Хранилище недоступно:', e);
+            return send(res, 503, { ok: false, storage: repo.kind, error: 'База данных недоступна.' });
+          }
           return send(res, 200, { ok: true, storage: repo.kind });
+        }
         case 'GET /api/authentication': {
           const current = await load();
           return send(res, 200, { authentication: current.authentication, windowsAvailable: !!windowsIdentity, directoryAvailable: !!directory });

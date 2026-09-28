@@ -13,6 +13,8 @@ export interface Repo {
    * Если fn бросает исключение, ничего не сохраняется.
    */
   update(fn: (current: Data | null) => Data): Promise<Data>;
+  /** Проверка доступности хранилища для /api/health; бросает исключение, если база не отвечает. */
+  ping?(): Promise<void>;
   /** Закрыть соединения (тесты). */
   close?(): Promise<void>;
 }

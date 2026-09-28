@@ -47,6 +47,22 @@ describe('API', () => {
     expect(await call('/api/health')).toEqual({ status: 200, json: { ok: true, storage: 'memory' } });
   });
 
+  it('health отвечает 503, когда база настроена, но недоступна', async () => {
+    // Настроенная, но недоступная база — частая причина «белого экрана» после публикации.
+    const broken = { ...createMemoryRepo(), kind: 'sqlserver', ping: async () => { throw new Error('сеть недоступна'); } };
+    const handle = createApi({ repo: broken, secret: 'test-secret' });
+    const server = createServer((req, res) => void handle(req, res));
+    await new Promise<void>((done) => server.listen(0, done));
+    const port = (server.address() as AddressInfo).port;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/health`);
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual({ ok: false, storage: 'sqlserver', error: 'База данных недоступна.' });
+    } finally {
+      server.close();
+    }
+  });
+
   it('входит по логину и паролю, отказывает при неверном пароле', async () => {
     const bad = await call('/api/login', { method: 'POST', body: { email: 'user@example.com', password: 'nope00' } });
     expect(bad.status).toBe(401);

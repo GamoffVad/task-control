@@ -512,6 +512,11 @@ export const createMssqlRepo = (settings: MssqlSettings): Repo => {
 
   return {
     kind: 'sqlserver',
+    ping: async () => {
+      // connect() создаёт базу и таблицы, поэтому проверка охватывает всю готовность хранилища.
+      await connect();
+      await pool.request().query('select 1');
+    },
     close: async () => {
       if (ready) await ready.catch(() => undefined);
       await pool.close();

@@ -331,6 +331,10 @@ export const createPgRepo = (connectionString: string, opts: { max?: number } = 
 
   return {
     kind: 'postgres',
+    ping: async () => {
+      await ensureSchema();
+      await pool.query('select 1');
+    },
     close: () => pool.end(),
     async read() {
       await ensureSchema();
