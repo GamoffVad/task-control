@@ -15,6 +15,9 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(path.join(out, 'data'), { recursive: true });
 cpSync(path.join(root, 'dist'), path.join(out, 'public'), { recursive: true });
 
+// Скрипт подготовки SQL Server кладётся рядом с сервером: на сервере может не быть папки проекта.
+cpSync(path.join(root, 'scripts', 'setup-sql.ps1'), path.join(out, 'setup-sql.ps1'));
+
 await build({
   entryPoints: [path.join(root, 'server', 'iis.ts')],
   outfile: path.join(out, 'server.cjs'),

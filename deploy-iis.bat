@@ -6,7 +6,8 @@ rem ============================================================
 rem  Публикация приложения «Контроль задач» в IIS
 rem  Адрес: http://10.199.127.27:1500  Папка: C:\inetpub\wwwroot\PLAN
 rem  Запускать от имени администратора.
-rem  Ключ /nobuild — только копирование и настройка IIS, без пересборки.
+rem  Ключи: /nobuild — без пересборки, /nosql — не трогать SQL Server,
+rem         /resetsql — задать учётной записи приложения новый пароль.
 rem ============================================================
 
 set "SITE=PLAN"
@@ -15,6 +16,10 @@ set "IP=10.199.127.27"
 set "PORT=1500"
 set "TARGET=C:\inetpub\wwwroot\PLAN"
 set "SOURCE=%~dp0dist-iis"
+rem SQL Server для хранилища: имя сервера или СЕРВЕР\ЭКЗЕМПЛЯР, база и учётная запись приложения.
+set "SQLSERVER=localhost"
+set "SQLDB=TaskControl"
+set "SQLLOGIN=tc_app"
 set "APPCMD=%windir%\system32\inetsrv\appcmd.exe"
 set "SECTION=system.webServer/security/authentication"
 
@@ -23,6 +28,7 @@ echo === Контроль задач: публикация в IIS ===
 echo Сайт:   %SITE%
 echo Адрес:  http://%IP%:%PORT%/
 echo Папка:  %TARGET%
+echo База:   %SQLDB% на %SQLSERVER%
 echo.
 
 rem --- Проверки окружения -------------------------------------
@@ -56,10 +62,20 @@ if errorlevel 1 (
   goto :fail
 )
 
-rem --- Сборка комплекта ---------------------------------------
-if /i "%~1"=="/nobuild" goto :copy
+rem --- Ключи запуска ------------------------------------------
+set "SKIPBUILD="
+set "SKIPSQL="
+set "RESETSQL="
+for %%a in (%*) do (
+  if /i "%%~a"=="/nobuild" set "SKIPBUILD=1"
+  if /i "%%~a"=="/nosql" set "SKIPSQL=1"
+  if /i "%%~a"=="/resetsql" set "RESETSQL=-Reset"
+)
 
-echo [1/6] Сборка комплекта...
+rem --- Сборка комплекта ---------------------------------------
+if defined SKIPBUILD goto :copy
+
+echo [1/7] Сборка комплекта...
 pushd "%~dp0"
 call npm run build:iis
 set "BUILD=%errorlevel%"
@@ -75,7 +91,7 @@ if not exist "%SOURCE%\server.cjs" (
   goto :fail
 )
 
-echo [2/6] Копирование файлов...
+echo [2/7] Копирование файлов...
 if not exist "%TARGET%" mkdir "%TARGET%"
 if not exist "%TARGET%\web.config" (
   copy /y "%SOURCE%\web.config" "%TARGET%\web.config" >nul
@@ -92,13 +108,13 @@ if not exist "%TARGET%\data" mkdir "%TARGET%\data"
 rem Журналы iisnode пишутся в папку рядом с приложением.
 if not exist "%TARGET%\iisnode" mkdir "%TARGET%\iisnode"
 
-echo [3/6] Права доступа...
+echo [3/7] Права доступа...
 icacls "%TARGET%" /grant "IIS_IUSRS:(OI)(CI)(RX)" /T /C >nul
 icacls "%TARGET%\data" /grant "IIS_IUSRS:(OI)(CI)(M)" /T /C >nul
 icacls "%TARGET%\iisnode" /grant "IIS_IUSRS:(OI)(CI)(M)" /T /C >nul
 
 rem --- Пул приложений -----------------------------------------
-echo [4/6] Пул приложений...
+echo [4/7] Пул приложений...
 "%APPCMD%" list apppool "%POOL%" >nul 2>&1
 if errorlevel 1 "%APPCMD%" add apppool /name:"%POOL%" >nul
 rem Без управляемого кода, без простоя и перезапусков по расписанию: сервер Node.js держится постоянно.
@@ -107,7 +123,7 @@ icacls "%TARGET%\data" /grant "IIS AppPool\%POOL%:(OI)(CI)(M)" /T /C >nul
 icacls "%TARGET%\iisnode" /grant "IIS AppPool\%POOL%:(OI)(CI)(M)" /T /C >nul
 
 rem --- Сайт ----------------------------------------------------
-echo [5/6] Сайт и привязка...
+echo [5/7] Сайт и привязка...
 "%APPCMD%" list site "%SITE%" >nul 2>&1
 if errorlevel 1 (
   "%APPCMD%" add site /name:"%SITE%" /bindings:"http/%IP%:%PORT%:" /physicalPath:"%TARGET%" >nul
@@ -118,7 +134,7 @@ if errorlevel 1 (
 "%APPCMD%" set app "%SITE%/" /applicationPool:"%POOL%" >nul
 
 rem --- Windows-аутентификация ----------------------------------
-echo [6/6] Windows-аутентификация...
+echo [6/7] Windows-аутентификация...
 "%APPCMD%" set config "%SITE%" /section:%SECTION%/anonymousAuthentication /enabled:false /commit:apphost >nul
 "%APPCMD%" set config "%SITE%" /section:%SECTION%/basicAuthentication /enabled:false /commit:apphost >nul
 "%APPCMD%" set config "%SITE%" /section:%SECTION%/windowsAuthentication /enabled:true /commit:apphost >nul
@@ -133,6 +149,28 @@ rem Правило передаёт приложению подтверждён�
 "%APPCMD%" set config "%SITE%" -section:system.webServer/rewrite/rules /+"[name='Windows user'].serverVariables.[name='HTTP_X_WINDOWS_USER',value='{LOGON_USER}',replace='True']" /commit:apphost >nul 2>&1
 "%APPCMD%" set config "%SITE%" -section:system.webServer/rewrite/rules /"[name='Windows user'].action.type:None" /commit:apphost >nul 2>&1
 
+rem --- SQL Server: база и учётная запись приложения ------------
+echo [7/7] SQL Server...
+rem Внутри блока «if (...)» переменная не успевает раскрыться, поэтому путь ищем заранее.
+set "SQLSETUP=%~dp0scripts\setup-sql.ps1"
+if not exist "%SQLSETUP%" set "SQLSETUP=%TARGET%\setup-sql.ps1"
+if defined SKIPSQL echo   Пропущено по ключу /nosql.
+if defined SKIPSQL goto :sqldone
+if not exist "%SQLSETUP%" (
+  echo   ВНИМАНИЕ: не найден %SQLSETUP% — настройка SQL Server пропущена.
+  goto :sqldone
+)
+rem Скрипт создаёт учётную запись и базу от имени текущего администратора и вписывает
+rem настройки в web.config. Таблицы приложение создаёт само при первом запуске.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SQLSETUP%" -Server "%SQLSERVER%" -Database "%SQLDB%" -Login "%SQLLOGIN%" -ConfigPath "%TARGET%\web.config" %RESETSQL%
+if errorlevel 1 (
+  echo.
+  echo   ВНИМАНИЕ: настроить SQL Server не удалось — смотрите сообщение выше.
+  echo   Публикация в IIS уже выполнена. Настройте базу позже и повторите только этот шаг:
+  echo   powershell -ExecutionPolicy Bypass -File "%SQLSETUP%" -Server "%SQLSERVER%" -ConfigPath "%TARGET%\web.config"
+)
+:sqldone
+
 rem --- Брандмауэр и запуск -------------------------------------
 netsh advfirewall firewall show rule name="TaskControl %PORT%" >nul 2>&1
 if errorlevel 1 netsh advfirewall firewall add rule name="TaskControl %PORT%" dir=in action=allow protocol=TCP localport=%PORT% >nul
@@ -144,9 +182,8 @@ echo.
 echo Готово. Приложение доступно по адресу http://%IP%:%PORT%/
 echo.
 echo Дальше:
-echo  1. Задать настройки в разделе appSettings файла %TARGET%\web.config:
-echo     MSSQL_SERVER — имя SQL Server, MSSQL_USER и MSSQL_PASSWORD — учётная запись SQL Server,
-echo     AUTH_SECRET — длинная случайная строка. База и таблицы создадутся при первом запуске.
+echo  1. Проверить раздел appSettings файла %TARGET%\web.config: строки MSSQL_ и AUTH_SECRET
+echo     заполняются шагом 7 автоматически. Таблицы создадутся при первом открытии приложения.
 echo  2. Войти администратором, открыть Администрирование ^> Аутентификация
 echo     и нажать «Проверить настройку»: там видно, какой доменный логин получил сервер.
 echo  3. Заполнить Windows-логины сотрудников и включить режим «Windows-аутентификация».

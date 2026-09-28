@@ -11,3 +11,6 @@
 
 # Пакетный файл публикации запускает cmd.exe: только переводы строк Windows.
 *.bat text eol=crlf
+
+# Скрипты PowerShell запускает Windows PowerShell 5.1: нужны CRLF и BOM в UTF-8.
+*.ps1 text eol=crlf

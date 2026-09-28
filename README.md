@@ -7,7 +7,7 @@
 **Планирование задач отдела и контроль исполнения:** календарь, недельная матрица плана, доска сроков,
 график событий сотрудников, недельные отчёты, показатели эффективности и уведомления — без обращений в интернет.
 
-[![версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-5.15.0-1F3A5F)](CHANGELOG.md)
+[![версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-5.16.0-1F3A5F)](CHANGELOG.md)
 [![тесты](https://img.shields.io/badge/%D1%82%D0%B5%D1%81%D1%82%D1%8B-191-2C6B45)](#проверки)
 [![стек](https://img.shields.io/badge/Vite%208%20%C2%B7%20React%2019%20%C2%B7%20TypeScript-1F2B3A)](#устройство-проекта)
 [![лицензия](https://img.shields.io/badge/%D0%BB%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F-MIT-5D6575)](LICENSE)
@@ -201,7 +201,7 @@ npm run dev
 | `npm run build:vercel` | интерфейс и функции API в `.vercel/output` |
 | `npm run deploy` | публикация собранного каталога `.vercel/output` на Vercel |
 | `npm run build:iis` | комплект для публикации в IIS в `dist-iis/` |
-| `deploy-iis.bat` | публикация в IIS: копирование в `C:\inetpub\wwwroot\PLAN`, сайт, пул и Windows-аутентификация (от имени администратора) |
+| `deploy-iis.bat` | публикация в IIS: копирование в `C:\inetpub\wwwroot\PLAN`, сайт, пул, Windows-аутентификация, учётная запись и база SQL Server (от имени администратора) |
 | `npm run preview` | просмотр собранного интерфейса |
 | `npm test` | модульные, интерфейсные и серверные тесты (Vitest) |
 | `npm run test:mssql` | тесты хранилища SQL Server (нужны `MSSQL_TEST_SERVER`, `MSSQL_TEST_USER`, `MSSQL_TEST_PASSWORD`) |
@@ -231,8 +231,9 @@ public/       значки, Service Worker уведомлений, PDF-руко�
 ## Данные и сервер
 
 - Хранилище — **Microsoft SQL Server** 2016 и новее (проверено на 2025): переменные `MSSQL_SERVER`,
-  `MSSQL_DATABASE`, `MSSQL_USER`, `MSSQL_PASSWORD`. **База и таблицы создаются при первом обращении**,
-  пустая база заполняется демонстрационными данными. Настройка — [docs/corporate-offline.md](docs/corporate-offline.md).
+  `MSSQL_DATABASE`, `MSSQL_USER`, `MSSQL_PASSWORD`. **Учётную запись и базу создаёт публикация**
+  (`deploy-iis.bat`, шаг 7), **таблицы — само приложение** при первом обращении; пустая база
+  заполняется демонстрационными данными. Настройка — [docs/corporate-offline.md](docs/corporate-offline.md).
 - Публикация на Vercel работает с PostgreSQL (Neon): строка подключения — `DATABASE_URL`.
   Без настроек базы данные хранятся в файле рядом с сервером.
 - API: `POST /api/login`, `POST /api/windows-login`, `GET /api/state`, `POST /api/action`,
