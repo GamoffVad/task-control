@@ -1,4 +1,4 @@
-// Минимальный сборщик книги Excel (.xlsx) без внешних библиотек: один лист, заливки, границы и ширины колонок.
+// Минимальный сборщик книги Excel (.xlsx) без внешних библиотек: несколько листов, заливки, границы и ширины колонок.
 // Файл .xlsx — это ZIP с XML внутри; здесь складываем записи без сжатия (метод «store»).
 
 export type CellStyle = {
@@ -162,25 +162,35 @@ const zip = (files: { name: string; text: string }[]): Blob => {
   return new Blob([join(parts), dir, end], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 };
 
-/** Книга Excel с одним листом. */
-export const buildXlsx = (sheet: Sheet): Blob => {
+/** Имя листа: Excel не допускает : \ / ? * [ ] и длину больше 31 символа. */
+const sheetName = (name: string, fallback: string) => (name.replace(/[:\\/?*[\]]/g, ' ').trim().slice(0, 31) || fallback);
+
+/** Книга Excel с одним или несколькими листами. Таблица стилей — общая для всей книги. */
+export const buildXlsx = (input: Sheet | Sheet[]): Blob => {
+  const sheets = Array.isArray(input) ? input : [input];
+  if (!sheets.length) throw new Error('В книге должен быть хотя бы один лист.');
   const styles: CellStyle[] = [];
   const index = new Map<string, number>();
-  for (const row of sheet.rows) {
-    for (const cell of row.cells) {
-      if (!cell?.style) continue;
-      const key = styleKey(cell.style);
-      if (index.has(key)) continue;
-      styles.push(cell.style);
-      index.set(key, styles.length); // 0 — стиль по умолчанию
+  for (const sheet of sheets) {
+    for (const row of sheet.rows) {
+      for (const cell of row.cells) {
+        if (!cell?.style) continue;
+        const key = styleKey(cell.style);
+        if (index.has(key)) continue;
+        styles.push(cell.style);
+        index.set(key, styles.length); // 0 — стиль по умолчанию
+      }
     }
   }
   const styleOf = (style: CellStyle | undefined) => (style ? (index.get(styleKey(style)) ?? 0) : 0);
+  const names = sheets.map((sheet, i) => sheetName(sheet.name, `Лист${i + 1}`));
   return zip([
     {
       name: '[Content_Types].xml',
       text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`,
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${sheets
+        .map((_s, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`)
+        .join('')}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`,
     },
     {
       name: '_rels/.rels',
@@ -190,14 +200,18 @@ export const buildXlsx = (sheet: Sheet): Blob => {
     {
       name: 'xl/workbook.xml',
       text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${xml(sheet.name).slice(0, 31)}" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${names
+        .map((name, i) => `<sheet name="${xml(name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`)
+        .join('')}</sheets></workbook>`,
     },
     {
       name: 'xl/_rels/workbook.xml.rels',
       text: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets
+        .map((_s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`)
+        .join('')}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
     },
     { name: 'xl/styles.xml', text: buildStyles(styles) },
-    { name: 'xl/worksheets/sheet1.xml', text: sheetXml(sheet, styleOf) },
+    ...sheets.map((sheet, i) => ({ name: `xl/worksheets/sheet${i + 1}.xml`, text: sheetXml(sheet, styleOf) })),
   ]);
 };

@@ -107,7 +107,7 @@ export const Absences = () => {
         const bal = balanceFor(state.absences, state.entitlements, employeeId, year);
         return { vacation: bal.vacation.left, dayoff: bal.dayoff.left };
       },
-      clashTaskIds: new Set(clashes.map((c) => c.task.id)),
+      clashes,
       today,
     });
     saveBlob(`tetris-${toDateKey(month).slice(0, 7)}.xlsx`, file);

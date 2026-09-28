@@ -1,7 +1,8 @@
-// Выгрузка «Тетриса» в Excel: та же матрица месяца — сотрудники по строкам, дни по колонкам.
-// Цвет заливки ячейки берётся из справочника «Виды отсутствий», поэтому совпадает с цветом полосы на графике.
+// Выгрузка «Тетриса» в Excel: книга из нескольких листов — график месяца, события,
+// пересечения со сроками задач и остатки. Цвет заливки берётся из справочника «Виды отсутствий»,
+// поэтому совпадает с цветом полосы на графике.
 
-import { absenceDays, covers, fmtSpan } from './absences';
+import { absenceDays, covers, fmtSpan, type Clash } from './absences';
 import { employees, shortName } from './data';
 import { fmtDate, fmtMonthYear } from './dates';
 import { buildXlsx, columnName, type Cell, type Sheet } from './xlsx';
@@ -35,39 +36,55 @@ export type TetrisExportInput = {
   types: { key: AbsenceType; label: string; full: string }[];
   /** Остаток отпуска и отгулов сотрудника; null — не показывать. */
   balance: (employeeId: number) => { vacation: number; dayoff: number } | null;
-  /** Пересечения: задача со сроком во время согласованного отсутствия. */
-  clashTaskIds: Set<string>;
+  /** Пересечения: срок неисполненной задачи приходится на событие её исполнителя. */
+  clashes: Clash[];
   today: Date;
 };
 
 const HEAD = '#EFEBE3';
 const WEEKEND = '#F3F1EC';
 const INK = '#1F2B3A';
+const DANGER = '#A32D22';
+const MUTED = '#5D6575';
 
 export const typeColor = (dictionaries: DictionaryEntry[], type: string) =>
   dictionaries.find((d) => d.dictionary === 'absenceType' && d.code === type)?.color ?? DEFAULT_COLORS[type] ?? '#8C816C';
 
-/** Лист «Тетриса»: шапка, строки сотрудников, строка «Отсутствуют, %» и легенда. */
-export const tetrisSheet = (input: TetrisExportInput): Sheet => {
-  const { month, days, people, absences, tasks, dictionaries, types, balance, clashTaskIds, today } = input;
-  const approved = (a: Absence) => a.status === 'approved';
-  const rows: Sheet['rows'] = [];
+const SEVERITY: Record<Clash['severity'], string> = { overdue: 'Просрочено', risk: 'Под угрозой', request: 'По заявке' };
+
+const approved = (a: Absence) => a.status === 'approved';
+
+/** Заголовок листа: название и пояснение над таблицей. Шапка таблицы — четвёртая строка. */
+const titleRows = (title: string, note: string, lastColumn: string, merges: string[]): Sheet['rows'] => {
+  merges.push(`A1:${lastColumn}1`, `A2:${lastColumn}2`);
+  return [{ cells: [{ value: title, style: { bold: true } }] }, { cells: [{ value: note, style: { color: MUTED } }] }, { cells: [] }];
+};
+
+const headerRow = (titles: string[]): Sheet['rows'][number] => ({
+  cells: titles.map((value) => ({ value, style: { bold: true, fill: HEAD, border: true } })),
+});
+
+/** Лист «График»: дни по колонкам, сотрудники по строкам, «Отсутствуют, %» и легенда. */
+const chartSheet = (input: TetrisExportInput): Sheet => {
+  const { month, days, people, absences, tasks, dictionaries, types, balance, clashes, today } = input;
+  const clashTaskIds = new Set(clashes.map((c) => c.task.id));
   const merges: string[] = [];
   const lastColumn = columnName(days.length + 2);
+  const rows = titleRows(
+    `График событий отдела — ${fmtMonthYear(month)}`,
+    `Выгружено ${fmtDate(today)}. Цвет ячейки — вид события, светлый тон — заявка на согласовании.`,
+    lastColumn,
+    merges,
+  );
 
-  rows.push({ cells: [{ value: `График событий отдела — ${fmtMonthYear(month)}`, style: { bold: true } }] });
-  merges.push(`A1:${lastColumn}1`);
-  rows.push({ cells: [{ value: `Выгружено ${fmtDate(today)}. Цвет ячейки — вид события, светлый тон — заявка на согласовании.`, style: { color: '#5D6575' } }] });
-  merges.push(`A2:${lastColumn}2`);
-  rows.push({ cells: [] });
-
-  // Шапка: дни месяца.
-  const header: Cell[] = [
-    { value: 'Сотрудник', style: { bold: true, fill: HEAD, border: true } },
-    { value: 'Отпуск / отгулы', style: { bold: true, fill: HEAD, border: true, center: true, wrap: true } },
-    ...days.map((d) => ({ value: d.getDate(), style: { bold: true, fill: [0, 6].includes(d.getDay()) ? WEEKEND : HEAD, border: true, center: true } })),
-  ];
-  rows.push({ height: 20, cells: header });
+  rows.push({
+    height: 20,
+    cells: [
+      { value: 'Сотрудник', style: { bold: true, fill: HEAD, border: true } },
+      { value: 'Отпуск / отгулы', style: { bold: true, fill: HEAD, border: true, center: true, wrap: true } },
+      ...days.map((d) => ({ value: d.getDate(), style: { bold: true, fill: [0, 6].includes(d.getDay()) ? WEEKEND : HEAD, border: true, center: true } })),
+    ],
+  });
 
   for (const person of people) {
     const bal = balance(person.id);
@@ -75,7 +92,7 @@ export const tetrisSheet = (input: TetrisExportInput): Sheet => {
     const deadlines = tasks.filter((t) => t.assigneeIds.includes(person.id));
     const cells: (Cell | null)[] = [
       { value: shortName(person.id), style: { border: true } },
-      { value: bal ? `${bal.vacation} / ${bal.dayoff}` : person.position, style: { border: true, center: !!bal, color: '#5D6575' } },
+      { value: bal ? `${bal.vacation} / ${bal.dayoff}` : person.position, style: { border: true, center: !!bal, color: MUTED } },
     ];
     for (const day of days) {
       const absence = mine.find((a) => covers(a, day, today));
@@ -91,7 +108,7 @@ export const tetrisSheet = (input: TetrisExportInput): Sheet => {
           center: true,
           // Согласованное — насыщенный тон, заявка — светлее: как штриховка на графике.
           fill: color ? lighten(color, approved(absence!) ? 0.55 : 0.25) : [0, 6].includes(day.getDay()) ? WEEKEND : undefined,
-          color: clash ? '#A32D22' : INK,
+          color: clash ? DANGER : INK,
           bold: !!text,
         },
       });
@@ -108,16 +125,13 @@ export const tetrisSheet = (input: TetrisExportInput): Sheet => {
     cells: [
       { value: 'Отсутствуют, %', style: { bold: true, fill: HEAD, border: true } },
       { value: '', style: { fill: HEAD, border: true } },
-      ...share.map((value) => ({ value: value ? `${value}%` : '—', style: { border: true, center: true, fill: value > 30 ? '#F6D7D3' : HEAD, color: value > 30 ? '#A32D22' : INK } })),
+      ...share.map((value) => ({ value: value ? `${value}%` : '—', style: { border: true, center: true, fill: value > 30 ? '#F6D7D3' : HEAD, color: value > 30 ? DANGER : INK } })),
     ],
   });
 
+  // Легенда под графиком — там же, где она на экране.
   rows.push({ cells: [] });
   rows.push({ cells: [{ value: 'Виды событий', style: { bold: true } }] });
-  // Колонки дней узкие, поэтому подписи легенды и списка событий занимают по нескольку колонок.
-  const span = (row: number, from: number, to: number) => {
-    if (to > from) merges.push(`${columnName(from)}${row}:${columnName(Math.min(to, days.length + 2))}${row}`);
-  };
   for (const type of types) {
     const color = typeColor(dictionaries, type.key);
     rows.push({
@@ -127,52 +141,106 @@ export const tetrisSheet = (input: TetrisExportInput): Sheet => {
         { value: 'заявка', style: { fill: lighten(color, 0.25), border: true, center: true } },
       ],
     });
-    span(rows.length, 3, 5);
+    // Колонки дней узкие, поэтому подпись «заявка» занимает несколько колонок.
+    merges.push(`C${rows.length}:${columnName(Math.min(5, days.length + 2))}${rows.length}`);
   }
-  rows.push({ cells: [{ value: 'Сроки задач: • назначен, ✓ исполнено, ! срок во время события', style: { color: '#5D6575' } }] });
+  rows.push({ cells: [{ value: 'Сроки задач: • назначен, ✓ исполнено, ! срок во время события', style: { color: MUTED } }] });
 
-  rows.push({ cells: [] });
-  rows.push({ cells: [{ value: 'События месяца', style: { bold: true } }] });
-  // Границы колонок списка событий: сотрудник, вид, период, дней, состояние, основание.
-  const EVENT_SPANS: [number, number][] = [[1, 1], [2, 3], [4, 9], [10, 12], [13, 16], [17, days.length + 2]];
-  const eventRow = (cells: Cell[]) => {
-    const line: (Cell | null)[] = [];
-    cells.forEach((cell, i) => {
-      const [from, to] = EVENT_SPANS[i];
-      line[from - 1] = cell;
-      // Объединённой ячейке нужны соседи с тем же оформлением, иначе рамка обрывается.
-      for (let c = from + 1; c <= to; c++) line[c - 1] = { value: '', style: cell.style };
-    });
-    rows.push({ cells: line });
-    for (const [from, to] of EVENT_SPANS) span(rows.length, from, to);
-  };
-  eventRow(['Сотрудник', 'Вид', 'Период', 'Дней', 'Состояние', 'Основание'].map((value) => ({ value, style: { bold: true, fill: HEAD, border: true } })));
+  return { name: 'График', columns: [22, 14, ...days.map(() => 4.2)], rows, merges, freeze: { rows: 4, columns: 2 } };
+};
+
+/** Лист «События»: события месяца списком, каждое поле — в своей колонке. */
+const eventsSheet = (input: TetrisExportInput): Sheet => {
+  const { month, days, absences, dictionaries, types, today } = input;
+  const merges: string[] = [];
+  const rows = titleRows(`События месяца — ${fmtMonthYear(month)}`, `Выгружено ${fmtDate(today)}. Отклонённые события не выгружаются.`, 'F', merges);
+  rows.push(headerRow(['Сотрудник', 'Вид', 'Период', 'Дней', 'Состояние', 'Основание']));
+
   const inMonth = absences
     .filter((a) => a.status !== 'rejected' && days.some((d) => covers(a, d, today)))
     .sort((a, b) => a.from.localeCompare(b.from) || a.employeeId - b.employeeId);
   for (const a of inMonth) {
     const type = types.find((t) => t.key === a.type);
-    eventRow([
-      { value: shortName(a.employeeId), style: { border: true } },
-      { value: type?.full ?? a.type, style: { border: true, fill: lighten(typeColor(dictionaries, a.type), approved(a) ? 0.55 : 0.25) } },
-      { value: fmtSpan(a), style: { border: true } },
-      { value: absenceDays(a), style: { border: true, center: true } },
-      { value: approved(a) ? 'согласовано' : 'заявка', style: { border: true } },
-      { value: a.note, style: { border: true } },
-    ]);
+    rows.push({
+      cells: [
+        { value: shortName(a.employeeId), style: { border: true } },
+        { value: type?.full ?? a.type, style: { border: true, fill: lighten(typeColor(dictionaries, a.type), approved(a) ? 0.55 : 0.25) } },
+        { value: fmtSpan(a), style: { border: true } },
+        { value: absenceDays(a), style: { border: true, center: true } },
+        { value: approved(a) ? 'согласовано' : 'заявка', style: { border: true } },
+        { value: a.note, style: { border: true, wrap: true } },
+      ],
+    });
   }
+  if (!inMonth.length) rows.push({ cells: [{ value: 'В этом месяце событий нет.', style: { color: MUTED } }] });
 
-  return {
-    name: fmtMonthYear(month),
-    columns: [22, 14, ...days.map(() => 4.2)],
-    rows,
-    merges,
-    freeze: { rows: 4, columns: 2 },
-  };
+  return { name: 'События', columns: [24, 24, 22, 8, 16, 46], rows, merges, freeze: { rows: 4, columns: 1 } };
 };
 
+/** Лист «Пересечения»: задачи, срок которых приходится на событие исполнителя. */
+const clashesSheet = (input: TetrisExportInput): Sheet => {
+  const { month, clashes, dictionaries, types, today } = input;
+  const merges: string[] = [];
+  const rows = titleRows(
+    `Пересечения со сроками задач — ${fmtMonthYear(month)}`,
+    `Выгружено ${fmtDate(today)}. Неисполненные задачи, срок которых приходится на событие исполнителя.`,
+    'F',
+    merges,
+  );
+  rows.push(headerRow(['Задача', 'Исполнитель', 'Срок задачи', 'Вид события', 'Период события', 'Состояние']));
+
+  const sorted = [...clashes].sort((a, b) => a.task.end.localeCompare(b.task.end) || a.employeeId - b.employeeId);
+  for (const clash of sorted) {
+    const type = types.find((t) => t.key === clash.absence.type);
+    const overdue = clash.severity === 'overdue';
+    rows.push({
+      cells: [
+        { value: clash.task.title, style: { border: true, wrap: true } },
+        { value: shortName(clash.employeeId), style: { border: true } },
+        { value: fmtDate(new Date(clash.task.end)), style: { border: true, center: true, color: overdue ? DANGER : INK } },
+        { value: type?.full ?? clash.absence.type, style: { border: true, fill: lighten(typeColor(dictionaries, clash.absence.type), approved(clash.absence) ? 0.55 : 0.25) } },
+        { value: fmtSpan(clash.absence), style: { border: true } },
+        { value: SEVERITY[clash.severity], style: { border: true, bold: overdue, color: overdue ? DANGER : INK } },
+      ],
+    });
+  }
+  if (!sorted.length) rows.push({ cells: [{ value: 'Пересечений нет.', style: { color: MUTED } }] });
+
+  // Период больничного без даты окончания — самая длинная подпись, под неё и ширина.
+  return { name: 'Пересечения', columns: [46, 24, 14, 24, 30, 16], rows, merges, freeze: { rows: 4, columns: 1 } };
+};
+
+/** Лист «Остатки»: остаток отпуска и отгулов. Пропускается, когда остатки недоступны. */
+const balancesSheet = (input: TetrisExportInput): Sheet | null => {
+  const { month, people, balance, today } = input;
+  const withBalance = people
+    .map((person) => ({ person, bal: balance(person.id) }))
+    .filter((x): x is { person: Employee; bal: { vacation: number; dayoff: number } } => !!x.bal);
+  if (!withBalance.length) return null;
+
+  const merges: string[] = [];
+  const rows = titleRows(`Остатки на ${month.getFullYear()} год`, `Выгружено ${fmtDate(today)}. Остаток отпуска 5 дней и меньше выделен.`, 'D', merges);
+  rows.push(headerRow(['Сотрудник', 'Должность', 'Остаток отпуска, дней', 'Остаток отгулов, дней']));
+  for (const { person, bal } of withBalance) {
+    const low = bal.vacation <= 5;
+    rows.push({
+      cells: [
+        { value: shortName(person.id), style: { border: true } },
+        { value: person.position, style: { border: true, color: MUTED } },
+        { value: bal.vacation, style: { border: true, center: true, bold: low, color: low ? DANGER : INK } },
+        { value: bal.dayoff, style: { border: true, center: true } },
+      ],
+    });
+  }
+  return { name: 'Остатки', columns: [26, 38, 20, 20], rows, merges, freeze: { rows: 4, columns: 1 } };
+};
+
+/** Листы книги: график, события, пересечения и — если остатки видны — остатки. */
+export const tetrisSheets = (input: TetrisExportInput): Sheet[] =>
+  [chartSheet(input), eventsSheet(input), clashesSheet(input), balancesSheet(input)].filter((sheet): sheet is Sheet => !!sheet);
+
 /** Готовый файл книги. */
-export const tetrisXlsx = (input: TetrisExportInput): Blob => buildXlsx(tetrisSheet(input));
+export const tetrisXlsx = (input: TetrisExportInput): Blob => buildXlsx(tetrisSheets(input));
 
 /** Сотрудники для выгрузки: те же, что показаны на графике. */
 export const exportPeople = (ids: number[]): Employee[] => employees.filter((e) => ids.includes(e.id));
