@@ -114,6 +114,10 @@ export const tetrisSheet = (input: TetrisExportInput): Sheet => {
 
   rows.push({ cells: [] });
   rows.push({ cells: [{ value: 'Виды событий', style: { bold: true } }] });
+  // Колонки дней узкие, поэтому подписи легенды и списка событий занимают по нескольку колонок.
+  const span = (row: number, from: number, to: number) => {
+    if (to > from) merges.push(`${columnName(from)}${row}:${columnName(Math.min(to, days.length + 2))}${row}`);
+  };
   for (const type of types) {
     const color = typeColor(dictionaries, type.key);
     rows.push({
@@ -123,29 +127,39 @@ export const tetrisSheet = (input: TetrisExportInput): Sheet => {
         { value: 'заявка', style: { fill: lighten(color, 0.25), border: true, center: true } },
       ],
     });
+    span(rows.length, 3, 5);
   }
   rows.push({ cells: [{ value: 'Сроки задач: • назначен, ✓ исполнено, ! срок во время события', style: { color: '#5D6575' } }] });
 
   rows.push({ cells: [] });
   rows.push({ cells: [{ value: 'События месяца', style: { bold: true } }] });
-  rows.push({
-    cells: ['Сотрудник', 'Вид', 'Период', 'Дней', 'Состояние', 'Основание'].map((value) => ({ value, style: { bold: true, fill: HEAD, border: true } })),
-  });
+  // Границы колонок списка событий: сотрудник, вид, период, дней, состояние, основание.
+  const EVENT_SPANS: [number, number][] = [[1, 1], [2, 3], [4, 9], [10, 12], [13, 16], [17, days.length + 2]];
+  const eventRow = (cells: Cell[]) => {
+    const line: (Cell | null)[] = [];
+    cells.forEach((cell, i) => {
+      const [from, to] = EVENT_SPANS[i];
+      line[from - 1] = cell;
+      // Объединённой ячейке нужны соседи с тем же оформлением, иначе рамка обрывается.
+      for (let c = from + 1; c <= to; c++) line[c - 1] = { value: '', style: cell.style };
+    });
+    rows.push({ cells: line });
+    for (const [from, to] of EVENT_SPANS) span(rows.length, from, to);
+  };
+  eventRow(['Сотрудник', 'Вид', 'Период', 'Дней', 'Состояние', 'Основание'].map((value) => ({ value, style: { bold: true, fill: HEAD, border: true } })));
   const inMonth = absences
     .filter((a) => a.status !== 'rejected' && days.some((d) => covers(a, d, today)))
     .sort((a, b) => a.from.localeCompare(b.from) || a.employeeId - b.employeeId);
   for (const a of inMonth) {
     const type = types.find((t) => t.key === a.type);
-    rows.push({
-      cells: [
-        { value: shortName(a.employeeId), style: { border: true } },
-        { value: type?.full ?? a.type, style: { border: true, fill: lighten(typeColor(dictionaries, a.type), approved(a) ? 0.55 : 0.25) } },
-        { value: fmtSpan(a), style: { border: true } },
-        { value: absenceDays(a), style: { border: true, center: true } },
-        { value: approved(a) ? 'согласовано' : 'заявка', style: { border: true } },
-        { value: a.note, style: { border: true, wrap: true } },
-      ],
-    });
+    eventRow([
+      { value: shortName(a.employeeId), style: { border: true } },
+      { value: type?.full ?? a.type, style: { border: true, fill: lighten(typeColor(dictionaries, a.type), approved(a) ? 0.55 : 0.25) } },
+      { value: fmtSpan(a), style: { border: true } },
+      { value: absenceDays(a), style: { border: true, center: true } },
+      { value: approved(a) ? 'согласовано' : 'заявка', style: { border: true } },
+      { value: a.note, style: { border: true } },
+    ]);
   }
 
   return {
