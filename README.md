@@ -7,8 +7,8 @@
 **Планирование задач отдела и контроль исполнения:** календарь, недельная матрица плана, доска сроков,
 график событий сотрудников, недельные отчёты, показатели эффективности и уведомления — без обращений в интернет.
 
-[![версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-5.14.1-1F3A5F)](CHANGELOG.md)
-[![тесты](https://img.shields.io/badge/%D1%82%D0%B5%D1%81%D1%82%D1%8B-186-2C6B45)](#проверки)
+[![версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-5.15.0-1F3A5F)](CHANGELOG.md)
+[![тесты](https://img.shields.io/badge/%D1%82%D0%B5%D1%81%D1%82%D1%8B-191-2C6B45)](#проверки)
 [![стек](https://img.shields.io/badge/Vite%208%20%C2%B7%20React%2019%20%C2%B7%20TypeScript-1F2B3A)](#устройство-проекта)
 [![лицензия](https://img.shields.io/badge/%D0%BB%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F-MIT-5D6575)](LICENSE)
 
@@ -180,8 +180,8 @@ npm install
 npm run dev
 ```
 
-Откройте http://localhost:5173. Без переменной `DATABASE_URL` данные хранятся в файле `.data/dev-db.json`,
-пустая база заполняется демонстрационными данными.
+Откройте http://localhost:5173. Без настроек базы (`MSSQL_SERVER` или `DATABASE_URL`) данные хранятся
+в файле `.data/dev-db.json`, пустая база заполняется демонстрационными данными.
 
 Демонстрационные учётные записи (пароль `123456`):
 
@@ -204,6 +204,7 @@ npm run dev
 | `deploy-iis.bat` | публикация в IIS: копирование в `C:\inetpub\wwwroot\PLAN`, сайт, пул и Windows-аутентификация (от имени администратора) |
 | `npm run preview` | просмотр собранного интерфейса |
 | `npm test` | модульные, интерфейсные и серверные тесты (Vitest) |
+| `npm run test:mssql` | тесты хранилища SQL Server (нужны `MSSQL_TEST_SERVER`, `MSSQL_TEST_USER`, `MSSQL_TEST_PASSWORD`) |
 | `npm run lint` | статический анализ (oxlint) |
 | `npm run docs` | тесты, сборка, дымовая проверка в Chrome на 4 ширинах, скриншоты в двух темах и PDF-руководство |
 
@@ -218,7 +219,7 @@ src/
   components/ шапка, карточка задачи, окна и общие элементы приложения
   screens/    экраны разделов
   test/       тесты (Vitest + Testing Library)
-server/       HTTP API: маршруты, авторизация, PostgreSQL, вход через Windows
+server/       HTTP API: маршруты, авторизация, SQL Server и PostgreSQL, вход через Windows
 scripts/      сборка для Vercel (Build Output API) и комплекта для IIS
 docs/         исходник руководства, скрипты съёмки и сборки PDF, скриншоты
 public/       значки, Service Worker уведомлений, PDF-руководство для скачивания
@@ -229,11 +230,14 @@ public/       значки, Service Worker уведомлений, PDF-руко�
 
 ## Данные и сервер
 
-- Хранилище — PostgreSQL (проверено на Neon). Строка подключения — переменная `DATABASE_URL`;
-  таблицы создаются при первом запросе, пустая база заполняется демонстрационными данными.
+- Хранилище — **Microsoft SQL Server** 2016 и новее (проверено на 2025): переменные `MSSQL_SERVER`,
+  `MSSQL_DATABASE`, `MSSQL_USER`, `MSSQL_PASSWORD`. **База и таблицы создаются при первом обращении**,
+  пустая база заполняется демонстрационными данными. Настройка — [docs/corporate-offline.md](docs/corporate-offline.md).
+- Публикация на Vercel работает с PostgreSQL (Neon): строка подключения — `DATABASE_URL`.
+  Без настроек базы данные хранятся в файле рядом с сервером.
 - API: `POST /api/login`, `POST /api/windows-login`, `GET /api/state`, `POST /api/action`,
   `GET /api/notices`, `GET /api/authentication`, `GET /api/directory-users`, `GET /api/health`.
-- Сеанс — подписанный токен (HMAC-SHA256) на 7 дней; секрет — `AUTH_SECRET`.
+- Сеанс — подписанный токен (HMAC-SHA256) на 7 дней; секрет — `AUTH_SECRET`, иначе выводится из настроек базы.
 - Вход: форма или бесшовный вход через Windows за IIS либо доверенным прокси (Kerberos/NTLM),
   с резервным входом администратора. Поиск сотрудников — в Active Directory.
 - Записываются только изменившиеся строки, всё — в транзакции под общей блокировкой.
@@ -274,7 +278,7 @@ Vercel (ответ «Not authorized»); без метаданных Git пров
 
 | Проверка | Значение |
 |---|---|
-| Тесты (Vitest) | 186 — логика, права, интерфейс, API, PostgreSQL (PGlite), уведомления, логотип, вход через Windows, выгрузка в Excel |
+| Тесты (Vitest) | 191 — логика, права, интерфейс, API, SQL Server, PostgreSQL (PGlite), уведомления, логотип, вход через Windows, выгрузка в Excel |
 | Типы | `tsc` без ошибок, строгий режим |
 | Линтер | oxlint без замечаний |
 | Браузер | `npm run docs` проходит разделы на ширинах 375, 768, 1024 и 1440 и сообщает об ошибках консоли, горизонтальной прокрутке и мелких кнопках |

@@ -1399,6 +1399,8 @@ a.label:hover { color: var(--accent); }
 /* На телефоне кнопка списка остаётся удобной для пальца; на компьютере — компактной, по высоте сводки. */
 @media (min-width: 768px) { .tt-filter .dd-btn { min-height: 0; } }
 .dd--multi .dd-list { min-width: 220px; }
+/* Последний фильтр в строке: список раскрывается влево, иначе его обрезает край окна. */
+.filters .filter-card:last-child .dd-list { left: auto; right: 0; }
 .dd--multi .dd-list button { display: flex; align-items: center; gap: 9px; }
 .dd--multi .dd-list button[aria-selected] { font-weight: 400; background: none; color: var(--ink-2); }
 .dd--multi .dd-list button.focus { background: var(--soft); }

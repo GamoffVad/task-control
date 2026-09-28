@@ -6,10 +6,12 @@ const TTL_DAYS = 7;
 
 const b64 = (s: string | Buffer) => Buffer.from(s).toString('base64url');
 
-/** Секрет: AUTH_SECRET, иначе производный от строки подключения к базе — отдельная настройка не нужна. */
-export const secretFromEnv = (env: Record<string, string | undefined>): string =>
-  env.AUTH_SECRET ||
-  (env.DATABASE_URL ? createHash('sha256').update(`task-control|${env.DATABASE_URL}`).digest('hex') : 'task-control-dev-secret');
+/** Секрет: AUTH_SECRET, иначе производный от настроек базы — отдельная настройка не нужна. */
+export const secretFromEnv = (env: Record<string, string | undefined>): string => {
+  if (env.AUTH_SECRET) return env.AUTH_SECRET;
+  const source = env.DATABASE_URL || (env.MSSQL_SERVER ? `mssql://${env.MSSQL_SERVER}/${env.MSSQL_DATABASE ?? 'TaskControl'}` : null);
+  return source ? createHash('sha256').update(`task-control|${source}`).digest('hex') : 'task-control-dev-secret';
+};
 
 export const signToken = (user: User, secret: string, now: Date = new Date()): string => {
   const payload = b64(JSON.stringify({ ...user, exp: now.getTime() + TTL_DAYS * 86_400_000 }));

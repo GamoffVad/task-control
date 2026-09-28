@@ -1,4 +1,5 @@
 // Точка входа для публикации в IIS через iisnode: один процесс Node.js отдаёт и статику, и /api.
+// Хранилище — SQL Server (MSSQL_SERVER); без него PostgreSQL или файл рядом с сервером.
 // IIS проверяет доменного пользователя и передаёт его заголовком, приложение пароль не спрашивает.
 // PORT задаёт iisnode (именованный канал); при запуске вручную — обычный номер порта.
 import { createReadStream, existsSync, statSync } from 'node:fs';
@@ -6,14 +7,12 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import path from 'node:path';
 import { createApi } from './app';
 import { secretFromEnv } from './auth';
-import { createPgRepo } from './pgRepo';
-import { createMemoryRepo } from './repo';
+import { createRepoFromEnv } from './storage';
 import { inspectWindowsRequest, windowsIdentityFromEnv } from './windowsAuth';
 import { activeDirectoryFromEnv } from './activeDirectory';
 
 const root = path.resolve(process.env.TC_STATIC_DIR ?? path.join(__dirname, 'public'));
-const url = process.env.DATABASE_URL;
-const repo = url ? createPgRepo(url) : createMemoryRepo(path.resolve(process.env.TC_DB_FILE ?? path.join(__dirname, 'data', 'db.json')));
+const repo = createRepoFromEnv(process.env, path.resolve(process.env.TC_DB_FILE ?? path.join(__dirname, 'data', 'db.json')))!;
 
 const api = createApi({
   repo,

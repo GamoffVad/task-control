@@ -21,9 +21,11 @@ const { version } = JSON.parse(readFileSync(path.join(root, 'package.json'), 'ut
 // Число тестов берётся из фактического прогона, чтобы документация не расходилась с проектом.
 const report = path.join(docs, '.vitest.json');
 execSync(`npx vitest run --reporter=json --outputFile="${report}"`, { cwd: root, stdio: 'ignore' });
-const { numPassedTests, numTotalTests } = JSON.parse(readFileSync(report, 'utf8'));
+const { numPassedTests, numFailedTests, numPendingTests, numTotalTests } = JSON.parse(readFileSync(report, 'utf8'));
 rmSync(report);
-if (numPassedTests !== numTotalTests) throw new Error(`Тесты не прошли: ${numPassedTests} из ${numTotalTests}`);
+// Тесты хранилища SQL Server пропускаются без настроенного сервера, поэтому считаем именно провалы.
+if (numFailedTests) throw new Error(`Тесты не прошли: ${numFailedTests} из ${numTotalTests}`);
+if (numPendingTests) console.log(`Пропущено тестов: ${numPendingTests} (нужен SQL Server — npm run test:mssql)`);
 
 if (!skipShots) {
   execSync('npm run build', { cwd: root, stdio: 'inherit' });

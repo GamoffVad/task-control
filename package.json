@@ -1,7 +1,7 @@
 {
   "name": "task-control",
   "private": true,
-  "version": "5.14.1",
+  "version": "5.15.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:mssql": "vitest run src/test/mssql.test.ts",
     "typecheck": "tsc -b",
     "docs": "node docs/build-docs.mjs",
     "build:vercel": "node scripts/build-vercel.mjs",
@@ -17,6 +18,7 @@
     "deploy": "node scripts/deploy-vercel.mjs"
   },
   "dependencies": {
+    "mssql": "^12.7.2",
     "pg": "^8.23.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
@@ -28,6 +30,7 @@
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",
+    "@types/mssql": "^12.3.0",
     "@types/node": "^24.13.3",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.2.18",

@@ -26,7 +26,8 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), api()],
     // Приложение должно открываться в последнем Chrome для Windows 7 (109) и в Edge 109.
     build: { target: ['chrome109', 'edge109', 'firefox115', 'safari15.6'] },
-    esbuild: { target: 'chrome109' },
+    // Vite 8 использует oxc: прежний параметр esbuild.target он игнорировал с предупреждением.
+    oxc: { target: 'chrome109' },
     // Версия приложения из package.json — показывается в интерфейсе.
     define: { __APP_VERSION__: JSON.stringify(pkg.version) },
     test: {

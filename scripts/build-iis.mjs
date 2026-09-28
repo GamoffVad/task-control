@@ -38,7 +38,14 @@ writeFileSync(
     <add key="WINDOWS_AUTH_PROXY_SECRET" value="" />
     <!-- Ключ подписи сеансов. Заменить на длинную случайную строку. -->
     <add key="AUTH_SECRET" value="" />
-    <!-- Строка подключения к PostgreSQL. Пусто — данные в файле data\db.json рядом с сервером. -->
+    <!-- SQL Server: имя сервера или СЕРВЕР\ЭКЗЕМПЛЯР. База и таблицы создаются при первом запуске. -->
+    <add key="MSSQL_SERVER" value="" />
+    <add key="MSSQL_DATABASE" value="TaskControl" />
+    <!-- Учётная запись SQL Server. Для доменной учётной записи заполните ещё MSSQL_DOMAIN. -->
+    <add key="MSSQL_USER" value="" />
+    <add key="MSSQL_PASSWORD" value="" />
+    <add key="MSSQL_DOMAIN" value="" />
+    <!-- Строка подключения к PostgreSQL. Используется, только если MSSQL_SERVER пуст. -->
     <add key="DATABASE_URL" value="" />
     <!-- Выпадающий список ФИО из Active Directory. -->
     <add key="AD_SEARCH_ENABLED" value="false" />
@@ -78,6 +85,7 @@ writeFileSync(
     'Комплект публикации «Контроль задач» для IIS.',
     '',
     'Состав: server.cjs — сервер приложения, public\ — интерфейс, web.config — настройки IIS, data\ — файловое хранилище.',
+    'Хранилище: задайте MSSQL_SERVER — база и таблицы в SQL Server создадутся сами при первом запуске.',
     'Настройки правятся в разделе appSettings файла web.config; после правки IIS перезапускает приложение сам.',
     'Порядок развёртывания и настройка Windows-входа: docs\corporate-offline.md.',
   ].join('\r\n'),

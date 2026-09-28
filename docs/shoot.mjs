@@ -167,9 +167,13 @@ try {
   await closeDialog();
   await page.$eval('.search .clear', (el) => el.click());
   await clickText('.stepper .text-action', 'Сегодня');
-  await clickText('.cat-toggle', 'Иное');
-  await shot('02c-calendar-categories', { clip: { x: 0, y: 330, width: 1440, height: 570 } });
-  await clickText('.cat-filter .text-action', 'показать все');
+  // Категории — выпадающий список с отметками в строке фильтров.
+  await page.$eval('[aria-label^="Категории мероприятий"]', (el) => el.click());
+  await page.waitForSelector('.dd-list');
+  await clickText('.dd-list [role=option]', 'Иное');
+  await shot('02c-calendar-categories', { clip: { x: 0, y: 50, width: 1440, height: 450 } });
+  await clickText('.dd-list [role=option]', 'все категории');
+  await page.keyboard.press('Escape');
   await clickText('.seg button', 'Месяц');
   await shot('03-calendar-month');
   await clickText('.seg button', 'День');
