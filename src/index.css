@@ -1307,6 +1307,20 @@ a.label:hover { color: var(--accent); }
 .auth-choice-grid strong, .auth-choice-grid span { display: block; }
 .auth-choice-grid strong { margin-bottom: 4px; font-size: 14px; font-weight: 600; }
 .auth-choice-grid span { color: var(--ink-3); font-size: 12.5px; line-height: 1.45; }
+/* Вкладка «Оценка»: списки без стандартных маркеров, выбор среднего — как выбор способа входа. */
+.scoring-units, .scoring-people { list-style: none; margin: 8px 0 18px; padding: 0; }
+.scoring-units li { min-height: 32px; }
+.scoring-people { display: grid; grid-template-columns: 1fr; gap: 2px 18px; max-height: 232px; overflow-y: auto; padding-right: 6px; }
+.scoring-people li { min-height: 32px; }
+.admin-subhead { margin: 20px 0 2px; font-size: 14px; font-weight: 600; }
+.scoring-choice { display: grid; grid-template-columns: 1fr; gap: 8px; padding: 12px 0 18px; }
+.scoring-choice button { min-height: 74px; padding: 13px 14px; border: 1px solid var(--line); background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.scoring-choice button:hover { border-color: var(--accent); background: var(--soft-alt); }
+.scoring-choice button[aria-checked='true'] { border-color: var(--accent); background: var(--soft); }
+.scoring-choice strong, .scoring-choice span { display: block; }
+.scoring-choice strong { margin-bottom: 4px; font-size: 14px; font-weight: 600; }
+.scoring-choice span { color: var(--ink-3); font-size: 12.5px; line-height: 1.45; }
+
 .auth-emergency { padding: 14px 0 0; }
 .auth-emergency p { margin: 5px 0 0 25px; color: var(--ink-3); font-size: 12px; }
 .add-user-form { padding-top: 4px; }
@@ -1327,6 +1341,8 @@ a.label:hover { color: var(--accent); }
   .admin-section { padding-top: 18px; }
   .permission-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .auth-choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .scoring-choice { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .scoring-people { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 767px) {
   .admin-editor { grid-template-columns: 1fr; }

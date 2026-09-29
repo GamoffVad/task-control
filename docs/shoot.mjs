@@ -225,7 +225,11 @@ try {
   await shot('08b-report-doc');
   await closeDialog();
   await go('/kpi');
+  // Экран вырос из-за разреза по направлениям: снимаем окном повыше, чтобы попали и сотрудники, и недели.
+  await page.setViewport({ width: 1440, height: 1560, deviceScaleFactor: 1.5 });
+  await go('/kpi');
   await shot('09-kpi');
+  await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1.5 });
   await go('/employees/3');
   await shot('10-employee');
   await say('sidorov@example.com', 'Сборка модуля авторизации выложена на тестовый стенд.');
@@ -298,6 +302,11 @@ try {
   await page.waitForSelector('[role=dialog]');
   await shot('33-admin-template-dialog');
   await closeDialog();
+  await clickText('.admin-page .seg button', 'Оценка');
+  // Вкладка длиннее окна: снимаем её целиком, вместе с выбором среднего балла.
+  await page.setViewport({ width: 1440, height: 1500, deviceScaleFactor: 1.5 });
+  await shot('34-admin-scoring', { clip: { x: 0, y: 130, width: 1440, height: 1180 } });
+  await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1.5 });
   await clickText('.admin-page .seg button', 'Роли и разрешения');
   await clickText('.admin-directory-list button', 'Руководитель');
   await shot('27-admin-roles');
