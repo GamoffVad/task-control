@@ -6,6 +6,7 @@ export type Role = 'administrator' | 'manager' | 'executor';
 export type Permission =
   | 'admin.access'
   | 'authentication.manage'
+  | 'scoring.manage'
   | 'users.manage'
   | 'roles.manage'
   | 'dictionaries.manage'
@@ -71,6 +72,29 @@ export type AuthenticationSettings = {
   mode: AuthenticationMode;
   /** Allows an administrator to use the password form if Windows SSO is unavailable. */
   allowEmergencyForm: boolean;
+};
+
+/** Чем делится общий балл при расчёте среднего. */
+export type ScoringAverageBase =
+  /** Все сотрудники отдела, кроме исключённых. */
+  | 'staff'
+  /** Только действующие учётные записи. */
+  | 'active'
+  /** Только те, у кого есть баллы за период. */
+  | 'withScore';
+
+/**
+ * Правила подсчёта баллов. Применяются при показе: изменение правила пересчитывает и прошлые периоды.
+ * Вес самой записи отчёта остаётся замороженным на момент отправки.
+ */
+export type ScoringSettings = {
+  /** Подразделения вне общей оценки — например, руководство. */
+  excludedUnitIds: string[];
+  /** Точечные исключения сотрудников. */
+  excludedEmployeeIds: number[];
+  averageBase: ScoringAverageBase;
+  /** Показывать разрез по направлениям (отделениям). */
+  byDirection: boolean;
 };
 
 /** Категория мероприятия — определяет цвет в календаре. */
@@ -247,16 +271,19 @@ export type AppState = {
   units: Unit[];
   templates: DocumentTemplate[];
   authentication: AuthenticationSettings;
+  scoring: ScoringSettings;
   user: User | null;
 };
 
 /** Данные, которые хранятся в базе (без сеанса пользователя). */
 /** Серверные данные. planRows optional только для миграции хранилищ старых версий. */
-export type Data = Omit<AppState, 'version' | 'user' | 'planRows' | 'units' | 'templates' | 'chatReads'> & {
+export type Data = Omit<AppState, 'version' | 'user' | 'planRows' | 'units' | 'templates' | 'chatReads' | 'scoring'> & {
   planRows?: PlanRow[];
   units?: Unit[];
   templates?: DocumentTemplate[];
   chatReads?: ChatRead[];
+  /** Правила подсчёта баллов; отсутствуют в базах прежних версий. */
+  scoring?: ScoringSettings;
   /** Журнал уведомлений — только на сервере. */
   notices?: Notice[];
 };

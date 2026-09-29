@@ -112,7 +112,8 @@ const EmployeeCard = ({ id }: { id: number }) => {
   const periodEntries = useMemo(() => entriesInPeriod(state.reports, period), [state.reports, period]);
   const done = useMemo(() => periodEntries.filter((entry) => entry.assigneeId === id).sort((a, b) => b.doneAt.localeCompare(a.doneAt)), [periodEntries, id]);
   const departmentSize = useMemo(() => new Set([...department.groups.flatMap((item) => item.employeeIds), ...state.users.map((account) => account.employeeId)]).size, [state.users]);
-  const scoreContext = useMemo(() => employeeScoreContext(periodEntries, id, departmentSize), [periodEntries, id, departmentSize]);
+  const scoringCtx = useMemo(() => ({ scoring: state.scoring, users: state.users, units: state.units }), [state.scoring, state.users, state.units]);
+  const scoreContext = useMemo(() => employeeScoreContext(periodEntries, id, departmentSize, scoringCtx), [periodEntries, id, departmentSize, scoringCtx]);
   const total = scoreContext.employeeTotal;
   const relativeExplanation = scoreContext.relativeToAverage === null
     ? 'нет баллов за период'
@@ -163,10 +164,11 @@ const EmployeeCard = ({ id }: { id: number }) => {
             <div className="value ok">{fmtNum(total)}</div>
             <div className="expl">{plural(total, 'балл', 'балла', 'баллов')} за период</div>
           </div>
-          <div className="stat" data-tip={`Среднее по отделу: ${fmtNum(scoreContext.departmentAverage)} балла`}>
+          <div className="stat" data-tip={scoreContext.excluded ? 'Сотрудник вне общей оценки: его баллы не входят в итог и среднее по отделу' : `Среднее по отделу: ${fmtNum(scoreContext.departmentAverage)} балла`}>
             <span className="caps">К среднему по отделу</span>
             <div className="value ratio">{scoreContext.relativeToAverage === null ? '—' : `${fmtNum(scoreContext.relativeToAverage)}%`}</div>
-            <div className="expl">{relativeExplanation}</div>
+            {/* Исключённый сотрудник сравнивается со средним по отделу, но сам в него не входит. */}
+            <div className="expl">{scoreContext.excluded ? 'вне общей оценки' : relativeExplanation}</div>
           </div>
           <div className="stat" data-tip={`Общая сумма баллов отдела: ${fmtNum(scoreContext.departmentTotal)}`}>
             <span className="caps">Вклад в баллы отдела</span>

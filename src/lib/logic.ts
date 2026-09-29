@@ -1,7 +1,9 @@
 // Чистые функции предметной области — покрыты модульными тестами.
-import { categoryLabel, employees, fullName, planRows } from './data';
+import { categoryLabel, department, employees, fullName, planRows, unitOf } from './data';
 import { deadlineBucket, inRange, periodStart, planWeekRange, fromDateKey, toDateKey } from './dates';
-import type { AppState, DeadlineBucket, Employee, Period, PlanRow, Report, ReportEntry, Task } from './types';
+import { unitWithDescendants } from './units';
+import { DEFAULT_SCORING } from './access';
+import type { AppState, DeadlineBucket, Employee, ManagedUser, Period, PlanRow, Report, ReportEntry, ScoringSettings, Task, Unit } from './types';
 
 /** Базовый вес позиции плана (из справочника; позже — из БД). */
 export const baseScore = (rowId: string | null, rows: PlanRow[] = planRows): number | null => {
@@ -107,41 +109,123 @@ export const entriesInPeriod = (reports: Report[], period: Period, now: Date = n
   return from ? all.filter((e) => new Date(e.doneAt) >= from) : all;
 };
 
+// ——— Правила подсчёта баллов ———
+
+/**
+ * Данные для правил оценки. Правила применяются при показе, поэтому расчёт всегда идёт
+ * по текущим настройкам — и прошлые периоды пересчитываются вместе с ними.
+ */
+export type ScoringContext = {
+  scoring: ScoringSettings;
+  /** Учётные записи: подразделение сотрудника и признак «действующая». */
+  users: ManagedUser[];
+  units: Unit[];
+};
+
+const defaultContext: ScoringContext = { scoring: DEFAULT_SCORING, users: [], units: [] };
+
+/** Сотрудники вне общей оценки: по подразделению (вместе с вложенными) и поимённо. */
+export const excludedFromScoring = (ctx: ScoringContext = defaultContext): Set<number> => {
+  const out = new Set(ctx.scoring.excludedEmployeeIds);
+  for (const unitId of ctx.scoring.excludedUnitIds) {
+    const inside = unitWithDescendants(ctx.units, unitId);
+    for (const user of ctx.users) if (inside.has(unitOf(user) ?? '')) out.add(user.employeeId);
+  }
+  return out;
+};
+
+const round1 = (value: number) => Math.round(value * 10) / 10;
+
+/** Итог по набору баллов сотрудников: общий, средний и что взято знаменателем. */
+export type ScoreSummary = { total: number; average: number; counted: number };
+
+export const summarize = (totals: Map<number, number>, ctx: ScoringContext = defaultContext): ScoreSummary => {
+  const excluded = excludedFromScoring(ctx);
+  const ids = [...totals.keys()].filter((id) => !excluded.has(id));
+  const total = round1(ids.reduce((sum, id) => sum + (totals.get(id) ?? 0), 0));
+  const active = new Map(ctx.users.map((u) => [u.employeeId, u.active]));
+  const counted = ids.filter((id) => {
+    if (ctx.scoring.averageBase === 'withScore') return (totals.get(id) ?? 0) > 0;
+    if (ctx.scoring.averageBase === 'active') return active.get(id) !== false;
+    return true;
+  }).length;
+  return { total, average: counted > 0 ? round1(total / counted) : 0, counted };
+};
+
 export type EmployeeScoreContext = {
   employeeTotal: number;
   departmentTotal: number;
   departmentAverage: number;
   relativeToAverage: number | null;
   contribution: number | null;
+  /** Сотрудник не входит в общую оценку: его баллы видны, но в итог отдела не идут. */
+  excluded: boolean;
 };
 
-/** Контекст баллов сотрудника относительно текущей численности отдела. */
-export const employeeScoreContext = (entries: Pick<ReportEntry, 'assigneeId' | 'score'>[], employeeId: number, departmentSize: number): EmployeeScoreContext => {
-  const rounded = (value: number) => Math.round(value * 10) / 10;
-  const employeeTotal = rounded(entries.filter((entry) => entry.assigneeId === employeeId).reduce((sum, entry) => sum + entry.score, 0));
-  const departmentTotal = rounded(entries.reduce((sum, entry) => sum + entry.score, 0));
-  const average = departmentSize > 0 ? departmentTotal / departmentSize : 0;
-  const departmentAverage = rounded(average);
+/**
+ * Контекст баллов сотрудника: общий и средний балл отдела считаются по правилам оценки.
+ * departmentSize используется только при правиле «все сотрудники».
+ */
+export const employeeScoreContext = (
+  entries: Pick<ReportEntry, 'assigneeId' | 'score'>[],
+  employeeId: number,
+  departmentSize: number,
+  ctx: ScoringContext = defaultContext,
+): EmployeeScoreContext => {
+  const employeeTotal = round1(entries.filter((entry) => entry.assigneeId === employeeId).reduce((sum, entry) => sum + entry.score, 0));
+  const totals = new Map<number, number>();
+  // Знаменатель «все сотрудники» — численность отдела, поэтому в набор входят и те, у кого баллов нет.
+  for (const e of employees) totals.set(e.id, 0);
+  for (const entry of entries) totals.set(entry.assigneeId, (totals.get(entry.assigneeId) ?? 0) + entry.score);
+  const summary = summarize(totals, ctx);
+  // Правило «все сотрудники» опирается на переданную численность: она учитывает выбранную группу.
+  const excluded = excludedFromScoring(ctx);
+  const size = ctx.scoring.averageBase === 'staff' ? Math.max(0, departmentSize - [...excluded].filter((id) => totals.has(id)).length) : summary.counted;
+  const average = size > 0 ? summary.total / size : 0;
   return {
     employeeTotal,
-    departmentTotal,
-    departmentAverage,
-    relativeToAverage: average > 0 ? rounded(employeeTotal / average * 100) : null,
-    contribution: departmentTotal > 0 ? rounded(employeeTotal / departmentTotal * 100) : null,
+    departmentTotal: summary.total,
+    departmentAverage: round1(average),
+    relativeToAverage: average > 0 ? round1((employeeTotal / average) * 100) : null,
+    contribution: summary.total > 0 ? round1((employeeTotal / summary.total) * 100) : null,
+    excluded: excluded.has(employeeId),
   };
 };
 
-export type KpiRow = { employeeId: number; total: number; count: number };
+export type KpiRow = { employeeId: number; total: number; count: number; excluded: boolean };
 
-export const kpiByEmployee = (reports: Report[], period: Period, now: Date = new Date()): KpiRow[] => {
-  const map = new Map<number, KpiRow>(employees.map((e) => [e.id, { employeeId: e.id, total: 0, count: 0 }]));
+export const kpiByEmployee = (reports: Report[], period: Period, now: Date = new Date(), ctx: ScoringContext = defaultContext): KpiRow[] => {
+  const excluded = excludedFromScoring(ctx);
+  const map = new Map<number, KpiRow>(employees.map((e) => [e.id, { employeeId: e.id, total: 0, count: 0, excluded: excluded.has(e.id) }]));
   for (const e of entriesInPeriod(reports, period, now)) {
     const rowEntry = map.get(e.assigneeId);
     if (!rowEntry) continue;
-    rowEntry.total = Math.round((rowEntry.total + e.score) * 10) / 10;
+    rowEntry.total = round1(rowEntry.total + e.score);
     rowEntry.count += 1;
   }
-  return [...map.values()].sort((a, b) => b.total - a.total || a.employeeId - b.employeeId);
+  // Исключённые уходят вниз списка: их баллы видны, но в общую оценку не входят.
+  return [...map.values()].sort((a, b) => Number(a.excluded) - Number(b.excluded) || b.total - a.total || a.employeeId - b.employeeId);
+};
+
+/** Итог по направлению (отделению) отдела. */
+export type DirectionRow = { id: string; name: string; total: number; average: number; count: number; people: number; excluded: boolean };
+
+/** Разрез по направлениям: общий и средний балл каждого отделения. */
+export const kpiByDirection = (reports: Report[], period: Period, now: Date = new Date(), ctx: ScoringContext = defaultContext): DirectionRow[] => {
+  const rows = kpiByEmployee(reports, period, now, ctx);
+  const byEmployee = new Map(rows.map((r) => [r.employeeId, r]));
+  return department.groups
+    .map((group): DirectionRow => {
+      // Ряд показывает собственные баллы направления целиком: исключение влияет на итог отдела,
+      // а не на само направление — иначе у руководства были бы задачи, но ноль баллов.
+      const totals = new Map(group.employeeIds.map((id) => [id, byEmployee.get(id)?.total ?? 0]));
+      const summary = summarize(totals, { ...ctx, scoring: { ...ctx.scoring, excludedUnitIds: [], excludedEmployeeIds: [] } });
+      const count = group.employeeIds.reduce((sum, id) => sum + (byEmployee.get(id)?.count ?? 0), 0);
+      // Направление целиком вне оценки, когда исключены все его сотрудники, — например, руководство.
+      const excluded = group.employeeIds.length > 0 && group.employeeIds.every((id) => byEmployee.get(id)?.excluded);
+      return { id: group.id, name: group.name, total: summary.total, average: summary.average, count, people: summary.counted, excluded };
+    })
+    .sort((a, b) => Number(a.excluded) - Number(b.excluded) || b.total - a.total || a.name.localeCompare(b.name, 'ru'));
 };
 
 /** Строки отчёта: разделы остаются, только если под ними есть записи. */

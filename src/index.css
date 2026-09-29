@@ -785,6 +785,12 @@ td.name { color: var(--ink); font-weight: 600; }
 .state.bad { color: var(--danger); }
 .cal-event.dim { opacity: 0.25; }
 
+/* Показатели: исключённые из оценки видны, но приглушены. */
+.hbar-row--muted .label, .hbar-row--muted .val { opacity: 0.55; }
+.hbar-row--muted .bar-fill { opacity: 0.4; }
+.admin-table.directions td.num { text-align: right; font-family: 'IBM Plex Mono', monospace; }
+.admin-table tr.muted td { opacity: 0.6; }
+
 /* Поиск и категории в календаре */
 .search { position: relative; display: flex; align-items: center; }
 .search svg { position: absolute; left: 0; color: var(--ink-3); pointer-events: none; }

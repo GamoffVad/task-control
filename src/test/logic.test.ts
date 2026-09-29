@@ -17,7 +17,10 @@ import {
   clampScore,
   groupByCell,
   employeeScoreContext,
+  excludedFromScoring,
+  kpiByDirection,
   kpiByEmployee,
+  type ScoringContext,
   reportRows,
   reportToCsv,
   baseScore,
@@ -28,11 +31,13 @@ import {
   validateTask,
 } from '../lib/logic';
 import { layoutDay } from '../lib/calendarLayout';
+import { DEFAULT_SCORING, DEFAULT_USERS } from '../lib/access';
+import { DEFAULT_UNITS } from '../lib/units';
 import { unreadMessages } from '../lib/chat';
 import { createSeed } from '../lib/seed';
 import { taskAccess } from '../lib/permissions';
 import { migrate, reducer } from '../lib/store';
-import type { AppState, Report, Task, User } from '../lib/types';
+import type { AppState, Report, ScoringSettings, Task, User } from '../lib/types';
 
 // Основные тесты проверяют демоотдел из 7 человек; большой отдел — в bigdept.test.tsx.
 vi.mock('../lib/staff', async (original) => ({ ...(await original<typeof import('../lib/staff')>()), STAFF_USERS: [] }));
@@ -188,14 +193,86 @@ describe('логика задач', () => {
       { weekStart: '2026-09-11', submittedAt: '', entries: [entry(1, 2.5, new Date(2026, 8, 15)), entry(1, 2, new Date(2026, 8, 16))] },
     ];
     const month = kpiByEmployee(reports, 'month', NOW);
-    expect(month[0]).toEqual({ employeeId: 1, total: 4.5, count: 2 });
+    expect(month[0]).toEqual({ employeeId: 1, total: 4.5, count: 2, excluded: false });
     expect(month.find((r) => r.employeeId === 2)?.total).toBe(0);
-    expect(kpiByEmployee(reports, 'all', NOW)[0]).toEqual({ employeeId: 2, total: 5, count: 1 });
+    expect(kpiByEmployee(reports, 'all', NOW)[0]).toEqual({ employeeId: 2, total: 5, count: 1, excluded: false });
     expect(month).toHaveLength(7);
 
     const context = employeeScoreContext(reports.flatMap((report) => report.entries), 1, 7);
-    expect(context).toEqual({ employeeTotal: 4.5, departmentTotal: 9.5, departmentAverage: 1.4, relativeToAverage: 331.6, contribution: 47.4 });
-    expect(employeeScoreContext([], 1, 7)).toEqual({ employeeTotal: 0, departmentTotal: 0, departmentAverage: 0, relativeToAverage: null, contribution: null });
+    expect(context).toEqual({ employeeTotal: 4.5, departmentTotal: 9.5, departmentAverage: 1.4, relativeToAverage: 331.6, contribution: 47.4, excluded: false });
+    expect(employeeScoreContext([], 1, 7)).toEqual({ employeeTotal: 0, departmentTotal: 0, departmentAverage: 0, relativeToAverage: null, contribution: null, excluded: false });
+  });
+
+  describe('правила подсчёта баллов', () => {
+    // Сотрудники 1 и 2 — «Руководство» (g-1), 3 и 4 — «Проектная группа 1» (g-2), 5 и 6 — «Проектная группа 2» (g-3).
+    const done = new Date(2026, 8, 15);
+    const entry = (assigneeId: number, score: number) => ({
+      taskId: `t-${assigneeId}`, rowId: '1.1', rowTitle: '', assigneeId, title: '', deadline: '', result: '',
+      docName: '', docNumber: '', score, doneAt: done.toISOString(),
+    });
+    const reports: Report[] = [{ weekStart: '2026-09-11', submittedAt: '', entries: [entry(1, 10), entry(3, 6), entry(5, 4)] }];
+    const ctx = (over: Partial<ScoringSettings> = {}): ScoringContext => ({
+      scoring: { ...DEFAULT_SCORING, ...over },
+      users: DEFAULT_USERS,
+      units: DEFAULT_UNITS,
+    });
+
+    it('без настроек считаются все сотрудники', () => {
+      expect(excludedFromScoring(ctx()).size).toBe(0);
+      const rows = kpiByEmployee(reports, 'month', NOW, ctx());
+      expect(rows[0]).toMatchObject({ employeeId: 1, total: 10, excluded: false });
+    });
+
+    it('исключённое подразделение не входит в общую оценку, но баллы сохраняются', () => {
+      const excluded = excludedFromScoring(ctx({ excludedUnitIds: ['g-1'] }));
+      expect([...excluded].sort((a, b) => a - b)).toEqual([1, 2]);
+      const rows = kpiByEmployee(reports, 'month', NOW, ctx({ excludedUnitIds: ['g-1'] }));
+      // Баллы руководителя видны, но он ушёл вниз списка.
+      expect(rows.find((r) => r.employeeId === 1)).toMatchObject({ total: 10, excluded: true });
+      expect(rows[0].excluded).toBe(false);
+      expect(rows.at(-1)!.excluded).toBe(true);
+    });
+
+    it('исключение убирает баллы из итога и среднего', () => {
+      const all = employeeScoreContext(reports[0].entries, 3, 7, ctx());
+      expect(all.departmentTotal).toBe(20);
+      const without = employeeScoreContext(reports[0].entries, 3, 7, ctx({ excludedUnitIds: ['g-1'] }));
+      // Осталось 10 баллов на 5 сотрудников: семеро минус двое из руководства.
+      expect(without.departmentTotal).toBe(10);
+      expect(without.departmentAverage).toBe(2);
+      expect(without.excluded).toBe(false);
+      expect(employeeScoreContext(reports[0].entries, 1, 7, ctx({ excludedUnitIds: ['g-1'] })).excluded).toBe(true);
+    });
+
+    it('знаменатель среднего выбирается настройкой', () => {
+      const staff = employeeScoreContext(reports[0].entries, 3, 7, ctx());
+      // Все семеро: 20 / 7.
+      expect(staff.departmentAverage).toBe(2.9);
+      const withScore = employeeScoreContext(reports[0].entries, 3, 7, ctx({ averageBase: 'withScore' }));
+      // Только трое, у кого есть баллы: 20 / 3.
+      expect(withScore.departmentAverage).toBe(6.7);
+    });
+
+    it('поимённое исключение работает наравне с подразделением', () => {
+      expect([...excludedFromScoring(ctx({ excludedEmployeeIds: [3] }))]).toEqual([3]);
+    });
+
+    it('разрез по направлениям даёт общий и средний балл', () => {
+      const directions = kpiByDirection(reports, 'month', NOW, ctx({ averageBase: 'withScore' }));
+      const first = directions.find((d) => d.name === 'Руководство')!;
+      expect(first).toMatchObject({ total: 10, average: 10, count: 1, excluded: false });
+      const second = directions.find((d) => d.name === 'Проектная группа 1')!;
+      expect(second).toMatchObject({ total: 6, average: 6 });
+      // Направление без баллов остаётся в списке с нулём.
+      expect(directions.some((d) => d.total === 0)).toBe(true);
+    });
+
+    it('полностью исключённое направление помечается и уходит вниз', () => {
+      const directions = kpiByDirection(reports, 'month', NOW, ctx({ excludedUnitIds: ['g-1'] }));
+      // Баллы направления остаются видимыми, хотя в итог отдела оно не входит.
+      expect(directions.at(-1)).toMatchObject({ name: 'Руководство', excluded: true, total: 10 });
+      expect(directions[0].excluded).toBe(false);
+    });
   });
 
   it('выгружает CSV с экранированием и BOM', () => {

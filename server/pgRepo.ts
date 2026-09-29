@@ -2,9 +2,9 @@
 // под общей блокировкой, поэтому одновременные правки разных пользователей не теряются.
 import pg from 'pg';
 import { DEFAULT_DICTIONARIES } from '../src/lib/seed';
-import { DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_USERS } from '../src/lib/access';
+import { ACCESS_VERSION, DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS, withAddedAdminPermissions } from '../src/lib/access';
 import { planRows as DEFAULT_PLAN_ROWS, sortedPlanRows } from '../src/lib/data';
-import type { Absence, ChatRead, Data, Notice, DictionaryEntry, DocumentTemplate, Entitlement, ManagedUser, Message, Permission, PlanRow, Report, RoleDefinition, Task, Unit } from '../src/lib/types';
+import type { Absence, ChatRead, Data, Notice, DictionaryEntry, DocumentTemplate, Entitlement, ManagedUser, Message, PlanRow, Report, RoleDefinition, Task, Unit } from '../src/lib/types';
 import { DEFAULT_UNITS } from '../src/lib/units';
 import { DEFAULT_TEMPLATES, templateScope } from '../src/lib/templates';
 import type { Repo } from './repo';
@@ -90,6 +90,7 @@ const readAll = async (q: Q): Promise<Data | null> => {
   const accessReady = await q.query(`select value from tc_meta where key = 'access-ready'`);
   const accessVersion = await q.query(`select value from tc_meta where key = 'access-version'`);
   const authentication = await q.query(`select value from tc_meta where key = 'authentication-settings'`);
+  const scoring = await q.query(`select value from tc_meta where key = 'scoring-settings'`);
   const tasks = await q.query('select * from tc_tasks order by seq');
   const absences = await q.query('select * from tc_absences order by date_from, id');
   const entitlements = await q.query('select * from tc_entitlements order by year, employee_id');
@@ -102,7 +103,7 @@ const readAll = async (q: Q): Promise<Data | null> => {
   const users = await q.query('select * from tc_users order by employee_id');
   const roles = await q.query('select * from tc_roles order by role');
   const storedRoles: RoleDefinition[] = accessReady.rowCount ? roles.rows.map((r): RoleDefinition => ({ role: r.role, name: r.name, permissions: r.permissions })) : DEFAULT_ROLES;
-  const migratedRoles = accessVersion.rows[0]?.value === '2' ? storedRoles : storedRoles.map((role): RoleDefinition => role.role === 'administrator' && !role.permissions.includes('authentication.manage') ? { ...role, permissions: [...role.permissions, 'authentication.manage' as Permission] } : role);
+  const migratedRoles = accessVersion.rows[0]?.value === ACCESS_VERSION ? storedRoles : withAddedAdminPermissions(storedRoles);
   return {
     tasks: tasks.rows.map(
       (r): Task => ({
@@ -158,6 +159,7 @@ const readAll = async (q: Q): Promise<Data | null> => {
     units: unitsReady.rowCount ? units.rows.map((r): Unit => ({ id: r.id, parentId: r.parent_id, kind: r.kind, name: r.name })) : DEFAULT_UNITS.map((u) => ({ ...u })),
     roles: migratedRoles,
     authentication: authentication.rowCount ? JSON.parse(authentication.rows[0].value) : { ...DEFAULT_AUTHENTICATION },
+    scoring: scoring.rowCount ? JSON.parse(scoring.rows[0].value) : { ...DEFAULT_SCORING },
   };
 };
 
@@ -349,7 +351,7 @@ export const createPgRepo = (connectionString: string, opts: { max?: number } = 
         const accessVersion = await client.query(`select value from tc_meta where key = 'access-version'`);
         const current = await readAll(client);
         const next = fn(current);
-        const empty: Data = { tasks: [], absences: [], entitlements: [], reports: [], messages: [], chatReads: [], planRows: DEFAULT_PLAN_ROWS.map((row) => ({ ...row })), dictionaries: DEFAULT_DICTIONARIES, users: DEFAULT_USERS, roles: DEFAULT_ROLES, units: DEFAULT_UNITS, templates: DEFAULT_TEMPLATES, authentication: { ...DEFAULT_AUTHENTICATION } };
+        const empty: Data = { tasks: [], absences: [], entitlements: [], reports: [], messages: [], chatReads: [], planRows: DEFAULT_PLAN_ROWS.map((row) => ({ ...row })), dictionaries: DEFAULT_DICTIONARIES, users: DEFAULT_USERS, roles: DEFAULT_ROLES, units: DEFAULT_UNITS, templates: DEFAULT_TEMPLATES, authentication: { ...DEFAULT_AUTHENTICATION }, scoring: { ...DEFAULT_SCORING } };
         const before = current ?? empty;
         // Пока таблица ни разу не записывалась, чтение подставляет значения по умолчанию.
         // Сравнивать с ними нельзя: иначе значения по умолчанию сочтутся уже сохранёнными и не попадут в базу.
@@ -377,9 +379,16 @@ export const createPgRepo = (connectionString: string, opts: { max?: number } = 
         await sync(client, ROLES, baseline.roles, next.roles);
         await sync(client, UNITS, baseline.units ?? [], next.units ?? DEFAULT_UNITS);
         await sync(client, TEMPLATES, baseline.templates ?? [], next.templates ?? DEFAULT_TEMPLATES);
-        if (accessVersion.rows[0]?.value !== '2') {
+        if (accessVersion.rows[0]?.value !== ACCESS_VERSION) {
           for (const role of next.roles) await ROLES.upsert(client, role);
-          await client.query(`insert into tc_meta (key, value) values ('access-version', '2') on conflict (key) do update set value = excluded.value`);
+          await client.query(`insert into tc_meta (key, value) values ('access-version', $1) on conflict (key) do update set value = excluded.value`, [ACCESS_VERSION]);
+        }
+        if (stable(before.scoring ?? DEFAULT_SCORING) !== stable(next.scoring ?? DEFAULT_SCORING)) {
+          await client.query(
+            `insert into tc_meta (key, value) values ('scoring-settings', $1)
+             on conflict (key) do update set value = excluded.value`,
+            [JSON.stringify(next.scoring ?? DEFAULT_SCORING)],
+          );
         }
         if (stable(before.authentication) !== stable(next.authentication)) {
           await client.query(

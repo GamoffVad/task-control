@@ -10,16 +10,17 @@ import { PERMISSIONS, hasPermission, permissionsFor } from '../lib/access';
 import { DEFAULT_DICTIONARIES } from '../lib/seed';
 import { useStore } from '../lib/store';
 import type { WindowsCheck } from '../lib/api';
-import type { AuthenticationMode, DictionaryEntry, DictionaryKind, DirectoryUser, DocumentTemplate, ManagedUser, TemplateScope, Permission, PlanRow, Role, Unit, UnitKind } from '../lib/types';
+import type { AuthenticationMode, DictionaryEntry, DictionaryKind, DirectoryUser, DocumentTemplate, ManagedUser, ScoringSettings, TemplateScope, Permission, PlanRow, Role, Unit, UnitKind } from '../lib/types';
 import { PARENT_KIND, UNIT_KINDS, unitKindLabel, unitPath, unitTree, unitWithDescendants } from '../lib/units';
 import { unitOf } from '../lib/data';
 
-type Tab = 'users' | 'units' | 'roles' | 'authentication' | 'dictionaries' | 'planRows' | 'templates';
+type Tab = 'users' | 'units' | 'roles' | 'authentication' | 'scoring' | 'dictionaries' | 'planRows' | 'templates';
 const ALL_TABS: { value: Tab; label: string; permission: Permission }[] = [
   { value: 'users', label: 'Пользователи', permission: 'users.manage' },
   { value: 'units', label: 'Подразделения', permission: 'users.manage' },
   { value: 'roles', label: 'Роли и разрешения', permission: 'roles.manage' },
   { value: 'authentication', label: 'Аутентификация', permission: 'authentication.manage' },
+  { value: 'scoring', label: 'Оценка', permission: 'scoring.manage' },
   { value: 'dictionaries', label: 'Словари', permission: 'dictionaries.manage' },
   { value: 'planRows', label: 'Разделы планирования', permission: 'dictionaries.manage' },
   { value: 'templates', label: 'Шаблоны документов', permission: 'dictionaries.manage' },
@@ -46,12 +47,13 @@ export const Admin = () => {
   const activeTab = tabs.some((item) => item.value === tab) ? tab : tabs[0]?.value;
   return (
     <section className="admin-page">
-      <PageHeader title="Администрирование" subtitle="Пользователи и подразделения, доступ, способ входа, разделы планирования, справочники и шаблоны документов." />
+      <PageHeader title="Администрирование" subtitle="Пользователи и подразделения, доступ, способ входа, правила оценки, разделы планирования, справочники и шаблоны документов." />
       {tabs.length > 0 && <Segmented value={activeTab!} options={tabs} onChange={setTab} label="Раздел администрирования" />}
       {activeTab === 'users' && <UsersTab state={state} dispatch={dispatch} />}
       {activeTab === 'units' && <UnitsTab state={state} dispatch={dispatch} />}
       {activeTab === 'roles' && <RolesTab state={state} dispatch={dispatch} />}
       {activeTab === 'authentication' && <AuthenticationTab />}
+      {activeTab === 'scoring' && <ScoringTab state={state} dispatch={dispatch} />}
       {activeTab === 'dictionaries' && <DictionariesTab state={state} dispatch={dispatch} />}
       {activeTab === 'planRows' && <PlanRowsTab state={state} dispatch={dispatch} />}
       {activeTab === 'templates' && <TemplatesTab state={state} dispatch={dispatch} />}
@@ -341,6 +343,81 @@ const RolesTab = ({ state, dispatch }: TabProps) => {
       </section>)}</div>
       <p className="help-note">Изменения сохраняются сразу. У активного пользователя должны оставаться разрешения на вход в администрирование, управление пользователями и ролями.</p>
     </div>
+  </div>;
+};
+
+const AVERAGE_BASES: { value: ScoringSettings['averageBase']; label: string; hint: string }[] = [
+  { value: 'staff', label: 'Все сотрудники', hint: 'Делим на численность, кроме исключённых. Сотрудник без баллов занижает среднее.' },
+  { value: 'active', label: 'Действующие', hint: 'Отключённые учётные записи в знаменатель не идут.' },
+  { value: 'withScore', label: 'Только с баллами', hint: 'Делим на число тех, у кого есть баллы за период.' },
+];
+
+const ScoringTab = ({ state, dispatch }: TabProps) => {
+  const scoring = state.scoring;
+  const save = (patch: Partial<ScoringSettings>) => dispatch({ type: 'saveScoring', scoring: { ...scoring, ...patch } });
+  // Исключать можно любое подразделение: и отделение отдела, и целое управление.
+  const units = useMemo(() => unitTree(state.units), [state.units]);
+  const excludedUnits = new Set(scoring.excludedUnitIds);
+  const excludedPeople = new Set(scoring.excludedEmployeeIds);
+  const toggleUnit = (id: string, on: boolean) =>
+    save({ excludedUnitIds: on ? [...scoring.excludedUnitIds, id] : scoring.excludedUnitIds.filter((x) => x !== id) });
+  const togglePerson = (id: number, on: boolean) =>
+    save({ excludedEmployeeIds: on ? [...scoring.excludedEmployeeIds, id] : scoring.excludedEmployeeIds.filter((x) => x !== id) });
+  // Сотрудник уже исключён подразделением — отдельная отметка ему не нужна.
+  const byUnit = new Set<number>();
+  for (const id of scoring.excludedUnitIds) {
+    const inside = unitWithDescendants(state.units, id);
+    for (const user of state.users) if (inside.has(unitOf(user) ?? '')) byUnit.add(user.employeeId);
+  }
+
+  return <div className="admin-section">
+    <div className="card-head admin-content-head">
+      <div><h2>Правила подсчёта баллов</h2><p className="subtitle">Правила применяются при показе: изменение пересчитывает и прошлые периоды. Вес самой записи отчёта остаётся тем, что был на момент отправки.</p></div>
+    </div>
+
+    <h3 className="admin-subhead">Вне общей оценки</h3>
+    <p className="subtitle">Баллы исключённых видны на своих местах, но не входят в итог и среднее по отделу — так обычно поступают с руководством.</p>
+    <ul className="scoring-units">
+      {units.map(({ unit, depth }) => (
+        <li key={unit.id} style={{ paddingLeft: depth * 18 }}>
+          <Checkbox checked={excludedUnits.has(unit.id)} onChange={(on) => toggleUnit(unit.id, on)}>
+            {unit.name} <span className="faint">· {unitKindLabel(unit.kind)}</span>
+          </Checkbox>
+        </li>
+      ))}
+    </ul>
+
+    <h3 className="admin-subhead">Отдельные сотрудники</h3>
+    <ul className="scoring-people">
+      {[...state.users].sort((a, b) => a.fullName.localeCompare(b.fullName, 'ru')).map((user) => (
+        <li key={user.employeeId}>
+          <Checkbox
+            checked={excludedPeople.has(user.employeeId) || byUnit.has(user.employeeId)}
+            disabled={byUnit.has(user.employeeId)}
+            onChange={(on) => togglePerson(user.employeeId, on)}
+          >
+            {user.fullName}
+            {byUnit.has(user.employeeId) && <span className="faint"> · по подразделению</span>}
+          </Checkbox>
+        </li>
+      ))}
+    </ul>
+
+    <h3 className="admin-subhead">Средний балл</h3>
+    <p className="subtitle">Чем делится общий балл отдела или направления.</p>
+    <div className="scoring-choice" role="radiogroup" aria-label="Знаменатель среднего балла">
+      {AVERAGE_BASES.map((item) => (
+        <button key={item.value} type="button" role="radio" aria-checked={scoring.averageBase === item.value} onClick={() => save({ averageBase: item.value })}>
+          <strong>{item.label}</strong><span>{item.hint}</span>
+        </button>
+      ))}
+    </div>
+
+    <h3 className="admin-subhead">Направления</h3>
+    <Checkbox checked={scoring.byDirection} onChange={(byDirection) => save({ byDirection })}>
+      Показывать разрез по направлениям в «Показателях»
+    </Checkbox>
+    <p className="subtitle">Направления — отделения основного отдела, те же, что в фильтре «Группа».</p>
   </div>;
 };
 

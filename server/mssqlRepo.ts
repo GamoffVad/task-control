@@ -3,7 +3,7 @@
 // Изменения пишутся в транзакции под общей блокировкой sp_getapplock — как в PostgreSQL-хранилище.
 import sql from 'mssql';
 import { DEFAULT_DICTIONARIES } from '../src/lib/seed';
-import { DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_USERS } from '../src/lib/access';
+import { ACCESS_VERSION, DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS, withAddedAdminPermissions } from '../src/lib/access';
 import { planRows as DEFAULT_PLAN_ROWS, sortedPlanRows } from '../src/lib/data';
 import type { Absence, ChatRead, Data, Notice, DictionaryEntry, DocumentTemplate, Entitlement, ManagedUser, Message, Permission, PlanRow, Report, RoleDefinition, Task, Unit } from '../src/lib/types';
 import { DEFAULT_UNITS } from '../src/lib/units';
@@ -140,6 +140,7 @@ const readAll = async (q: Q): Promise<Data | null> => {
   const accessReady = (await meta(q, 'access-ready')) != null;
   const accessVersion = await meta(q, 'access-version');
   const authentication = await meta(q, 'authentication-settings');
+  const scoring = await meta(q, 'scoring-settings');
 
   const r = async (text: string) => rows(q, text);
   const tasks = await r('select * from dbo.tc_tasks order by [seq]');
@@ -162,15 +163,8 @@ const readAll = async (q: Q): Promise<Data | null> => {
         return { role: row.role as RoleDefinition['role'], name: row.name, permissions: json<Permission[]>(row.permissions, []) };
       })
     : DEFAULT_ROLES;
-  // Право «управление способом входа» добавлено позже: старым базам оно дописывается при чтении.
-  const migratedRoles =
-    accessVersion === '2'
-      ? storedRoles
-      : storedRoles.map((role): RoleDefinition =>
-          role.role === 'administrator' && !role.permissions.includes('authentication.manage')
-            ? { ...role, permissions: [...role.permissions, 'authentication.manage' as Permission] }
-            : role,
-        );
+  // Права, добавленные позже, дописываются администратору при чтении старой базы.
+  const migratedRoles = accessVersion === ACCESS_VERSION ? storedRoles : withAddedAdminPermissions(storedRoles);
 
   return {
     tasks: tasks.map((x) => {
@@ -249,6 +243,7 @@ const readAll = async (q: Q): Promise<Data | null> => {
       : DEFAULT_UNITS.map((u) => ({ ...u })),
     roles: migratedRoles,
     authentication: authentication ? JSON.parse(authentication) : { ...DEFAULT_AUTHENTICATION },
+    scoring: scoring ? JSON.parse(scoring) : { ...DEFAULT_SCORING },
   };
 };
 
@@ -559,6 +554,7 @@ export const createMssqlRepo = (settings: MssqlSettings): Repo => {
           units: DEFAULT_UNITS,
           templates: DEFAULT_TEMPLATES,
           authentication: { ...DEFAULT_AUTHENTICATION },
+          scoring: { ...DEFAULT_SCORING },
         };
         const before = current ?? empty;
         // Пока таблица ни разу не записывалась, чтение подставляет значения по умолчанию.
@@ -589,10 +585,11 @@ export const createMssqlRepo = (settings: MssqlSettings): Repo => {
         await sync(tx, UNITS, baseline.units ?? [], next.units ?? DEFAULT_UNITS);
         await sync(tx, TEMPLATES, baseline.templates ?? [], next.templates ?? DEFAULT_TEMPLATES);
 
-        if (accessVersion !== '2') {
+        if (accessVersion !== ACCESS_VERSION) {
           for (const role of next.roles) await ROLES.upsert(tx, role);
-          await setMeta(tx, 'access-version', '2');
+          await setMeta(tx, 'access-version', ACCESS_VERSION);
         }
+        if (stable(before.scoring ?? DEFAULT_SCORING) !== stable(next.scoring ?? DEFAULT_SCORING)) await setMeta(tx, 'scoring-settings', JSON.stringify(next.scoring ?? DEFAULT_SCORING));
         if (stable(before.authentication) !== stable(next.authentication)) await setMeta(tx, 'authentication-settings', JSON.stringify(next.authentication));
 
         await setMetaOnce(tx, 'seeded', new Date().toISOString());

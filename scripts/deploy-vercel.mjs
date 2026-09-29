@@ -24,5 +24,10 @@ try {
   const args = process.argv.slice(2).join(' ');
   execSync(`vercel deploy --prebuilt --prod --yes ${args}`.trim(), { cwd: dir, stdio: 'inherit', shell: true });
 } finally {
-  rmSync(dir, { recursive: true, force: true });
+  // Уборка не должна ронять уже состоявшуюся публикацию: в Windows файл может быть ещё занят CLI.
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  } catch (e) {
+    console.warn(`Не удалось удалить временную папку ${dir}: ${e instanceof Error ? e.message : e}`);
+  }
 }

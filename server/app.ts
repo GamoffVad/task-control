@@ -16,7 +16,7 @@ import { DEFAULT_UNITS } from '../src/lib/units';
 import { validateTask, type TaskDraft } from '../src/lib/logic';
 import { fromData, PERSISTED, reducer, toData, type Action } from '../src/lib/reducer';
 import { createSeed, DEFAULT_DICTIONARIES } from '../src/lib/seed';
-import type { Data, DictionaryKind, Entitlement, ManagedUser, Permission, Role, UnitKind, User } from '../src/lib/types';
+import type { Data, DictionaryKind, Entitlement, ManagedUser, Permission, Role, ScoringSettings, UnitKind, User } from '../src/lib/types';
 import { signToken, verifyToken } from './auth';
 import type { Repo } from './repo';
 import type { ActiveDirectory } from './activeDirectory';
@@ -263,6 +263,26 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
     case 'saveAuthentication':
       if (!['form', 'windows'].includes(a.mode as string) || typeof a.allowEmergencyForm !== 'boolean') bad('способ входа');
       return { type: 'saveAuthentication', mode: a.mode as 'form' | 'windows', allowEmergencyForm: a.allowEmergencyForm as boolean };
+    case 'saveScoring': {
+      const raw = a.scoring;
+      if (!isObj(raw)) bad('правила подсчёта баллов');
+      const settings = raw as Record<string, unknown>;
+      const ids = settings.excludedUnitIds;
+      const people = settings.excludedEmployeeIds;
+      if (!Array.isArray(ids) || !ids.every((id) => typeof id === 'string')) bad('список подразделений');
+      if (!Array.isArray(people) || !people.every((id) => Number.isInteger(id))) bad('список сотрудников');
+      if (!['staff', 'active', 'withScore'].includes(settings.averageBase as string)) bad('знаменатель среднего балла');
+      if (typeof settings.byDirection !== 'boolean') bad('разрез по направлениям');
+      return {
+        type: 'saveScoring',
+        scoring: {
+          excludedUnitIds: ids as string[],
+          excludedEmployeeIds: people as number[],
+          averageBase: settings.averageBase as ScoringSettings['averageBase'],
+          byDirection: settings.byDirection as boolean,
+        },
+      };
+    }
     case 'reset':
       return { type: 'reset', now };
   }

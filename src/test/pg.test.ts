@@ -77,6 +77,15 @@ describe('PostgreSQL', () => {
     expect(after.entitlements.find((e) => e.employeeId === 2)?.carriedOver).toBe(9);
   });
 
+  it('хранит правила подсчёта баллов', async () => {
+    const scoring = { excludedUnitIds: ['g-1'], excludedEmployeeIds: [5], averageBase: 'withScore' as const, byDirection: false };
+    await repo.update((d) => ({ ...d!, scoring }));
+    expect((await repo.read())!.scoring).toEqual(scoring);
+    // Правка без правил их не теряет.
+    await repo.update((d) => ({ ...d!, messages: [...d!.messages, { id: 'm-scoring', authorId: 1, text: 'после правил', sentAt: NOW.toISOString() }] }));
+    expect((await repo.read())!.scoring).toEqual(scoring);
+  });
+
   it('ошибка внутри изменения откатывает транзакцию', async () => {
     const before = await repo.read();
     await expect(

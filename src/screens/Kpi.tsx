@@ -3,20 +3,34 @@ import { Link } from 'react-router';
 import { PeriodPicker } from '../components/ui';
 import { FilterCard, PageHeader } from '../kit';
 import { employeeById, shortName } from '../lib/data';
-import { fmtDate, fmtDayMonth, fmtNum, PERIOD_LABELS, periodStart, points } from '../lib/dates';
-import { kpiByEmployee, reportWeek } from '../lib/logic';
+import { fmtDate, fmtDayMonth, fmtNum, PERIOD_LABELS, periodStart, plural, points } from '../lib/dates';
+import { kpiByDirection, kpiByEmployee, reportWeek, summarize, type ScoringContext } from '../lib/logic';
 import { useStore } from '../lib/store';
-import type { Period } from '../lib/types';
+import type { Period, ScoringAverageBase } from '../lib/types';
+
+/** Чем делится общий балл — подпись под средним значением. */
+const AVERAGE_LABEL: Record<ScoringAverageBase, string> = {
+  staff: 'все сотрудники',
+  active: 'действующие',
+  withScore: 'только с баллами',
+};
 
 export const Kpi = () => {
   const { state } = useStore();
   const [period, setPeriod] = useState<Period>('quarter');
-  const now = new Date();
-  const rows = useMemo(() => kpiByEmployee(state.reports, period), [state.reports, period]);
-  const total = rows.reduce((s, r) => s + r.total, 0);
-  const count = rows.reduce((s, r) => s + r.count, 0);
+  // «Сейчас» фиксируется на время просмотра: иначе пересчёт шёл бы на каждой отрисовке.
+  const now = useMemo(() => new Date(), []);
+  const ctx = useMemo<ScoringContext>(() => ({ scoring: state.scoring, users: state.users, units: state.units }), [state.scoring, state.users, state.units]);
+  const rows = useMemo(() => kpiByEmployee(state.reports, period, now, ctx), [state.reports, period, now, ctx]);
+  const directions = useMemo(() => (state.scoring.byDirection ? kpiByDirection(state.reports, period, now, ctx) : []), [state.reports, period, now, ctx, state.scoring.byDirection]);
+  // Итоги считаются по правилам оценки: исключённые сотрудники в них не входят.
+  const summary = useMemo(() => summarize(new Map(rows.map((r) => [r.employeeId, r.total])), ctx), [rows, ctx]);
+  const counted = rows.filter((r) => !r.excluded);
+  const total = summary.total;
+  const count = counted.reduce((s, r) => s + r.count, 0);
   const max = Math.max(1, ...rows.map((r) => r.total));
-  const leader = rows[0]?.total ? rows[0] : null;
+  const leader = counted[0]?.total ? counted[0] : null;
+  const excludedCount = rows.length - counted.length;
   const from = periodStart(period, now);
 
   const weeks = useMemo(() => {
@@ -35,6 +49,11 @@ export const Kpi = () => {
         title="Показатели эффективности"
         subtitle="Баллы начисляются за исполненные задачи из отправленных отчётов. Вес задачи равен весу позиции плана на момент отправки отчёта."
       />
+      {excludedCount > 0 && (
+        <p className="help-note">
+          Вне общей оценки: {excludedCount} {plural(excludedCount, 'сотрудник', 'сотрудника', 'сотрудников')}. Их баллы показаны, но в итог и среднее не входят — правила задаёт администратор.
+        </p>
+      )}
       <div className="filters">
         <FilterCard label="Период" wide>
           <PeriodPicker value={period} onChange={setPeriod} />
@@ -60,8 +79,8 @@ export const Kpi = () => {
           </div>
           <div className="stat">
             <span className="caps">В среднем на сотрудника</span>
-            <div className="value">{fmtNum(Math.round((total / rows.length) * 10) / 10)}</div>
-            <div className="expl">баллов</div>
+            <div className="value">{fmtNum(summary.average)}</div>
+            <div className="expl">{summary.counted > 0 ? `${AVERAGE_LABEL[state.scoring.averageBase]} · ${summary.counted}` : 'нет данных'}</div>
           </div>
           <div className="stat">
             <span className="caps">Лучший результат</span>
@@ -71,6 +90,40 @@ export const Kpi = () => {
         </div>
       </section>
 
+      {directions.length > 0 && (
+        <section className="card" aria-label="Баллы по направлениям">
+          <div className="card-head">
+            <h2>Баллы по направлениям</h2>
+            <span className="caps">общий · средний балл</span>
+          </div>
+          <div className="table-scroll">
+            <table className="admin-table directions">
+              <thead>
+                <tr>
+                  <th>Направление</th>
+                  <th style={{ width: '14%' }}>Общий балл</th>
+                  <th style={{ width: '14%' }}>Средний балл</th>
+                  <th style={{ width: '14%' }}>В расчёте</th>
+                  <th style={{ width: '14%' }}>Задач</th>
+                </tr>
+              </thead>
+              <tbody>
+                {directions.map((d) => (
+                  <tr key={d.id} className={d.excluded ? 'muted' : undefined}>
+                    <td>{d.name}{d.excluded && <span className="faint"> · вне оценки</span>}</td>
+                    <td className="num">{fmtNum(d.total)}</td>
+                    <td className="num">{fmtNum(d.average)}</td>
+                    <td className="num">{d.people}</td>
+                    <td className="num">{d.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="help-note">Направления — отделения отдела. Средний балл делится на {AVERAGE_LABEL[state.scoring.averageBase]}. У направлений с пометкой «вне оценки» баллы показаны, но в общий итог отдела они не входят.</p>
+        </section>
+      )}
+
       <div className="split split--half">
         <section className="card" aria-label="Баллы по сотрудникам">
           <div className="card-head">
@@ -79,13 +132,13 @@ export const Kpi = () => {
           </div>
           {total === 0 && <p className="empty">За выбранный период нет отправленных отчётов.</p>}
           {rows.map((r, i) => (
-            <div className="hbar-row" key={r.employeeId}>
+            <div className={`hbar-row${r.excluded ? ' hbar-row--muted' : ''}`} key={r.employeeId}>
               <Link className="label" to={`/employees/${r.employeeId}`}>
                 {shortName(r.employeeId)}
-                <span className="pos">{employeeById.get(r.employeeId)?.position}</span>
+                <span className="pos">{r.excluded ? 'вне оценки' : employeeById.get(r.employeeId)?.position}</span>
               </Link>
               <div className="bar-track" aria-hidden>
-                <div className={`bar-fill${i === 0 && r.total > 0 ? ' lead' : ''}`} style={{ transform: `scaleX(${r.total / max})` }} />
+                <div className={`bar-fill${i === 0 && r.total > 0 && !r.excluded ? ' lead' : ''}`} style={{ transform: `scaleX(${r.total / max})` }} />
               </div>
               <div className="val">
                 {fmtNum(r.total)}

@@ -1,13 +1,13 @@
 // Изменение данных приложения. Чистые функции без React: тот же код работает в браузере и на сервере,
 // поэтому права проверяются одинаково в обоих местах.
 import { employeeById, planRows, sortedPlanRows } from './data';
-import { DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_USERS, effectiveUser, hasPermission, permissionsFor } from './access';
+import { DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS, effectiveUser, hasPermission, permissionsFor, withAddedAdminPermissions } from './access';
 import { createSeed, DEFAULT_DICTIONARIES } from './seed';
 import { buildReportEntries, clampScore, upsertReport, type TaskDraft } from './logic';
 import { absenceAccess, isManager, taskAccess } from './permissions';
 import { toDateKey } from './dates';
 import type { AbsenceDraft } from './absences';
-import type { Absence, AbsenceStatus, AppState, ChatRead, AuthenticationMode, Data, DictionaryEntry, DictionaryKind, Entitlement, ManagedUser, Message, Permission, PlanRow, Role, RoleDefinition, Task, TemplateScope, Unit, UnitKind, User } from './types';
+import type { Absence, AbsenceStatus, AppState, ChatRead, AuthenticationMode, Data, DictionaryEntry, DictionaryKind, Entitlement, ManagedUser, Message, Permission, PlanRow, Role, RoleDefinition, ScoringSettings, Task, TemplateScope, Unit, UnitKind, User } from './types';
 import { DEFAULT_UNIT_OF, DEFAULT_UNITS, PARENT_KIND } from './units';
 import { DEFAULT_TEMPLATES, parseTemplate, templateScope } from './templates';
 
@@ -58,6 +58,7 @@ export type Action =
   | { type: 'deleteManagedUser'; employeeId: number }
   | { type: 'saveRolePermissions'; role: Role; permissions: Permission[] }
   | { type: 'saveAuthentication'; mode: AuthenticationMode; allowEmergencyForm: boolean }
+  | { type: 'saveScoring'; scoring: ScoringSettings }
   | { type: 'reset'; now?: Date };
 
 /** Сдвигает отметку «прочитано» сотрудника вперёд (назад не двигает). */
@@ -91,6 +92,7 @@ export const PERSISTED: Action['type'][] = [
   'deleteManagedUser',
   'saveRolePermissions',
   'saveAuthentication',
+  'saveScoring',
   'reset',
 ];
 
@@ -367,6 +369,20 @@ export const reducer = (state: AppState, action: Action): AppState => {
     case 'saveAuthentication':
       if (!hasPermission(state.user, 'authentication.manage')) return state;
       return { ...state, authentication: { mode: action.mode, allowEmergencyForm: action.allowEmergencyForm } };
+    case 'saveScoring': {
+      if (!hasPermission(state.user, 'scoring.manage')) return state;
+      const { excludedUnitIds, excludedEmployeeIds, averageBase, byDirection } = action.scoring;
+      // Исключения хранятся без повторов: список приходит из флажков и может содержать дубли.
+      return {
+        ...state,
+        scoring: {
+          excludedUnitIds: [...new Set(excludedUnitIds)],
+          excludedEmployeeIds: [...new Set(excludedEmployeeIds)],
+          averageBase,
+          byDirection,
+        },
+      };
+    }
     case 'reset':
       if (!hasPermission(state.user, 'data.reset')) return state;
       return { ...createSeed(action.now), user: effectiveUser(state.user, DEFAULT_USERS, DEFAULT_ROLES) };
@@ -429,6 +445,7 @@ export const migrate = (s: Stored): AppState => {
     users,
     roles,
     authentication: s.authentication ?? { ...DEFAULT_AUTHENTICATION },
+    scoring: { ...DEFAULT_SCORING },
     units: s.units ?? DEFAULT_UNITS.map((u) => ({ ...u })),
     templates: (s.templates ?? DEFAULT_TEMPLATES).map((t) => ({ ...t, scope: templateScope(t) })),
     user: null,
@@ -451,15 +468,18 @@ export const toData = (s: AppState): Data => ({
   units: s.units,
   templates: s.templates,
   authentication: s.authentication,
+  scoring: s.scoring,
 });
 
 export const fromData = (d: Data, user: User | null): AppState => {
   const users = d.users ?? DEFAULT_USERS;
-  const roles = d.roles ?? DEFAULT_ROLES;
+  // Отсутствие правил оценки означает базу прежней версии: администратору дописываются новые права.
+  // В PostgreSQL и SQL Server то же делает отметка access-version, файловому хранилищу признак нужен свой.
+  const roles = d.scoring ? (d.roles ?? DEFAULT_ROLES) : withAddedAdminPermissions(d.roles ?? DEFAULT_ROLES);
   const normalizedUsers = users.map((account) => {
     const employee = employeeById.get(account.employeeId);
     return { ...account, windowsLogin: account.windowsLogin || account.email.split('@')[0], fullName: account.fullName || (employee ? `${employee.lastname} ${employee.name} ${employee.patronymic}` : account.windowsLogin), position: account.position || employee?.position || '', unitId: account.unitId ?? DEFAULT_UNIT_OF[account.employeeId] };
   });
   const { notices: _notices, ...rest } = d;
-  return { version: 5, ...rest, chatReads: d.chatReads ?? [], units: d.units ?? DEFAULT_UNITS.map((u) => ({ ...u })), templates: (d.templates ?? DEFAULT_TEMPLATES).map((t) => ({ ...t, scope: templateScope(t) })), planRows: sortedPlanRows(d.planRows ?? planRows), dictionaries: d.dictionaries ?? DEFAULT_DICTIONARIES, users: normalizedUsers, roles, authentication: d.authentication ?? { ...DEFAULT_AUTHENTICATION }, user: effectiveUser(user, normalizedUsers, roles) };
+  return { version: 5, ...rest, chatReads: d.chatReads ?? [], units: d.units ?? DEFAULT_UNITS.map((u) => ({ ...u })), templates: (d.templates ?? DEFAULT_TEMPLATES).map((t) => ({ ...t, scope: templateScope(t) })), planRows: sortedPlanRows(d.planRows ?? planRows), dictionaries: d.dictionaries ?? DEFAULT_DICTIONARIES, users: normalizedUsers, roles, authentication: d.authentication ?? { ...DEFAULT_AUTHENTICATION }, scoring: d.scoring ?? { ...DEFAULT_SCORING }, user: effectiveUser(user, normalizedUsers, roles) };
 };
