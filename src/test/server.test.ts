@@ -167,6 +167,38 @@ describe('API', () => {
     expect(json.data!.absences.find((a) => a.from === '2026-11-02')).toMatchObject({ employeeId: 3, status: 'request' });
   });
 
+  it('отклоняет перевёрнутые сроки задачи и события', async () => {
+    // Интерфейс это проверяет, но сервер данным клиента не доверяет: запрос может прийти и мимо него.
+    const token = await login('user@example.com');
+    const state = await call('/api/state', { token });
+    const task = state.json.data!.tasks[0];
+    const reversed = await call('/api/action', {
+      method: 'POST',
+      token,
+      body: { action: { type: 'saveTask', draft: { ...task, start: '2026-09-20T12:00:00.000Z', end: '2026-09-18T09:00:00.000Z' } } },
+    });
+    expect(reversed.status).toBe(400);
+    expect(reversed.json.error).toContain('окончание раньше начала');
+
+    const absence = await call('/api/action', {
+      method: 'POST',
+      token,
+      body: { action: { type: 'saveAbsence', draft: { employeeId: 4, type: 'vacation', from: '2026-12-10', to: '2026-12-01', status: 'approved', note: '' } } },
+    });
+    expect(absence.status).toBe(400);
+    expect(absence.json.error).toContain('последний день раньше первого');
+
+    // Одинаковые даты — это один день, их отклонять нельзя.
+    const sameDay = await call('/api/action', {
+      method: 'POST',
+      token,
+      body: { action: { type: 'saveAbsence', draft: { employeeId: 4, type: 'dayoff', from: '2026-12-10', to: '2026-12-10', status: 'approved', note: '' } } },
+    });
+    expect(sameDay.status).toBe(200);
+    const after = await call('/api/state', { token });
+    expect(after.json.data!.tasks.find((t) => t.id === task.id)!.end).toBe(task.end);
+  });
+
   it('отклоняет неверные данные с понятной причиной', async () => {
     const token = await login('user@example.com');
     await call('/api/state', { token });

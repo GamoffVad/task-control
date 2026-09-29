@@ -87,6 +87,8 @@ const checkTaskDraft = (d: unknown, data: Data): TaskDraft => {
   if (d.category !== null && !CATEGORIES.some((c) => c.key === d.category)) bad('категория');
   if (!Array.isArray(d.assigneeIds) || d.assigneeIds.length > 20 || !d.assigneeIds.every((a) => typeof a === 'number' && employeeById.has(a))) bad('исполнители');
   if (!isoDate(d.start) || !isoDate(d.end)) bad('сроки');
+  // Порядок дат проверяется и здесь: в интерфейсе он тоже проверяется, но сервер данным клиента не доверяет.
+  if (new Date(d.end as string) < new Date(d.start as string)) bad('сроки: окончание раньше начала');
   if (!str(d.docName, 300) || !str(d.docNumber, 100) || !str(d.result, 4000)) bad('документ или результат');
   if (typeof d.done !== 'boolean') bad('отметка об исполнении');
   if (d.score !== null && typeof d.score !== 'number') bad('баллы');
@@ -115,6 +117,7 @@ const checkAbsenceDraft = (d: unknown, data: Data, now: Date): AbsenceDraft => {
   if (typeof d.employeeId !== 'number' || !employeeById.has(d.employeeId)) bad('сотрудник');
   if (!['vacation', 'trip', 'dayoff', 'sick', 'study'].includes(d.type as string)) bad('вид отсутствия');
   if (!dateKey(d.from) || (d.to !== null && !dateKey(d.to))) bad('даты');
+  if (d.to !== null && (d.to as string) < (d.from as string)) bad('даты: последний день раньше первого');
   if (!['request', 'approved', 'rejected'].includes(d.status as string)) bad('статус');
   if (!str(d.note, 500)) bad('комментарий');
   const draft: AbsenceDraft = {

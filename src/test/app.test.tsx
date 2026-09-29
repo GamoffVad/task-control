@@ -816,6 +816,38 @@ describe('отсутствия', () => {
     expect(loadState().absences.some((a) => a.employeeId === 4 && a.from === '2026-09-18' && a.status === 'approved')).toBe(true);
   });
 
+  it('перенос первого дня события двигает последний, сохраняя длительность', async () => {
+    const user = userEvent.setup();
+    renderAt('/tetris');
+    await user.click(screen.getByRole('button', { name: /^Событие$/ }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('С'), { target: { value: '2026-10-05' } });
+    const to = within(dialog).getByLabelText('По (включительно)');
+    fireEvent.change(to, { target: { value: '2026-10-09' } });
+    // Поле держит набранный текст до потери фокуса, поэтому уводим фокус, как это делает пользователь.
+    fireEvent.blur(to);
+    // Переносим начало вперёд за прежний конец: конец должен уехать вместе с ним.
+    fireEvent.change(within(dialog).getByLabelText('С'), { target: { value: '2026-10-20' } });
+    expect(within(dialog).queryByText(/Последний день раньше первого/)).toBeNull();
+    await user.click(within(dialog).getByRole('button', { name: /Сохранить/ }));
+    // Длительность сохранена: пять дней, как и было.
+    expect(loadState().absences.at(-1)).toMatchObject({ from: '2026-10-20', to: '2026-10-24' });
+  });
+
+  it('последний день раньше первого — ошибка видна сразу, сохранить нельзя', async () => {
+    const user = userEvent.setup();
+    renderAt('/tetris');
+    await user.click(screen.getByRole('button', { name: /^Событие$/ }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('С'), { target: { value: '2026-10-05' } });
+    fireEvent.change(within(dialog).getByLabelText('По (включительно)'), { target: { value: '2026-10-01' } });
+    // Ошибка появляется до нажатия «Сохранить».
+    expect(within(dialog).getByText(/Последний день раньше первого/)).toBeInTheDocument();
+    const before = loadState().absences.length;
+    await user.click(within(dialog).getByRole('button', { name: /Сохранить/ }));
+    expect(loadState().absences.length).toBe(before);
+  });
+
   it('не даёт пересечь два отсутствия одного сотрудника', async () => {
     const user = userEvent.setup();
     renderAt('/tetris');

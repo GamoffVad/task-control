@@ -49,7 +49,20 @@ export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const readOnly = !access.edit;
 
-  const set = <K extends keyof AbsenceDraft>(k: K, v: AbsenceDraft[K]) => setDraft((d) => ({ ...d, [k]: v }));
+  const set = <K extends keyof AbsenceDraft>(k: K, v: AbsenceDraft[K]) => {
+    setDraft((d) => ({ ...d, [k]: v }));
+    // Ошибка по датам показывается сразу, а не только при сохранении.
+    if (k === 'from' || k === 'to') setErrors((prev) => ({ ...prev, from: undefined, to: undefined, overlap: undefined }));
+  };
+
+  /** Перенос первого дня сдвигает последний, сохраняя длительность: иначе можно получить «по» раньше «с». */
+  const setFrom = (value: string) =>
+    setDraft((d) => {
+      if (d.to === null || !/^\d{4}-\d{2}-\d{2}$/.test(value) || !/^\d{4}-\d{2}-\d{2}$/.test(d.from)) return { ...d, from: value };
+      const days = Math.round((fromDateKey(d.to).getTime() - fromDateKey(d.from).getTime()) / 86_400_000);
+      const to = new Date(fromDateKey(value).getTime() + Math.max(days, 0) * 86_400_000);
+      return { ...d, from: value, to: toDateKey(to) };
+    });
 
   const probe: Absence = { ...draft, id: draft.id ?? 'new', createdAt: '', decidedBy: null };
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(draft.from) && (draft.to === null || draft.to >= draft.from);
@@ -157,7 +170,7 @@ export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
           <div className="field-row">
             <label className="field">
               <span className="caps">С</span>
-              <DateField value={draft.from} readOnly={readOnly} invalid={!!errors.from} onChange={(v) => set('from', v)} />
+              <DateField value={draft.from} readOnly={readOnly} invalid={!!errors.from} onChange={setFrom} />
             </label>
             <label className="field">
               <span className="caps">По (включительно)</span>
@@ -176,7 +189,9 @@ export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
               Дата окончания не известна (больничный открыт)
             </Checkbox>
           )}
-          {(errors.from || errors.to || errors.overlap) && <span className="field-error">{errors.from ?? errors.to ?? errors.overlap}</span>}
+          {(errors.from || errors.to || errors.overlap || (!valid && draft.to !== null)) && (
+            <span className="field-error">{errors.from ?? errors.to ?? errors.overlap ?? 'Последний день раньше первого: исправьте даты.'}</span>
+          )}
 
           <div className="abs-calc" aria-live="polite">
             <div>

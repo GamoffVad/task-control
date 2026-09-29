@@ -84,6 +84,8 @@ const TaskModal = ({ task, defaults, context, onClose }: OpenArgs & { onClose: (
         const dur = new Date(prev.end).getTime() - new Date(prev.start).getTime();
         next.end = new Date(d.getTime() + Math.max(dur, 0)).toISOString();
       }
+      // Ошибка по срокам показывается сразу, а не только при сохранении.
+      setErrors((errs) => ({ ...errs, end: new Date(next.end) < new Date(next.start) ? 'Окончание раньше начала: исправьте дату или время.' : undefined }));
       return next;
     });
   };
