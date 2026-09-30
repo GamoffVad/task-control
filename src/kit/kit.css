@@ -1,12 +1,19 @@
 /* ——— Библиотека компонентов: то, что раньше рисовал браузер ——— */
 
-/* Полосы прокрутки в цветах темы. */
-* { scrollbar-width: thin; scrollbar-color: var(--dash) transparent; }
+/* Полосы прокрутки — свои, в цветах темы, во всём приложении. Стандартных быть не должно.
+   Важно: свойства scrollbar-width и scrollbar-color в Chrome 121+ ОТКЛЮЧАЮТ ::-webkit-scrollbar и возвращают
+   системную полосу, пусть и тонкую. Поэтому для Chromium (включая 109 на Windows 7) они здесь не задаются вообще. */
 *::-webkit-scrollbar { width: 10px; height: 10px; }
 *::-webkit-scrollbar-track { background: transparent; }
 *::-webkit-scrollbar-thumb { background: var(--dash); border: 3px solid var(--paper); border-radius: 6px; }
 *::-webkit-scrollbar-thumb:hover { background: var(--ink-4); }
+*::-webkit-scrollbar-thumb:active { background: var(--accent); }
+*::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
 *::-webkit-scrollbar-corner { background: transparent; }
+/* Движки без ::-webkit-scrollbar (Firefox) своих полос не поддерживают — им остаётся тонкая полоса цветом темы. */
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: var(--dash) transparent; }
+}
 
 /* Выделение текста и ручка изменения размера многострочных полей. */
 ::selection { background: rgb(var(--accent-rgb) / 35%); color: var(--ink); }
