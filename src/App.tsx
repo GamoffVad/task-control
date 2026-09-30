@@ -3,6 +3,7 @@ import { BrowserRouter, Link, Navigate, Route, Routes, useLocation } from 'react
 import { NAV } from './components/nav';
 import { Shell } from './components/Shell';
 import { TooltipLayer } from './kit';
+import { AppearanceStyles } from './components/AppearanceStyles';
 import { DictionaryColors } from './components/DictionaryColors';
 import { canOpenPath } from './lib/permissions';
 import { useStore } from './lib/store';
@@ -59,6 +60,7 @@ export const AppRoutes = () => (
   <>
     <Title />
     <TooltipLayer />
+    <AppearanceStyles />
     <DictionaryColors />
     <Routes>
       <Route path="/login" element={<Login />} />

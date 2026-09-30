@@ -5,6 +5,7 @@ export const PERMISSIONS: { key: Permission; label: string; group: string }[] = 
   { key: 'admin.access', label: 'Открывать администрирование', group: 'Администрирование' },
   { key: 'authentication.manage', label: 'Настраивать способ входа', group: 'Администрирование' },
   { key: 'scoring.manage', label: 'Настраивать правила подсчёта баллов', group: 'Администрирование' },
+  { key: 'appearance.manage', label: 'Настраивать оформление интерфейса', group: 'Администрирование' },
   { key: 'users.manage', label: 'Назначать роли пользователям', group: 'Администрирование' },
   { key: 'roles.manage', label: 'Настраивать роли и разрешения', group: 'Администрирование' },
   { key: 'dictionaries.manage', label: 'Редактировать словари', group: 'Администрирование' },
@@ -48,8 +49,8 @@ export const DEFAULT_AUTHENTICATION = { mode: 'form', allowEmergencyForm: true }
  * Версия набора прав. Права, добавленные после выпуска базы, дописываются администратору
  * один раз при обновлении: иначе новый раздел администрирования остался бы недоступен.
  */
-export const ACCESS_VERSION = '3';
-const ADDED_ADMIN_PERMISSIONS: Permission[] = ['authentication.manage', 'scoring.manage'];
+export const ACCESS_VERSION = '4';
+const ADDED_ADMIN_PERMISSIONS: Permission[] = ['authentication.manage', 'scoring.manage', 'appearance.manage'];
 
 export const withAddedAdminPermissions = (roles: RoleDefinition[]): RoleDefinition[] =>
   roles.map((role) => {

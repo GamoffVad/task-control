@@ -13,10 +13,11 @@ import { authenticate } from '../src/lib/auth';
 import { DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_USERS, effectiveUser, hasPermission, sessionUser } from '../src/lib/access';
 import { CATEGORIES, employeeById, planRows, syncCategories, syncStaff } from '../src/lib/data';
 import { DEFAULT_UNITS } from '../src/lib/units';
+import { normalizeAppearance } from '../src/lib/appearance';
 import { validateTask, type TaskDraft } from '../src/lib/logic';
 import { fromData, PERSISTED, reducer, toData, type Action } from '../src/lib/reducer';
 import { createSeed, DEFAULT_DICTIONARIES } from '../src/lib/seed';
-import type { Data, DictionaryKind, Entitlement, ManagedUser, Permission, Role, ScoringSettings, UnitKind, User } from '../src/lib/types';
+import type { AppearanceSettings, Data, DictionaryKind, Entitlement, ManagedUser, Permission, Role, ScoringSettings, UnitKind, User } from '../src/lib/types';
 import { signToken, verifyToken } from './auth';
 import type { Repo } from './repo';
 import type { ActiveDirectory } from './activeDirectory';
@@ -285,6 +286,11 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
           byDirection: settings.byDirection as boolean,
         },
       };
+    }
+    case 'saveAppearance': {
+      if (!isObj(a.appearance)) bad('оформление');
+      // Значения приводит к допустимым общий код: чужие токены, неверные цвета и размеры отбрасываются.
+      return { type: 'saveAppearance', appearance: normalizeAppearance(a.appearance as Partial<AppearanceSettings>) };
     }
     case 'reset':
       return { type: 'reset', now };

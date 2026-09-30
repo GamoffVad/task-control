@@ -49,7 +49,7 @@ input[type='search']::-webkit-search-cancel-button, input[type='search']::-webki
 .datepop-grid .wd.we { color: var(--ink-4); }
 .datepop-grid .day {
   height: 32px; border: 1px solid transparent; border-radius: 2px; background: none; cursor: pointer;
-  font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: var(--ink);
+  font-family: var(--font-mono); font-size: 12.5px; color: var(--ink);
 }
 .datepop-grid .day.we { color: var(--ink-3); }
 .datepop-grid .day.other { color: var(--ink-4); opacity: 0.55; }
@@ -59,7 +59,7 @@ input[type='search']::-webkit-search-cancel-button, input[type='search']::-webki
 .datepop-grid .day:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .datepop-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 12px; }
 .datepop-time { width: 76px; max-height: 300px; overflow-y: auto; border-left: 1px dashed var(--dash); padding: 6px 4px; display: flex; flex-direction: column; gap: 1px; }
-.datepop-time button { border: none; background: none; border-radius: 2px; padding: 5px 0; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
+.datepop-time button { border: none; background: none; border-radius: 2px; padding: 5px 0; font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
 .datepop-time button:hover { background: var(--soft); color: var(--accent); }
 .datepop-time button[aria-selected='true'] { background: var(--accent); color: var(--sheet); font-weight: 700; }
 @media (max-width: 559px) {
@@ -79,7 +79,7 @@ input[type='search']::-webkit-search-cancel-button, input[type='search']::-webki
 .kit-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
 .kit-swatch { font-size: 11.5px; color: var(--ink-3); }
 .kit-swatch i { display: block; height: 36px; border-radius: 2px; border: 1px solid var(--line); margin-bottom: 4px; }
-.kit-swatch code { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-2); }
+.kit-swatch code { font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); }
 .modal--wide { width: min(1060px, 100%); }
 
 /* Компактное окно: без прокрутки на экранах от 768 px высотой. */
@@ -208,14 +208,14 @@ input[type='search']::-webkit-search-cancel-button, input[type='search']::-webki
 .doc-preview {
   margin: 0; max-height: min(52vh, 460px); overflow: auto; padding: 12px 14px;
   background: var(--sheet); border: 1px dashed var(--dash); border-radius: 2px;
-  font-family: 'IBM Plex Mono', monospace; font-size: 12px; line-height: 1.55; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere;
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.55; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere;
 }
 .template-editor { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px 18px; }
 @media (min-width: 900px) { .template-editor { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
-.modal textarea.template-body.input, .template-body.input { min-height: 320px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; line-height: 1.5; tab-size: 2; }
+.modal textarea.template-body.input, .template-body.input { min-height: 320px; font-family: var(--font-mono); font-size: 12px; line-height: 1.5; tab-size: 2; }
 .template-preview { max-height: 360px; min-height: 320px; }
 .template-help summary { cursor: pointer; font-size: 12.5px; color: var(--accent); }
 .template-help dl { display: grid; gap: 4px 14px; grid-template-columns: minmax(0, 1fr); margin: 8px 0 0; font-size: 12px; }
 .template-help dl div { display: grid; grid-template-columns: minmax(180px, 280px) minmax(0, 1fr); gap: 10px; }
-.template-help dt code { font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: var(--ink); }
+.template-help dt code { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink); }
 .template-help dd { margin: 0; color: var(--ink-3); }

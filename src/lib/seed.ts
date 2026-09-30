@@ -1,6 +1,7 @@
 // Демонстрационные данные, построенные относительно текущей даты.
 import { employees, isCoreEmployee, planRows } from './data';
 import { DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS } from './access';
+import { normalizeAppearance } from './appearance';
 import { STAFF_USERS } from './staff';
 import { DEFAULT_UNITS } from './units';
 import { DEFAULT_TEMPLATES } from './templates';
@@ -118,6 +119,7 @@ export const createSeed = (now: Date = new Date()): AppState => {
     templates: DEFAULT_TEMPLATES.map((t) => ({ ...t })),
     authentication: { ...DEFAULT_AUTHENTICATION },
     scoring: { ...DEFAULT_SCORING },
+    appearance: normalizeAppearance(undefined),
     user: null,
   };
 };

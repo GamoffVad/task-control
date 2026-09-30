@@ -1,7 +1,7 @@
 /* Дизайн-система «Тёплый мел» (см. DESIGN.md) + тёмная тема «Ночной мел». Все медиазапросы — только здесь. */
 :root {
-  --paper: #F7F5F0;
-  --sheet: #FFFDF9;
+  --paper: #F1EDE6;
+  --sheet: #FAF7F1;
   --ink: #1F2B3A;
   --ink-2: #3E4859;
   --ink-3: #5D6575;
@@ -14,9 +14,9 @@
   --accent: #1F3A5F;
   --accent-2: #2F5480;
   --accent-hover: #16293F;
-  --soft: #EFEBE3;
-  --soft-alt: #F1EDE5;
-  --soft-2: #E9E4DA;
+  --soft: #E8E3D9;
+  --soft-alt: #EAE5DC;
+  --soft-2: #E1DBCF;
   --amber: #7A5312;
   --danger: #A32D22;
   --ok: #2C6B45;
@@ -26,6 +26,14 @@
   --logo-dark: #1F2B3A;
   --logo-1: #1F3A5F;
 
+  /* Шрифты и размеры текста: правятся в «Администрировании» → «Редактирование UI». */
+  --font-body: 'Segoe UI', Arial, sans-serif;
+  --font-mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  --size-base: 14px;
+  --size-heading: 16px;
+  --size-caps: 11px;
+  --size-subtitle: 14px;
+
   --shell-pad: 14px;
   --grid-gap: 16px;
   --tap-min: 44px;
@@ -34,9 +42,9 @@
   --footer-h: 44px;
   --backdrop: rgba(31, 43, 58, 0.28);
   --today-bg: rgba(220, 228, 239, 0.35);
-  --cal-surface: #FFFDF9;
-  --cal-head: #E9E4DA;
-  --cal-hours: #F1EDE5;
+  --cal-surface: #FAF7F1;
+  --cal-head: #E1DBCF;
+  --cal-hours: #EAE5DC;
   --cal-day-tint: rgba(31, 58, 95, 0.055);
   /* Светлая тема: событие — тёплый лист с лёгким оттенком категории и тонкой рамкой в её тон. */
   /* Стиль «Контур с точкой»: фон бумаги, рамка — цвет категории на 55%. */
@@ -66,6 +74,7 @@
   color-scheme: light;
 
   /* Каналы цветов: нужны для rgb(var(--…-rgb) / доля) вместо color-mix() — его нет в Chrome 109 (Windows 7). */
+  --paper-rgb: 241 237 230;
   --ink-rgb: 31 43 58;
   --ink-3-rgb: 93 101 117;
   --line-rgb: 221 217 208;
@@ -86,8 +95,8 @@
 
 /* Тёмная тема — основная. Тот же «лист», но ночью: тёплый графит, светлые чернила, один акцент. */
 :root[data-theme='dark'] {
-  --paper: #151D2B;
-  --sheet: #202C3D;
+  --paper: #1C2738;
+  --sheet: #28364A;
   --ink: #EAF0FA;
   --ink-2: #C7D3E5;
   --ink-3: #AABBD0;
@@ -97,22 +106,22 @@
   --accent: #93B9F0;
   --accent-2: #6094D3;
   --accent-hover: #B6D0F6;
-  --soft: #1C2A3B;
-  --soft-alt: #1A2737;
-  --soft-2: #26394E;
+  --soft: #243347;
+  --soft-alt: #223043;
+  --soft-2: #2E435A;
   --amber: #E1B36A;
   --danger: #FF847D;
   --ok: #75D8C9;
   --ok-bg: #17353A;
   --danger-bg: #3B2731;
-  --accent-bg: #223A58;
+  --accent-bg: #2A4566;
   --logo-dark: #6094D3;
   --logo-1: #93B9F0;
   --backdrop: rgba(0, 0, 0, 0.6);
   --today-bg: rgba(142, 178, 222, 0.06);
-  --cal-surface: #08111D;
-  --cal-head: #1A293A;
-  --cal-hours: #172534;
+  --cal-surface: #121C2B;
+  --cal-head: #223247;
+  --cal-hours: #1F2E40;
   --cal-day-tint: rgba(52, 88, 125, 0.08);
   --cal-event-surface: var(--paper);
   --cal-event-mix: 0%;
@@ -138,6 +147,7 @@
   color-scheme: dark;
 
   /* Каналы цветов: нужны для rgb(var(--…-rgb) / доля) вместо color-mix() — его нет в Chrome 109 (Windows 7). */
+  --paper-rgb: 28 39 56;
   --ink-rgb: 234 240 250;
   --ink-3-rgb: 170 187 208;
   --line-rgb: 49 71 95;
@@ -173,8 +183,8 @@ html, body {
   overflow-x: clip;
   background: var(--paper);
   color: var(--ink);
-  font-family: 'Segoe UI', Arial, sans-serif;
-  font-size: 14px;
+  font-family: var(--font-body);
+  font-size: var(--size-base);
   line-height: 1.5;
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
@@ -194,10 +204,10 @@ h1 {
   margin: 0;
   color: var(--ink);
 }
-h2 { font-size: 16px; font-weight: 700; margin: 0; color: var(--ink); }
+h2 { font-size: var(--size-heading); font-weight: 700; margin: 0; color: var(--ink); }
 
 .num {
-  font-family: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 .muted { color: var(--ink-3); }
@@ -209,13 +219,13 @@ h2 { font-size: 16px; font-weight: 700; margin: 0; color: var(--ink); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 .caps {
-  font-size: 11px;
+  font-size: var(--size-caps);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--ink-3);
 }
-.subtitle { font-size: 14px; color: var(--ink-3); line-height: 1.5; margin: 6px 0 0; }
+.subtitle { font-size: var(--size-subtitle); color: var(--ink-3); line-height: 1.5; margin: 6px 0 0; }
 
 /* ——— Кнопки ——— */
 .btn {
@@ -284,7 +294,7 @@ h2 { font-size: 16px; font-weight: 700; margin: 0; color: var(--ink); }
   padding: 0 4px;
   background: var(--danger);
   color: var(--sheet);
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   font-weight: 600;
   line-height: 18px;
@@ -345,7 +355,7 @@ h2 { font-size: 16px; font-weight: 700; margin: 0; color: var(--ink); }
 }
 .topnav a:hover { color: var(--accent); }
 .topnav a[aria-current='page'] { font-weight: 700; color: var(--accent); border-bottom-color: var(--accent); }
-.topnav .count { font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; color: var(--danger); }
+.topnav .count { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--danger); }
 /* Разделы — одной строкой с прокруткой вбок: шапка закреплена и не должна занимать пол-экрана. */
 .topnav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 .topnav::-webkit-scrollbar { display: none; }
@@ -517,7 +527,7 @@ h2 { font-size: 16px; font-weight: 700; margin: 0; color: var(--ink); }
 }
 textarea.input { resize: vertical; line-height: 1.5; }
 .input[aria-invalid='true'] { border-color: var(--danger); }
-.input.num-input { width: 76px; min-height: 32px; padding: 4px 6px; font-family: 'IBM Plex Mono', monospace; text-align: right; }
+.input.num-input { width: 76px; min-height: 32px; padding: 4px 6px; font-family: var(--font-mono); text-align: right; }
 .field-error { font-size: 13px; font-weight: 600; color: var(--danger); }
 .form-stack { display: flex; flex-direction: column; gap: 14px; }
 .form-actions, .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
@@ -598,7 +608,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .person-chip button:hover { background: var(--accent-bg); }
 .picker-bar { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; }
 .picker-bar .search { flex: 1 1 220px; }
-.picker-count { margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: var(--ink-3); white-space: nowrap; }
+.picker-count { margin-left: auto; font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3); white-space: nowrap; }
 .picker-list {
   max-height: 232px;
   overflow-y: auto;
@@ -649,10 +659,10 @@ td.name { color: var(--ink); font-weight: 600; }
 .plan-table .sticky-col { position: sticky; left: 0; z-index: 2; background: var(--paper); }
 .plan-table thead .sticky-col { z-index: 4; }
 .plan-table .pos-cell { min-width: 240px; max-width: 300px; border-right: 1px dashed var(--dash); }
-.plan-table .pos-cell .code { font-family: 'IBM Plex Mono', monospace; color: var(--ink-4); font-size: 12px; margin-right: 8px; }
+.plan-table .pos-cell .code { font-family: var(--font-mono); color: var(--ink-4); font-size: 12px; margin-right: 8px; }
 .plan-table tr.section td { background: var(--soft-alt); color: var(--ink); font-weight: 700; font-size: 12.5px; padding-top: 8px; padding-bottom: 8px; }
 .plan-table tr.section .sticky-col { background: var(--soft-alt); }
-.plan-table td.score-cell { white-space: nowrap; width: 72px; font-family: 'IBM Plex Mono', monospace; color: var(--ink-3); text-align: right; }
+.plan-table td.score-cell { white-space: nowrap; width: 72px; font-family: var(--font-mono); color: var(--ink-3); text-align: right; }
 .plan-table td.cell { padding: 6px; min-width: 168px; }
 .plan-table td.cell:hover { background: var(--soft); }
 /* Кнопка «+ задача»: в пустой ячейке заполняет её и видна при наведении, под задачами видна всегда. */
@@ -691,7 +701,7 @@ td.name { color: var(--ink); font-weight: 600; }
   border-radius: 0 2px 2px 0;
 }
 .chip:hover { background: var(--accent-bg); }
-.chip .meta { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+.chip .meta { display: block; font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); margin-top: 2px; }
 .chip.done { border-left-color: var(--ok); background: var(--ok-bg); }
 .chip.done .meta { color: var(--ok); }
 .chip.overdue { border-left-color: var(--danger); background: var(--danger-bg); }
@@ -711,12 +721,12 @@ td.name { color: var(--ink); font-weight: 600; }
 .cal-grid { display: grid; width: 100%; min-width: 640px; position: relative; }
 .cal-head { position: sticky; top: 0; z-index: 5; background: var(--cal-head); border-bottom: 1px solid var(--dash); padding: 12px 6px; text-align: center; }
 .cal-head .wd { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); }
-.cal-head .d { font-family: 'IBM Plex Mono', monospace; font-size: 18px; font-weight: 600; color: var(--ink); margin-left: 6px; }
+.cal-head .d { font-family: var(--font-mono); font-size: 18px; font-weight: 600; color: var(--ink); margin-left: 6px; }
 .cal-head.today .wd, .cal-head.today .d { color: var(--accent); }
 .cal-head.today { box-shadow: inset 0 -2px 0 var(--accent); }
 .cal-corner { position: sticky; top: 0; left: 0; z-index: 6; background: var(--cal-head); border-bottom: 1px solid var(--dash); }
 .cal-hours { position: sticky; left: 0; z-index: 4; background: var(--cal-hours); border-right: 1px solid var(--dash); }
-.cal-hour { height: var(--hour); font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-4); padding: 0 8px; text-align: right; transform: translateY(-7px); }
+.cal-hour { height: var(--hour); font-family: var(--font-mono); font-size: 11px; color: var(--ink-4); padding: 0 8px; text-align: right; transform: translateY(-7px); }
 .cal-day { position: relative; border-right: 1px solid var(--grid-line); background: linear-gradient(180deg, var(--cal-day-tint), transparent 35%); }
 .cal-day.today { background: var(--today-bg); }
 .cal-slot { height: calc(var(--hour) / 2); border: none; border-bottom: 1px solid var(--grid-line); background: none; display: block; width: 100%; padding: 0; cursor: pointer; }
@@ -750,7 +760,7 @@ td.name { color: var(--ink); font-weight: 600; }
   z-index: 2;
 }
 .cal-event:hover { outline: 1px solid var(--accent); }
-.cal-event .t { font-family: 'IBM Plex Mono', monospace; font-size: 10px; line-height: 1.25; font-weight: 400; color: var(--ink-3); display: block; }
+.cal-event .t { font-family: var(--font-mono); font-size: 10px; line-height: 1.25; font-weight: 400; color: var(--ink-3); display: block; }
 .cal-event .ti { display: block; }
 .cal-event .t { white-space: nowrap; }
 .cal-event .t.inline { display: inline; margin-right: 4px; }
@@ -788,7 +798,7 @@ td.name { color: var(--ink); font-weight: 600; }
 /* Показатели: исключённые из оценки видны, но приглушены. */
 .hbar-row--muted .label, .hbar-row--muted .val { opacity: 0.55; }
 .hbar-row--muted .bar-fill { opacity: 0.4; }
-.admin-table.directions td.num { text-align: right; font-family: 'IBM Plex Mono', monospace; }
+.admin-table.directions td.num { text-align: right; font-family: var(--font-mono); }
 .admin-table tr.muted td { opacity: 0.6; }
 
 /* Поиск и категории в календаре */
@@ -855,7 +865,7 @@ td.name { color: var(--ink); font-weight: 600; }
 .role-tag { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--amber); }
 .readonly-note { display: flex; gap: 8px; align-items: center; font-size: 12.5px; color: var(--ink-3); border-left: 1px solid var(--amber); padding: 4px 0 4px 12px; }
 .score-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; }
-.score-row .input { width: 90px; font-family: 'IBM Plex Mono', monospace; text-align: right; }
+.score-row .input { width: 90px; font-family: var(--font-mono); text-align: right; }
 .score-row .base { font-size: 12px; color: var(--ink-3); }
 .cal-now { position: absolute; left: 0; right: 0; height: 0; border-top: 2px solid var(--danger); z-index: 3; pointer-events: none; }
 
@@ -866,7 +876,7 @@ td.name { color: var(--ink); font-weight: 600; }
 .month-cell:hover { background: var(--soft); }
 .month-cell.other { background: var(--soft-alt); }
 .month-cell.other .d { color: var(--ink-4); }
-.month-cell .d { position: relative; z-index: 1; font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600; display: inline-block; padding: 2px 4px; }
+.month-cell .d { position: relative; z-index: 1; font-family: var(--font-mono); font-size: 13px; font-weight: 600; display: inline-block; padding: 2px 4px; }
 .month-cell.today .d { background: var(--accent); color: var(--sheet); border-radius: 2px; }
 .month-tasks { height: calc(100% - 23px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 .month-tasks::-webkit-scrollbar { width: 5px; }
@@ -937,7 +947,7 @@ td.name { color: var(--ink); font-weight: 600; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px 0; }
 .stat { padding: 2px 20px 2px 0; min-width: 0; }
 .stat + .stat { border-left: 1px dashed var(--dash); padding-left: 20px; }
-.stat .value { font-family: 'IBM Plex Mono', monospace; font-size: 27px; font-weight: 700; line-height: 1.15; color: var(--ink); }
+.stat .value { font-family: var(--font-mono); font-size: 27px; font-weight: 700; line-height: 1.15; color: var(--ink); }
 .stat .value.ratio { color: var(--accent); }
 .stat .expl { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
 .employees-layout > .employee-card { order: -1; }
@@ -953,7 +963,7 @@ td.name { color: var(--ink); font-weight: 600; }
 .hbar-row .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); text-decoration: none; }
 a.label:hover { color: var(--accent); }
 .hbar-row .label .pos { display: block; font-size: 11px; color: var(--ink-4); }
-.hbar-row .val { font-family: 'IBM Plex Mono', monospace; text-align: right; color: var(--ink); font-weight: 600; }
+.hbar-row .val { font-family: var(--font-mono); text-align: right; color: var(--ink); font-weight: 600; }
 .hbar-row .val small { display: block; font-weight: 400; color: var(--ink-4); font-size: 11px; }
 .bar-track { position: relative; height: 10px; background: var(--line); border-radius: 1px; overflow: hidden; }
 .bar-fill { position: absolute; inset: 0; background: var(--accent); transform-origin: left center; transition: transform 0.25s ease-out; }
@@ -962,7 +972,7 @@ a.label:hover { color: var(--accent); }
 .week-bars { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(18px, 1fr); gap: 4px; align-items: end; height: 140px; border-bottom: 1px solid var(--accent); }
 .week-bars .wb { background: var(--accent); min-height: 1px; position: relative; }
 .week-bars .wb:hover { background: var(--accent-2); }
-.week-labels { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(18px, 1fr); gap: 4px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink-4); margin-top: 4px; }
+.week-labels { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(18px, 1fr); gap: 4px; font-family: var(--font-mono); font-size: 10px; color: var(--ink-4); margin-top: 4px; }
 .week-labels span { text-align: center; overflow: hidden; }
 
 /* ——— Сотрудники ——— */
@@ -990,7 +1000,7 @@ a.label:hover { color: var(--accent); }
 .tree-row.active { border-left-color: var(--accent); color: var(--accent); background: var(--soft); }
 .tree-row .grow { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tree-row .sub { display: block; font-size: 11.5px; font-weight: 400; color: var(--ink-3); }
-.tree-row .meta { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-3); font-weight: 400; }
+.tree-row .meta { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); font-weight: 400; }
 .tree-row .meta.danger { color: var(--danger); font-weight: 600; }
 .avatar {
   flex: none;
@@ -1014,7 +1024,7 @@ a.label:hover { color: var(--accent); }
 .list .t { font-size: 13.5px; font-weight: 600; color: var(--ink); }
 .list .m { font-size: 12px; color: var(--ink-3); margin-top: 2px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
 .list .res { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; }
-.list .pts { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: var(--ok); white-space: nowrap; }
+.list .pts { font-family: var(--font-mono); font-weight: 600; color: var(--ok); white-space: nowrap; }
 .list button.t { border: none; background: none; padding: 0; text-align: left; cursor: pointer; }
 .list button.t:hover { color: var(--accent); }
 
@@ -1034,7 +1044,7 @@ a.label:hover { color: var(--accent); }
 .msg .avatar { margin-top: 2px; }
 .msg.mine .avatar { background: var(--accent); border: 1px solid var(--accent); color: var(--sheet); }
 .msg .who { font-size: 13px; font-weight: 700; color: var(--ink); }
-.msg .when { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-4); margin-left: 8px; font-weight: 400; }
+.msg .when { font-family: var(--font-mono); font-size: 11px; color: var(--ink-4); margin-left: 8px; font-weight: 400; }
 .msg .text { font-size: 13.5px; color: var(--ink-2); line-height: 1.55; white-space: pre-wrap; word-break: break-word; margin-top: 1px; }
 .msg.mine .who { color: var(--accent); }
 .composer { display: flex; gap: 10px; padding-top: 14px; border-top: 1px dashed var(--dash); align-items: flex-end; }
@@ -1141,7 +1151,7 @@ a.label:hover { color: var(--accent); }
 @media (max-width: 767px) { .tl { --name: 150px; --day: 30px; } }
 .tl-corner { position: sticky; left: 0; top: 0; z-index: 5; background: var(--paper); border-bottom: 1px solid var(--accent); padding: 6px 12px 5px 0; display: flex; align-items: flex-end; }
 .tl-dh { position: sticky; top: 0; z-index: 3; background: var(--paper); text-align: center; padding: 6px 0 5px; border-bottom: 1px solid var(--accent); font-size: 10.5px; color: var(--ink-3); }
-.tl-dh b { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.tl-dh b { display: block; font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; color: var(--ink); }
 .tl-dh.we, .tl-dh.we b { color: var(--ink-4); }
 .tl-dh.today { box-shadow: inset 0 -2px 0 var(--danger); }
 .tl-dh.today b { color: var(--danger); }
@@ -1166,7 +1176,7 @@ a.label:hover { color: var(--accent); }
   border: none; border-left: 3px solid var(--c); background: rgb(var(--c-rgb) / var(--abs-mix));
   border-radius: 0 2px 2px 0; padding: 2px 6px; font-size: 10.5px; line-height: 1.15; color: var(--ink); cursor: pointer; text-align: left; white-space: nowrap;
 }
-.tl-bar small { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: var(--ink-3); }
+.tl-bar small { display: block; font-family: var(--font-mono); font-size: 9px; color: var(--ink-3); }
 .tl-bar.request {
   background: repeating-linear-gradient(135deg, rgb(var(--c-rgb) / 24%) 0 1px, transparent 1px 5px);
   outline: 1px dashed rgb(var(--c-rgb) / 75%);
@@ -1203,7 +1213,7 @@ a.label:hover { color: var(--accent); }
 
 .abs-calc { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-block: 1px dashed var(--dash); padding: 8px 0; }
 .abs-calc div + div { border-left: 1px dashed var(--dash); padding-left: 12px; }
-.abs-calc b { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 18px; color: var(--ink); }
+.abs-calc b { display: block; font-family: var(--font-mono); font-size: 18px; color: var(--ink); }
 .abs-calc b.bad { color: var(--danger); }
 .abs-calc small { font-size: 11px; color: var(--ink-3); }
 .warn-note { border-left: 1px solid var(--danger); padding: 4px 0 4px 12px; font-size: 12.5px; color: var(--ink-2); margin: 0; }
@@ -1216,7 +1226,7 @@ a.label:hover { color: var(--accent); }
 
 .bal-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 18px 28px; }
 .bal-block .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.bal-block .big { font-family: 'IBM Plex Mono', monospace; font-size: 28px; font-weight: 600; line-height: 1.1; color: var(--ink); }
+.bal-block .big { font-family: var(--font-mono); font-size: 28px; font-weight: 600; line-height: 1.1; color: var(--ink); }
 .bal-block .big small { font-size: 12.5px; color: var(--ink-3); font-weight: 400; font-family: 'Golos Text', sans-serif; }
 .bal-block .big.bad { color: var(--danger); }
 .bal-track { display: flex; height: 10px; background: var(--line); border-radius: 1px; overflow: hidden; margin: 8px 0 6px; }
@@ -1321,6 +1331,23 @@ a.label:hover { color: var(--accent); }
 .scoring-choice strong { margin-bottom: 4px; font-size: 14px; font-weight: 600; }
 .scoring-choice span { color: var(--ink-3); font-size: 12.5px; line-height: 1.45; }
 
+/* Вкладка «Редактирование UI» */
+.ui-fields { display: grid; grid-template-columns: 1fr; gap: 14px 22px; margin: 10px 0 20px; }
+.ui-fields .field-hint { display: block; margin-top: 4px; color: var(--ink-3); font-size: 12px; line-height: 1.4; }
+.ui-theme-switch { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 10px 0 18px; }
+.ui-theme-switch .subtitle { margin: 0; }
+.ui-group { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px dashed var(--dash); }
+.ui-group:last-child { border-bottom: none; }
+.ui-group h4 { margin: 0; font-size: 13.5px; font-weight: 600; }
+.ui-group .subtitle { margin: 3px 0 0; font-size: 12.5px; }
+.ui-colors { display: grid; grid-template-columns: 1fr; gap: 8px 22px; margin-top: 10px; }
+.ui-color { display: grid; grid-template-columns: 22px minmax(0, 1fr) 92px auto; align-items: center; gap: 10px; }
+.ui-color-swatch { width: 22px; height: 22px; border: 1px solid var(--line); border-radius: 2px; }
+.ui-color-label { font-size: 13px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-color input { min-height: 32px; padding: 0 8px; font-family: var(--font-mono); font-size: 12px; }
+.ui-color .text-action { font-size: 11.5px; white-space: nowrap; }
+.ui-color .text-action:disabled { opacity: .35; cursor: default; }
+
 .auth-emergency { padding: 14px 0 0; }
 .auth-emergency p { margin: 5px 0 0 25px; color: var(--ink-3); font-size: 12px; }
 .add-user-form { padding-top: 4px; }
@@ -1343,6 +1370,8 @@ a.label:hover { color: var(--accent); }
   .auth-choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .scoring-choice { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .scoring-people { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ui-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ui-colors { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 767px) {
   .admin-editor { grid-template-columns: 1fr; }
@@ -1371,7 +1400,7 @@ a.label:hover { color: var(--accent); }
 .tt-stats { display: flex; flex-wrap: wrap; gap: 6px 0; padding: 8px 0; border-top: 1px dashed var(--dash); border-bottom: 1px dashed var(--dash); }
 .tt-stat { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding-right: 18px; margin-right: 18px; border-right: 1px dashed var(--dash); }
 .tt-stat:last-child { border-right: none; margin-right: 0; padding-right: 0; }
-.tt-stat .num { font-family: 'IBM Plex Mono', monospace; font-size: 17px; font-weight: 700; color: var(--ink); }
+.tt-stat .num { font-family: var(--font-mono); font-size: 17px; font-weight: 700; color: var(--ink); }
 .tt-stat .num.danger { color: var(--danger); }
 .tt-stat .expl { font-size: 12px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tt-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 20px; padding: 10px 0; }
@@ -1397,7 +1426,7 @@ a.label:hover { color: var(--accent); }
 .tl-dh.today.over, .tl-dh.today.over-req { box-shadow: inset 0 3px 0 var(--danger), inset 0 -2px 0 var(--danger); }
 /* Итоговая строка «Тетриса»: процент отсутствующих по дням. */
 .tl-foot-label { grid-column: 1; position: sticky; left: 0; bottom: 0; z-index: 5; background: var(--paper); border-right: 1px dashed var(--dash); border-top: 1px solid var(--accent); padding: 7px 12px 7px 0; display: flex; align-items: center; }
-.tl-foot { position: sticky; bottom: 0; z-index: 3; background: var(--paper); border-top: 1px solid var(--accent); border-right: 1px solid var(--grid-line-soft); padding: 7px 0; text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: var(--ink-4); white-space: nowrap; }
+.tl-foot { position: sticky; bottom: 0; z-index: 3; background: var(--paper); border-top: 1px solid var(--accent); border-right: 1px solid var(--grid-line-soft); padding: 7px 0; text-align: center; font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-4); white-space: nowrap; }
 .tl-foot.we { background: linear-gradient(var(--weekend), var(--weekend)), var(--paper); }
 .tl-foot.some { color: var(--ink-2); font-weight: 600; }
 .tl-foot.hi { color: var(--danger); font-weight: 700; background: var(--danger-bg); }
@@ -1405,7 +1434,7 @@ a.label:hover { color: var(--accent); }
 /* Непрочитанные сообщения «Переписки»: счётчик в меню и разделитель в ленте. */
 .topnav .unread-pill {
   display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
-  font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; font-weight: 700; line-height: 1;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; line-height: 1;
   background: var(--accent); color: var(--sheet);
 }
 .day-sep.new-sep { background: linear-gradient(var(--accent), var(--accent)) center / 100% 1px no-repeat; }

@@ -444,6 +444,33 @@ describe('календарь: поиск и категории', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
+  it('редактор оформления меняет цвет и возвращает его по умолчанию', async () => {
+    const user = userEvent.setup();
+    renderAt('/admin');
+    await user.click(screen.getByRole('button', { name: 'Редактирование UI' }));
+    const accent = screen.getByLabelText('Цвет: Акцент');
+    // Редактор открывается на теме страницы; в тестах это тёмная.
+    expect(accent).toHaveValue('#93B9F0');
+    fireEvent.change(accent, { target: { value: '#7a1f3d' } });
+    // Переопределение попадает в правило своей темы вместе со спутником «-rgb».
+    const css = () => [...document.querySelectorAll('style')].map((s) => s.textContent).join(' ');
+    expect(css()).toContain("[data-theme='dark']");
+    expect(css()).toContain('--accent: #7a1f3d;');
+    expect(css()).toContain('--accent-rgb: 122 31 61;');
+    const row = accent.closest('.ui-color')!;
+    await user.click(within(row as HTMLElement).getByRole('button', { name: 'по умолчанию' }));
+    expect(css()).not.toContain('--accent: #7a1f3d;');
+  });
+
+  it('размер текста ограничивается допустимыми значениями', async () => {
+    const user = userEvent.setup();
+    renderAt('/admin');
+    await user.click(screen.getByRole('button', { name: 'Редактирование UI' }));
+    fireEvent.change(screen.getByLabelText('Основной текст, пикселей'), { target: { value: '99' } });
+    const css = [...document.querySelectorAll('style')].map((s) => s.textContent).join(' ');
+    expect(css).toContain('--size-base: 20px;');
+  });
+
   it('состояние мероприятия видно по классам: исполнено, просрочено, исполнитель отсутствует', () => {
     renderAt('/calendar');
     const events = [...document.querySelectorAll('.cal-event')];

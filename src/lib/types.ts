@@ -7,6 +7,7 @@ export type Permission =
   | 'admin.access'
   | 'authentication.manage'
   | 'scoring.manage'
+  | 'appearance.manage'
   | 'users.manage'
   | 'roles.manage'
   | 'dictionaries.manage'
@@ -95,6 +96,19 @@ export type ScoringSettings = {
   averageBase: ScoringAverageBase;
   /** Показывать разрез по направлениям (отделениям). */
   byDirection: boolean;
+};
+
+/**
+ * Оформление приложения: цвета по темам, шрифты и размеры текста.
+ * Хранятся только отличия от дизайн-системы, поэтому её правки доходят до незаданных токенов.
+ */
+export type AppearanceSettings = {
+  /** Переопределённые цвета светлой темы: имя переменной CSS без «--» → #RRGGBB. */
+  light: Record<string, string>;
+  dark: Record<string, string>;
+  fontBody: string;
+  fontMono: string;
+  sizes: { base: number; heading: number; caps: number; subtitle: number };
 };
 
 /** Категория мероприятия — определяет цвет в календаре. */
@@ -272,18 +286,26 @@ export type AppState = {
   templates: DocumentTemplate[];
   authentication: AuthenticationSettings;
   scoring: ScoringSettings;
+  appearance: AppearanceSettings;
   user: User | null;
 };
 
 /** Данные, которые хранятся в базе (без сеанса пользователя). */
 /** Серверные данные. planRows optional только для миграции хранилищ старых версий. */
-export type Data = Omit<AppState, 'version' | 'user' | 'planRows' | 'units' | 'templates' | 'chatReads' | 'scoring'> & {
+export type Data = Omit<AppState, 'version' | 'user' | 'planRows' | 'units' | 'templates' | 'chatReads' | 'scoring' | 'appearance'> & {
   planRows?: PlanRow[];
   units?: Unit[];
   templates?: DocumentTemplate[];
   chatReads?: ChatRead[];
   /** Правила подсчёта баллов; отсутствуют в базах прежних версий. */
   scoring?: ScoringSettings;
+  /** Оформление; отсутствует в базах прежних версий. */
+  appearance?: AppearanceSettings;
+  /**
+   * Версия набора прав в этих данных. Отличается от текущей — администратору дописываются
+   * права, добавленные после выпуска базы. PostgreSQL и SQL Server держат ту же отметку в tc_meta.
+   */
+  accessVersion?: string;
   /** Журнал уведомлений — только на сервере. */
   notices?: Notice[];
 };

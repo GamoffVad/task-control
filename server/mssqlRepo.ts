@@ -141,6 +141,7 @@ const readAll = async (q: Q): Promise<Data | null> => {
   const accessVersion = await meta(q, 'access-version');
   const authentication = await meta(q, 'authentication-settings');
   const scoring = await meta(q, 'scoring-settings');
+  const appearance = await meta(q, 'appearance-settings');
 
   const r = async (text: string) => rows(q, text);
   const tasks = await r('select * from dbo.tc_tasks order by [seq]');
@@ -244,6 +245,9 @@ const readAll = async (q: Q): Promise<Data | null> => {
     roles: migratedRoles,
     authentication: authentication ? JSON.parse(authentication) : { ...DEFAULT_AUTHENTICATION },
     scoring: scoring ? JSON.parse(scoring) : { ...DEFAULT_SCORING },
+    ...(appearance ? { appearance: JSON.parse(appearance) } : {}),
+    // Отметка версии прав: без неё общий код дописывал бы их администратору при каждом чтении.
+    ...(accessVersion ? { accessVersion } : {}),
   };
 };
 
@@ -589,6 +593,7 @@ export const createMssqlRepo = (settings: MssqlSettings): Repo => {
           for (const role of next.roles) await ROLES.upsert(tx, role);
           await setMeta(tx, 'access-version', ACCESS_VERSION);
         }
+        if (next.appearance && stable(before.appearance) !== stable(next.appearance)) await setMeta(tx, 'appearance-settings', JSON.stringify(next.appearance));
         if (stable(before.scoring ?? DEFAULT_SCORING) !== stable(next.scoring ?? DEFAULT_SCORING)) await setMeta(tx, 'scoring-settings', JSON.stringify(next.scoring ?? DEFAULT_SCORING));
         if (stable(before.authentication) !== stable(next.authentication)) await setMeta(tx, 'authentication-settings', JSON.stringify(next.authentication));
 

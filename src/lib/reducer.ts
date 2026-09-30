@@ -1,13 +1,14 @@
 // Изменение данных приложения. Чистые функции без React: тот же код работает в браузере и на сервере,
 // поэтому права проверяются одинаково в обоих местах.
 import { employeeById, planRows, sortedPlanRows } from './data';
-import { DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS, effectiveUser, hasPermission, permissionsFor, withAddedAdminPermissions } from './access';
+import { ACCESS_VERSION, DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS, effectiveUser, hasPermission, permissionsFor, withAddedAdminPermissions } from './access';
 import { createSeed, DEFAULT_DICTIONARIES } from './seed';
+import { normalizeAppearance } from './appearance';
 import { buildReportEntries, clampScore, upsertReport, type TaskDraft } from './logic';
 import { absenceAccess, isManager, taskAccess } from './permissions';
 import { toDateKey } from './dates';
 import type { AbsenceDraft } from './absences';
-import type { Absence, AbsenceStatus, AppState, ChatRead, AuthenticationMode, Data, DictionaryEntry, DictionaryKind, Entitlement, ManagedUser, Message, Permission, PlanRow, Role, RoleDefinition, ScoringSettings, Task, TemplateScope, Unit, UnitKind, User } from './types';
+import type { Absence, AbsenceStatus, AppearanceSettings, AppState, ChatRead, AuthenticationMode, Data, DictionaryEntry, DictionaryKind, Entitlement, ManagedUser, Message, Permission, PlanRow, Role, RoleDefinition, ScoringSettings, Task, TemplateScope, Unit, UnitKind, User } from './types';
 import { DEFAULT_UNIT_OF, DEFAULT_UNITS, PARENT_KIND } from './units';
 import { DEFAULT_TEMPLATES, parseTemplate, templateScope } from './templates';
 
@@ -59,6 +60,7 @@ export type Action =
   | { type: 'saveRolePermissions'; role: Role; permissions: Permission[] }
   | { type: 'saveAuthentication'; mode: AuthenticationMode; allowEmergencyForm: boolean }
   | { type: 'saveScoring'; scoring: ScoringSettings }
+  | { type: 'saveAppearance'; appearance: AppearanceSettings }
   | { type: 'reset'; now?: Date };
 
 /** Сдвигает отметку «прочитано» сотрудника вперёд (назад не двигает). */
@@ -93,6 +95,7 @@ export const PERSISTED: Action['type'][] = [
   'saveRolePermissions',
   'saveAuthentication',
   'saveScoring',
+  'saveAppearance',
   'reset',
 ];
 
@@ -383,6 +386,9 @@ export const reducer = (state: AppState, action: Action): AppState => {
         },
       };
     }
+    case 'saveAppearance':
+      if (!hasPermission(state.user, 'appearance.manage')) return state;
+      return { ...state, appearance: normalizeAppearance(action.appearance) };
     case 'reset':
       if (!hasPermission(state.user, 'data.reset')) return state;
       return { ...createSeed(action.now), user: effectiveUser(state.user, DEFAULT_USERS, DEFAULT_ROLES) };
@@ -446,6 +452,7 @@ export const migrate = (s: Stored): AppState => {
     roles,
     authentication: s.authentication ?? { ...DEFAULT_AUTHENTICATION },
     scoring: { ...DEFAULT_SCORING },
+    appearance: normalizeAppearance(undefined),
     units: s.units ?? DEFAULT_UNITS.map((u) => ({ ...u })),
     templates: (s.templates ?? DEFAULT_TEMPLATES).map((t) => ({ ...t, scope: templateScope(t) })),
     user: null,
@@ -469,17 +476,19 @@ export const toData = (s: AppState): Data => ({
   templates: s.templates,
   authentication: s.authentication,
   scoring: s.scoring,
+  appearance: s.appearance,
+  accessVersion: ACCESS_VERSION,
 });
 
 export const fromData = (d: Data, user: User | null): AppState => {
   const users = d.users ?? DEFAULT_USERS;
-  // Отсутствие правил оценки означает базу прежней версии: администратору дописываются новые права.
-  // В PostgreSQL и SQL Server то же делает отметка access-version, файловому хранилищу признак нужен свой.
-  const roles = d.scoring ? (d.roles ?? DEFAULT_ROLES) : withAddedAdminPermissions(d.roles ?? DEFAULT_ROLES);
+  // Отметка версии прав: если она отстала, администратору дописываются права, добавленные позже.
+  // В PostgreSQL и SQL Server ту же роль играет access-version в tc_meta.
+  const roles = d.accessVersion === ACCESS_VERSION ? (d.roles ?? DEFAULT_ROLES) : withAddedAdminPermissions(d.roles ?? DEFAULT_ROLES);
   const normalizedUsers = users.map((account) => {
     const employee = employeeById.get(account.employeeId);
     return { ...account, windowsLogin: account.windowsLogin || account.email.split('@')[0], fullName: account.fullName || (employee ? `${employee.lastname} ${employee.name} ${employee.patronymic}` : account.windowsLogin), position: account.position || employee?.position || '', unitId: account.unitId ?? DEFAULT_UNIT_OF[account.employeeId] };
   });
-  const { notices: _notices, ...rest } = d;
-  return { version: 5, ...rest, chatReads: d.chatReads ?? [], units: d.units ?? DEFAULT_UNITS.map((u) => ({ ...u })), templates: (d.templates ?? DEFAULT_TEMPLATES).map((t) => ({ ...t, scope: templateScope(t) })), planRows: sortedPlanRows(d.planRows ?? planRows), dictionaries: d.dictionaries ?? DEFAULT_DICTIONARIES, users: normalizedUsers, roles, authentication: d.authentication ?? { ...DEFAULT_AUTHENTICATION }, scoring: d.scoring ?? { ...DEFAULT_SCORING }, user: effectiveUser(user, normalizedUsers, roles) };
+  const { notices: _notices, accessVersion: _accessVersion, ...rest } = d;
+  return { version: 5, ...rest, chatReads: d.chatReads ?? [], units: d.units ?? DEFAULT_UNITS.map((u) => ({ ...u })), templates: (d.templates ?? DEFAULT_TEMPLATES).map((t) => ({ ...t, scope: templateScope(t) })), planRows: sortedPlanRows(d.planRows ?? planRows), dictionaries: d.dictionaries ?? DEFAULT_DICTIONARIES, users: normalizedUsers, roles, authentication: d.authentication ?? { ...DEFAULT_AUTHENTICATION }, scoring: d.scoring ?? { ...DEFAULT_SCORING }, appearance: normalizeAppearance(d.appearance), user: effectiveUser(user, normalizedUsers, roles) };
 };

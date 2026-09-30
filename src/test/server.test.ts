@@ -199,6 +199,35 @@ describe('API', () => {
     expect(after.json.data!.tasks.find((t) => t.id === task.id)!.end).toBe(task.end);
   });
 
+  it('сохраняет оформление, отбрасывая чужие токены и недопустимые размеры', async () => {
+    const token = await login('user@example.com');
+    await call('/api/state', { token });
+    const { json } = await call('/api/action', {
+      method: 'POST',
+      token,
+      body: {
+        action: {
+          type: 'saveAppearance',
+          appearance: {
+            light: { accent: '#7A1F3D', выдумка: '#000000', paper: 'не цвет' },
+            dark: {},
+            fontBody: "url(http://example.com/font.woff2)",
+            fontMono: "Consolas, 'Courier New', monospace",
+            sizes: { base: 99, heading: 16, caps: 11, subtitle: 14 },
+          },
+        },
+      },
+    });
+    const appearance = json.data!.appearance!;
+    expect(appearance.light).toEqual({ accent: '#7a1f3d' });
+    // Шрифт не из списка не принимается: приложение ничего не загружает из интернета.
+    expect(appearance.fontBody).toBe("'Segoe UI', Arial, sans-serif");
+    expect(appearance.fontMono).toBe("Consolas, 'Courier New', monospace");
+    expect(appearance.sizes.base).toBe(20);
+    const bad = await call('/api/action', { method: 'POST', token, body: { action: { type: 'saveAppearance', appearance: 'нет' } } });
+    expect(bad.status).toBe(400);
+  });
+
   it('отклоняет неверные данные с понятной причиной', async () => {
     const token = await login('user@example.com');
     await call('/api/state', { token });

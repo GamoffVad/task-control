@@ -7,20 +7,23 @@ import { reportDocContext } from '../lib/reportExport';
 import { planDocContext, planItems } from '../lib/planExport';
 import { addDays, fmtRange, planWeekStart } from '../lib/dates';
 import { PERMISSIONS, hasPermission, permissionsFor } from '../lib/access';
+import { COLOR_GROUPS, DEFAULT_APPEARANCE, FONT_STACKS, isColor, MONO_STACKS, SIZE_TOKENS, tokenValue, type TokenDef } from '../lib/appearance';
+import { useTheme, type Theme } from '../lib/theme';
 import { DEFAULT_DICTIONARIES } from '../lib/seed';
 import { useStore } from '../lib/store';
 import type { WindowsCheck } from '../lib/api';
-import type { AuthenticationMode, DictionaryEntry, DictionaryKind, DirectoryUser, DocumentTemplate, ManagedUser, ScoringSettings, TemplateScope, Permission, PlanRow, Role, Unit, UnitKind } from '../lib/types';
+import type { AppearanceSettings, AuthenticationMode, DictionaryEntry, DictionaryKind, DirectoryUser, DocumentTemplate, ManagedUser, ScoringSettings, TemplateScope, Permission, PlanRow, Role, Unit, UnitKind } from '../lib/types';
 import { PARENT_KIND, UNIT_KINDS, unitKindLabel, unitPath, unitTree, unitWithDescendants } from '../lib/units';
 import { unitOf } from '../lib/data';
 
-type Tab = 'users' | 'units' | 'roles' | 'authentication' | 'scoring' | 'dictionaries' | 'planRows' | 'templates';
+type Tab = 'users' | 'units' | 'roles' | 'authentication' | 'scoring' | 'appearance' | 'dictionaries' | 'planRows' | 'templates';
 const ALL_TABS: { value: Tab; label: string; permission: Permission }[] = [
   { value: 'users', label: 'Пользователи', permission: 'users.manage' },
   { value: 'units', label: 'Подразделения', permission: 'users.manage' },
   { value: 'roles', label: 'Роли и разрешения', permission: 'roles.manage' },
   { value: 'authentication', label: 'Аутентификация', permission: 'authentication.manage' },
   { value: 'scoring', label: 'Оценка', permission: 'scoring.manage' },
+  { value: 'appearance', label: 'Редактирование UI', permission: 'appearance.manage' },
   { value: 'dictionaries', label: 'Словари', permission: 'dictionaries.manage' },
   { value: 'planRows', label: 'Разделы планирования', permission: 'dictionaries.manage' },
   { value: 'templates', label: 'Шаблоны документов', permission: 'dictionaries.manage' },
@@ -54,6 +57,7 @@ export const Admin = () => {
       {activeTab === 'roles' && <RolesTab state={state} dispatch={dispatch} />}
       {activeTab === 'authentication' && <AuthenticationTab />}
       {activeTab === 'scoring' && <ScoringTab state={state} dispatch={dispatch} />}
+      {activeTab === 'appearance' && <AppearanceTab state={state} dispatch={dispatch} />}
       {activeTab === 'dictionaries' && <DictionariesTab state={state} dispatch={dispatch} />}
       {activeTab === 'planRows' && <PlanRowsTab state={state} dispatch={dispatch} />}
       {activeTab === 'templates' && <TemplatesTab state={state} dispatch={dispatch} />}
@@ -418,6 +422,136 @@ const ScoringTab = ({ state, dispatch }: TabProps) => {
       Показывать разрез по направлениям в «Показателях»
     </Checkbox>
     <p className="subtitle">Направления — отделения основного отдела, те же, что в фильтре «Группа».</p>
+  </div>;
+};
+
+/** Строка цвета: образец, код и возврат к значению дизайн-системы. */
+const ColorRow = ({ token, value, isDefault, onChange, onReset }: {
+  token: TokenDef;
+  value: string;
+  isDefault: boolean;
+  onChange: (value: string) => void;
+  onReset: () => void;
+}) => {
+  // Пока код набирают, показываем набранное: промежуточный «#2F5» цветом ещё не является.
+  const [draft, setDraft] = useState<string | null>(null);
+  const [seen, setSeen] = useState(value);
+  // Возврат к значению по умолчанию меняет цвет извне — набранный текст тогда надо отпустить,
+  // иначе поле продолжит показывать прежний код, хотя цвет уже другой.
+  if (seen !== value) {
+    setSeen(value);
+    if (draft && draft.trim().toLowerCase() !== value.toLowerCase()) setDraft(null);
+  }
+  const text = draft ?? value;
+  return (
+    <div className="ui-color">
+      <span className="ui-color-swatch" style={{ background: isColor(text) ? text : value }} aria-hidden />
+      <span className="ui-color-label">{token.label}</span>
+      <TextInput
+        value={text}
+        aria-label={`Цвет: ${token.label}`}
+        invalid={!isColor(text)}
+        maxLength={7}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          if (isColor(e.target.value)) onChange(e.target.value.trim().toLowerCase());
+        }}
+        onBlur={() => setDraft(null)}
+      />
+      <button type="button" className="text-action" disabled={isDefault} onClick={() => { setDraft(null); onReset(); }}>
+        по умолчанию
+      </button>
+    </div>
+  );
+};
+
+const AppearanceTab = ({ state, dispatch }: TabProps) => {
+  const pageTheme = useTheme();
+  const [theme, setTheme] = useState<Theme>(pageTheme);
+  const appearance = state.appearance;
+  const save = (patch: Partial<AppearanceSettings>) => dispatch({ type: 'saveAppearance', appearance: { ...appearance, ...patch } });
+  const setColor = (name: string, value: string) => save({ [theme]: { ...appearance[theme], [name]: value } } as Partial<AppearanceSettings>);
+  const resetColor = (name: string) => {
+    const rest = { ...appearance[theme] };
+    delete rest[name];
+    save({ [theme]: rest } as Partial<AppearanceSettings>);
+  };
+  const changed = Object.keys(appearance.light).length + Object.keys(appearance.dark).length;
+
+  return <div className="admin-section">
+    <div className="card-head admin-content-head">
+      <div>
+        <h2>Редактирование UI</h2>
+        <p className="subtitle">Цвета, шрифты и размеры текста. Изменения видны сразу и действуют для всех пользователей. Сохраняются только отличия от оформления по умолчанию.</p>
+      </div>
+      <Button
+        onClick={() => dispatch({ type: 'saveAppearance', appearance: { ...DEFAULT_APPEARANCE, light: {}, dark: {}, sizes: { ...DEFAULT_APPEARANCE.sizes } } })}
+        disabled={changed === 0 && appearance.fontBody === DEFAULT_APPEARANCE.fontBody && appearance.fontMono === DEFAULT_APPEARANCE.fontMono && SIZE_TOKENS.every((i) => appearance.sizes[i.name] === i.base)}
+      >
+        Вернуть всё по умолчанию
+      </Button>
+    </div>
+
+    <h3 className="admin-subhead">Шрифты</h3>
+    <p className="subtitle">Только те, что есть в системе: приложение ничего не загружает из интернета.</p>
+    <div className="ui-fields">
+      <label className="field">
+        <span className="caps">Основной шрифт</span>
+        <Select value={appearance.fontBody} options={FONT_STACKS} onChange={(fontBody) => save({ fontBody })} label="Основной шрифт" />
+      </label>
+      <label className="field">
+        <span className="caps">Шрифт чисел и дат</span>
+        <Select value={appearance.fontMono} options={MONO_STACKS} onChange={(fontMono) => save({ fontMono })} label="Шрифт чисел и дат" />
+      </label>
+    </div>
+
+    <h3 className="admin-subhead">Размеры текста</h3>
+    <div className="ui-fields">
+      {SIZE_TOKENS.map((item) => (
+        <label className="field" key={item.name}>
+          <span className="caps">{item.label}</span>
+          <TextInput
+            inputMode="decimal"
+            value={String(appearance.sizes[item.name])}
+            aria-label={`${item.label}, пикселей`}
+            onChange={(e) => {
+              const value = Number(e.target.value.replace(',', '.'));
+              if (Number.isFinite(value)) save({ sizes: { ...appearance.sizes, [item.name]: value } });
+            }}
+          />
+          <span className="field-hint">{item.hint} От {item.min} до {item.max} пикселей, по умолчанию {item.base}.</span>
+        </label>
+      ))}
+    </div>
+
+    <h3 className="admin-subhead">Цвета</h3>
+    <div className="ui-theme-switch">
+      <Segmented
+        label="Тема, цвета которой правятся"
+        value={theme}
+        options={[{ value: 'light' as Theme, label: 'Светлая' }, { value: 'dark' as Theme, label: 'Тёмная' }]}
+        onChange={setTheme}
+      />
+      {theme !== pageTheme && <span className="subtitle">Сейчас включена другая тема — переключите её в шапке, чтобы увидеть правки.</span>}
+    </div>
+    {COLOR_GROUPS.map((group) => (
+      <section key={group.title} className="ui-group">
+        <h4>{group.title}</h4>
+        {group.hint && <p className="subtitle">{group.hint}</p>}
+        <div className="ui-colors">
+          {group.tokens.map((token) => (
+            <ColorRow
+              key={token.name}
+              token={token}
+              value={tokenValue(appearance, token, theme)}
+              isDefault={appearance[theme][token.name] === undefined}
+              onChange={(value) => setColor(token.name, value)}
+              onReset={() => resetColor(token.name)}
+            />
+          ))}
+        </div>
+      </section>
+    ))}
   </div>;
 };
 
