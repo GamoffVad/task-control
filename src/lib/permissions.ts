@@ -1,5 +1,5 @@
 // Права по типу учётной записи. Интерфейс их показывает, хранилище — проверяет повторно.
-import { hasPermission } from './access';
+import { ADMIN_TAB_PERMISSIONS, hasPermission } from './access';
 import type { Absence, Task, User } from './types';
 
 export const isManager = (u: User | null): boolean => hasPermission(u, 'tasks.plan');
@@ -33,9 +33,14 @@ export const taskAccess = (u: User | null, task: Task | null): TaskAccess => {
 };
 
 /** Разделы, недоступные исполнителю. */
+/**
+ * Раздел администрирования открывается, если доступна хоть одна его вкладка. По умолчанию у каждой роли
+ * есть «Редактирование UI», поэтому раздел виден всем, но администратор может это отозвать.
+ */
+export const canOpenAdmin = (u: User | null): boolean => hasPermission(u, 'admin.access') || ADMIN_TAB_PERMISSIONS.some((permission) => hasPermission(u, permission));
+
 export const canOpenPath = (u: User | null, path: string): boolean => {
-  // Раздел открыт всем: у каждого есть хотя бы вкладка «Редактирование UI» со своим оформлением.
-  if (path.startsWith('/admin')) return !!u;
+  if (path.startsWith('/admin')) return canOpenAdmin(u);
   if (path.startsWith('/reports') || path.startsWith('/kpi')) return hasPermission(u, 'reports.view');
   return !!u;
 };

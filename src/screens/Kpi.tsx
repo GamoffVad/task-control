@@ -101,10 +101,10 @@ export const Kpi = () => {
               <thead>
                 <tr>
                   <th>Направление</th>
-                  <th style={{ width: '14%' }}>Общий балл</th>
-                  <th style={{ width: '14%' }}>Средний балл</th>
-                  <th style={{ width: '14%' }}>В расчёте</th>
-                  <th style={{ width: '14%' }}>Задач</th>
+                  <th className="col-num" style={{ width: '14%' }}>Общий балл</th>
+                  <th className="col-num" style={{ width: '14%' }}>Средний балл</th>
+                  <th className="col-num" style={{ width: '14%' }}>В расчёте</th>
+                  <th className="col-num" style={{ width: '14%' }}>Задач</th>
                 </tr>
               </thead>
               <tbody>

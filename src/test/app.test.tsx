@@ -444,11 +444,45 @@ describe('календарь: поиск и категории', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
+  it('вошедший сотрудник получает свою тему и своё оформление', async () => {
+    localStorage.clear();
+    // У руководителя (1) светлая тема и красный акцент, у исполнителя (3) — тёмная без правок.
+    localStorage.setItem('task-control:theme:1', 'light');
+    localStorage.setItem('task-control:theme:3', 'dark');
+    localStorage.setItem('task-control:appearance:1', JSON.stringify({ light: { accent: '#a32d22' } }));
+    const css = () => [...document.querySelectorAll('style')].map((st) => st.textContent).join(' ');
+
+    const first = renderAt('/calendar', loggedIn());
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(css()).toContain('--accent: #a32d22;');
+    first.unmount();
+
+    renderAt('/calendar', executorIn());
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    // Оформление первого сотрудника у второго не появляется.
+    expect(css()).not.toContain('--accent: #a32d22;');
+    localStorage.clear();
+  });
+
+  it('переключение темы запоминается за сотрудником', async () => {
+    localStorage.clear();
+    const user = userEvent.setup();
+    renderAt('/calendar', executorIn());
+    const before = document.documentElement.dataset.theme;
+    await user.click(screen.getByRole('button', { name: /Включить .* тему/ }));
+    const after = document.documentElement.dataset.theme;
+    expect(after).not.toBe(before);
+    expect(localStorage.getItem('task-control:theme:3')).toBe(after);
+    // Чужой личный ключ не тронут.
+    expect(localStorage.getItem('task-control:theme:1')).toBeNull();
+    localStorage.clear();
+  });
+
   it('у каждой вкладки администрирования своё разрешение', async () => {
     const user = userEvent.setup();
     renderAt('/admin');
     await user.click(screen.getByRole('button', { name: 'Роли и разрешения' }));
-    // Список разрешений покрывает все вкладки, кроме личного оформления.
+    // Список разрешений покрывает все девять вкладок, включая «Редактирование UI».
     for (const label of [
       'Открывать администрирование',
       'Пользователи: вести и назначать роли',
@@ -459,6 +493,7 @@ describe('календарь: поиск и категории', () => {
       'Словари: редактировать значения',
       'Разделы планирования: вести план',
       'Шаблоны документов: редактировать',
+      'Редактирование UI: настраивать своё оформление',
     ]) {
       expect(screen.getByText(label), label).toBeInTheDocument();
     }

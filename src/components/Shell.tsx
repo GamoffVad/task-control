@@ -4,7 +4,7 @@ import { initials, shortName } from '../lib/data';
 import { hasPermission, roleLabel } from '../lib/access';
 import { overdueTasks } from '../lib/logic';
 import { countLabel, unreadMessages } from '../lib/chat';
-import { isManager } from '../lib/permissions';
+import { canOpenAdmin, isManager } from '../lib/permissions';
 import { useStore } from '../lib/store';
 import { Icon } from './Icons';
 import { LogoMark } from './LogoMark';
@@ -36,8 +36,8 @@ export const Shell = () => {
   const [confirmReset, setConfirmReset] = useState(false);
   const user = state.user!;
   const manager = isManager(user);
-  // Раздел администрирования открыт всем: без прав в нём одна вкладка — своё оформление.
-  const canAdmin = !!user;
+  // Раздел администрирования виден, если доступна хоть одна его вкладка (по умолчанию — «Редактирование UI»).
+  const canAdmin = canOpenAdmin(user);
   const managedAccount = state.users.find((account) => account.employeeId === user.employeeId);
   const managedParts = managedAccount?.fullName.trim().split(/\s+/) ?? [];
   const managedShortName = managedAccount && managedParts.length > 1 ? `${managedParts[0]} ${managedParts.slice(1, 3).map((part) => `${part[0]}.`).join('')}` : shortName(user.employeeId);

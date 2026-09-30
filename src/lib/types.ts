@@ -13,6 +13,7 @@ export type Permission =
   | 'dictionaries.manage'
   | 'planRows.manage'
   | 'templates.manage'
+  | 'appearance.manage'
   | 'reports.view'
   | 'tasks.plan'
   | 'tasks.execute'

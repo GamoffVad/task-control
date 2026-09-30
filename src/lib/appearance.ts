@@ -291,16 +291,23 @@ export const normalizeAppearance = (raw: Partial<AppearanceSettings> | undefined
   };
 };
 
+/** Прозрачность «тёмных» кубиков, когда знак строится от одного акцента. */
+export const LOGO_DARK_ALPHA = 0.55;
+
 /**
  * Логотип и значок вкладки идут за акцентом: сменили акцент — сменился и знак.
+ * Цвет один, а «тёмные» кубики берут его же с прозрачностью, чтобы знак не сливался в один тон.
  * Явно заданный цвет логотипа всегда главнее.
  */
 const withLogo = (overrides: Record<string, string>): Record<string, string> => {
   const out = { ...overrides };
-  if (overrides.accent && !overrides['logo-1']) out['logo-1'] = overrides.accent;
-  if (overrides['accent-2'] && !overrides['logo-dark']) out['logo-dark'] = overrides['accent-2'];
-  // Акцент задан, а дополнительного нет — тёмные кубики берут его же, иначе знак развалится по цвету.
-  if (overrides.accent && !overrides['accent-2'] && !overrides['logo-dark']) out['logo-dark'] = overrides.accent;
+  const base = overrides['logo-1'] ?? overrides.accent;
+  if (!base) return out;
+  out['logo-1'] = base;
+  if (!overrides['logo-dark']) {
+    out['logo-dark'] = base;
+    out['logo-dark-alpha'] = String(LOGO_DARK_ALPHA);
+  }
   return out;
 };
 
@@ -342,12 +349,14 @@ export const isPresetActive = (settings: AppearanceSettings, preset: AppearanceP
 
 // ——— Хранение у сотрудника ———
 
-/** Оформление — личное: у каждого своё и живёт в его браузере, а не в общей базе. */
-const STORAGE_KEY = 'task-control:appearance';
+/** Прежний общий ключ: из него оформление один раз переезжает к сотруднику. */
+const LEGACY_KEY = 'task-control:appearance';
+const appearanceKey = (employeeId: number) => `${LEGACY_KEY}:${employeeId}`;
 
-export const loadAppearance = (): AppearanceSettings => {
+/** Оформление личное: у каждого сотрудника свой ключ, и на общем компьютере они не пересекаются. */
+export const loadAppearance = (employeeId?: number | null): AppearanceSettings => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = (employeeId != null ? localStorage.getItem(appearanceKey(employeeId)) : null) ?? localStorage.getItem(LEGACY_KEY);
     return normalizeAppearance(raw ? (JSON.parse(raw) as Partial<AppearanceSettings>) : undefined);
   } catch {
     // Приватное окно или запрет на хранение: работаем с оформлением по умолчанию.
@@ -355,9 +364,11 @@ export const loadAppearance = (): AppearanceSettings => {
   }
 };
 
-export const storeAppearance = (settings: AppearanceSettings): void => {
+/** Без сотрудника (экран входа) ничего не пишется: сохранять оформление не за кого. */
+export const storeAppearance = (settings: AppearanceSettings, employeeId?: number | null): void => {
+  if (employeeId == null) return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    localStorage.setItem(appearanceKey(employeeId), JSON.stringify(settings));
   } catch {
     // Не сохранилось — оформление действует до конца сеанса.
   }

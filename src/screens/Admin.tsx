@@ -17,14 +17,13 @@ import { PARENT_KIND, UNIT_KINDS, unitKindLabel, unitPath, unitTree, unitWithDes
 import { unitOf } from '../lib/data';
 
 type Tab = 'users' | 'units' | 'roles' | 'authentication' | 'scoring' | 'appearance' | 'dictionaries' | 'planRows' | 'templates';
-// permission не задан — вкладка доступна каждому.
-const ALL_TABS: { value: Tab; label: string; permission?: Permission }[] = [
+const ALL_TABS: { value: Tab; label: string; permission: Permission }[] = [
   { value: 'users', label: 'Пользователи', permission: 'users.manage' },
   { value: 'units', label: 'Подразделения', permission: 'units.manage' },
   { value: 'roles', label: 'Роли и разрешения', permission: 'roles.manage' },
   { value: 'authentication', label: 'Аутентификация', permission: 'authentication.manage' },
   { value: 'scoring', label: 'Оценка', permission: 'scoring.manage' },
-  { value: 'appearance', label: 'Редактирование UI' },
+  { value: 'appearance', label: 'Редактирование UI', permission: 'appearance.manage' },
   { value: 'dictionaries', label: 'Словари', permission: 'dictionaries.manage' },
   { value: 'planRows', label: 'Разделы планирования', permission: 'planRows.manage' },
   { value: 'templates', label: 'Шаблоны документов', permission: 'templates.manage' },
@@ -46,7 +45,7 @@ type TabProps = { state: ReturnType<typeof useStore>['state']; dispatch: ReturnT
 
 export const Admin = () => {
   const { state, dispatch } = useStore();
-  const tabs = ALL_TABS.filter((item) => !item.permission || hasPermission(state.user, item.permission));
+  const tabs = ALL_TABS.filter((item) => hasPermission(state.user, item.permission));
   const [tab, setTab] = useState<Tab>(() => tabs[0]?.value ?? 'users');
   const activeTab = tabs.some((item) => item.value === tab) ? tab : tabs[0]?.value;
   return (

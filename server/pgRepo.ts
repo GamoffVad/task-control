@@ -2,7 +2,7 @@
 // под общей блокировкой, поэтому одновременные правки разных пользователей не теряются.
 import pg from 'pg';
 import { DEFAULT_DICTIONARIES } from '../src/lib/seed';
-import { ACCESS_VERSION, DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS, withAddedAdminPermissions } from '../src/lib/access';
+import { ACCESS_VERSION, DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS, withAddedPermissions } from '../src/lib/access';
 import { planRows as DEFAULT_PLAN_ROWS, sortedPlanRows } from '../src/lib/data';
 import type { Absence, ChatRead, Data, Notice, DictionaryEntry, DocumentTemplate, Entitlement, ManagedUser, Message, PlanRow, Report, RoleDefinition, Task, Unit } from '../src/lib/types';
 import { DEFAULT_UNITS } from '../src/lib/units';
@@ -103,7 +103,7 @@ const readAll = async (q: Q): Promise<Data | null> => {
   const users = await q.query('select * from tc_users order by employee_id');
   const roles = await q.query('select * from tc_roles order by role');
   const storedRoles: RoleDefinition[] = accessReady.rowCount ? roles.rows.map((r): RoleDefinition => ({ role: r.role, name: r.name, permissions: r.permissions })) : DEFAULT_ROLES;
-  const migratedRoles = accessVersion.rows[0]?.value === ACCESS_VERSION ? storedRoles : withAddedAdminPermissions(storedRoles);
+  const migratedRoles = accessVersion.rows[0]?.value === ACCESS_VERSION ? storedRoles : withAddedPermissions(storedRoles);
   return {
     tasks: tasks.rows.map(
       (r): Task => ({

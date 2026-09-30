@@ -1,7 +1,7 @@
 // Изменение данных приложения. Чистые функции без React: тот же код работает в браузере и на сервере,
 // поэтому права проверяются одинаково в обоих местах.
 import { employeeById, planRows, sortedPlanRows } from './data';
-import { ACCESS_VERSION, DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS, effectiveUser, hasPermission, permissionsFor, withAddedAdminPermissions } from './access';
+import { ACCESS_VERSION, DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS, effectiveUser, hasPermission, PERMISSIONS, permissionsFor, withAddedPermissions } from './access';
 import { createSeed, DEFAULT_DICTIONARIES } from './seed';
 import { normalizeAppearance } from './appearance';
 import { buildReportEntries, clampScore, upsertReport, type TaskDraft } from './logic';
@@ -357,10 +357,9 @@ export const reducer = (state: AppState, action: Action): AppState => {
     }
     case 'saveRolePermissions': {
       if (!hasPermission(state.user, 'roles.manage')) return state;
-      const allowed = new Set<Permission>([
-        'admin.access', 'users.manage', 'roles.manage', 'dictionaries.manage', 'reports.view', 'tasks.plan', 'tasks.execute',
-        'tasks.score', 'tasks.delete', 'absences.manage', 'absences.request', 'entitlements.manage', 'data.reset', 'authentication.manage',
-      ]);
+      // Допустимое — всё из общего справочника. Ручной список отставал и молча отбрасывал новые права:
+      // достаточно было один раз поставить флажок, и роль теряла вкладки, которых в нём не было.
+      const allowed = new Set<Permission>(PERMISSIONS.map((item) => item.key));
       const permissions = [...new Set(action.permissions.filter((permission) => allowed.has(permission)))];
       const roles = state.roles.map((item) => item.role === action.role ? { ...item, permissions } : item);
       const hasAdmin = state.users.some((item) => item.active && ['admin.access', 'users.manage', 'roles.manage'].every((permission) => permissionsFor(item.role, roles).includes(permission as Permission)));
@@ -482,7 +481,7 @@ export const fromData = (d: Data, user: User | null): AppState => {
   const users = d.users ?? DEFAULT_USERS;
   // Отметка версии прав: если она отстала, администратору дописываются права, добавленные позже.
   // В PostgreSQL и SQL Server ту же роль играет access-version в tc_meta.
-  const roles = d.accessVersion === ACCESS_VERSION ? (d.roles ?? DEFAULT_ROLES) : withAddedAdminPermissions(d.roles ?? DEFAULT_ROLES);
+  const roles = d.accessVersion === ACCESS_VERSION ? (d.roles ?? DEFAULT_ROLES) : withAddedPermissions(d.roles ?? DEFAULT_ROLES);
   const normalizedUsers = users.map((account) => {
     const employee = employeeById.get(account.employeeId);
     return { ...account, windowsLogin: account.windowsLogin || account.email.split('@')[0], fullName: account.fullName || (employee ? `${employee.lastname} ${employee.name} ${employee.patronymic}` : account.windowsLogin), position: account.position || employee?.position || '', unitId: account.unitId ?? DEFAULT_UNIT_OF[account.employeeId] };

@@ -25,6 +25,8 @@
   --accent-bg: #DCE4EF;
   --logo-dark: #1F2B3A;
   --logo-1: #1F3A5F;
+  /* Прозрачность «тёмных» кубиков: 1 — сплошной цвет; при смене акцента они становятся полупрозрачными. */
+  --logo-dark-alpha: 1;
 
   /* Шрифты и размеры текста: правятся в «Администрировании» → «Редактирование UI». */
   --font-body: 'Segoe UI', Arial, sans-serif;
@@ -117,6 +119,7 @@
   --accent-bg: #2A4566;
   --logo-dark: #6094D3;
   --logo-1: #93B9F0;
+  --logo-dark-alpha: 1;
   --backdrop: rgba(0, 0, 0, 0.6);
   --today-bg: rgba(142, 178, 222, 0.06);
   --cal-surface: #121C2B;
@@ -798,7 +801,9 @@ td.name { color: var(--ink); font-weight: 600; }
 /* Показатели: исключённые из оценки видны, но приглушены. */
 .hbar-row--muted .label, .hbar-row--muted .val { opacity: 0.55; }
 .hbar-row--muted .bar-fill { opacity: 0.4; }
+/* Числа прижаты вправо, поэтому и подписи столбцов — по тому же краю: иначе они не над своими значениями. */
 .admin-table.directions td.num { text-align: right; font-family: var(--font-mono); }
+.admin-table.directions th.col-num { text-align: right; }
 .admin-table tr.muted td { opacity: 0.6; }
 
 /* Поиск и категории в календаре */

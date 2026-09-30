@@ -7,6 +7,7 @@ import {
   storeAppearance,
   BUILTIN_PRESETS,
   isPresetActive,
+  LOGO_DARK_ALPHA,
   MAX_PRESETS,
   presetsFor,
   COLOR_TOKENS,
@@ -127,16 +128,27 @@ describe('оформление интерфейса', () => {
     expect(isPresetActive(normalizeAppearance(undefined), BUILTIN_PRESETS[0])).toBe(true);
   });
 
-  it('логотип и значок идут за акцентом, явный цвет логотипа главнее', () => {
-    const byAccent = appearanceCss(normalizeAppearance({ light: { accent: '#7a1f3d', 'accent-2': '#a33f5e' } }));
-    expect(byAccent).toContain('--logo-1: #7a1f3d;');
-    expect(byAccent).toContain('--logo-dark: #a33f5e;');
-    // Без дополнительного акцента тёмные кубики берут основной, чтобы знак не распался по цвету.
-    expect(appearanceCss(normalizeAppearance({ light: { accent: '#7a1f3d' } }))).toContain('--logo-dark: #7a1f3d;');
-    // Заданный вручную цвет логотипа не перебивается.
-    const explicit = appearanceCss(normalizeAppearance({ light: { accent: '#7a1f3d', 'logo-1': '#123456' } }));
-    expect(explicit).toContain('--logo-1: #123456;');
-    expect(explicit).not.toContain('--logo-1: #7a1f3d;');
+  it('логотип строится от одного акцента: тёмные кубики — тот же цвет, но прозрачнее', () => {
+    const css = appearanceCss(normalizeAppearance({ light: { accent: '#7a1f3d', 'accent-2': '#a33f5e' } }));
+    expect(css).toContain('--logo-1: #7a1f3d;');
+    // Оба тона — один цвет, а различает их прозрачность; дополнительный акцент знак не красит.
+    expect(css).toContain('--logo-dark: #7a1f3d;');
+    expect(css).toContain(`--logo-dark-alpha: ${LOGO_DARK_ALPHA};`);
+    expect(css).not.toContain('--logo-dark: #a33f5e;');
+    expect(LOGO_DARK_ALPHA).toBeGreaterThan(0);
+    expect(LOGO_DARK_ALPHA).toBeLessThan(1);
+  });
+
+  it('явно заданный цвет логотипа главнее акцента', () => {
+    const own = appearanceCss(normalizeAppearance({ light: { accent: '#7a1f3d', 'logo-1': '#123456' } }));
+    expect(own).toContain('--logo-1: #123456;');
+    expect(own).toContain('--logo-dark: #123456;');
+    // Свой цвет «тёмных» кубиков сплошной: прозрачность не навязывается.
+    const both = appearanceCss(normalizeAppearance({ light: { accent: '#7a1f3d', 'logo-dark': '#0a0a0a' } }));
+    expect(both).toContain('--logo-dark: #0a0a0a;');
+    expect(both).not.toContain('--logo-dark-alpha');
+    // Без акцента знак остаётся как в дизайн-системе.
+    expect(appearanceCss(normalizeAppearance({ light: { paper: '#eeeeee' } }))).not.toContain('--logo');
   });
 
   it('значок вкладки строится из той же геометрии и данных URI', () => {
@@ -146,19 +158,39 @@ describe('оформление интерфейса', () => {
     expect(svg.match(/<rect /g)!.length).toBe(10);
     expect(svg).toContain('fill="#7a1f3d"');
     expect(svg).toContain('fill="#1f2b3a"');
+    // Полная непрозрачность — без лишнего атрибута; прозрачные кубики получают его только у «тёмных».
+    expect(svg).not.toContain('fill-opacity');
+    const soft = faviconSvg({ dark: '#7a1f3d', accent: '#7a1f3d', paper: '#f1ede6', darkAlpha: 0.55 });
+    expect(soft.match(/fill-opacity="0.55"/g)!.length).toBe(4);
     expect(faviconHref({ dark: '#000000', accent: '#ffffff', paper: '#f1ede6' }).startsWith('data:image/svg+xml,')).toBe(true);
   });
 
-  it('оформление хранится у сотрудника в браузере', () => {
-    storeAppearance(normalizeAppearance({ light: { accent: '#7a1f3d' }, sizes: { base: 16, heading: 16, caps: 11, subtitle: 14 } }));
-    const back = loadAppearance();
-    expect(back.light).toEqual({ accent: '#7a1f3d' });
-    expect(back.sizes.base).toBe(16);
-    // Испорченное содержимое не роняет приложение: берём оформление по умолчанию.
-    localStorage.setItem('task-control:appearance', 'не json');
-    expect(loadAppearance()).toEqual(DEFAULT_APPEARANCE);
+  it('оформление хранится в браузере отдельно для каждого сотрудника', () => {
     localStorage.clear();
-    expect(loadAppearance()).toEqual(DEFAULT_APPEARANCE);
+    storeAppearance(normalizeAppearance({ light: { accent: '#7a1f3d' }, sizes: { base: 16, heading: 16, caps: 11, subtitle: 14 } }), 1);
+    storeAppearance(normalizeAppearance({ light: { accent: '#1e7268' } }), 2);
+    // На одном компьютере двое не перебивают друг другу настройки.
+    expect(loadAppearance(1).light).toEqual({ accent: '#7a1f3d' });
+    expect(loadAppearance(1).sizes.base).toBe(16);
+    expect(loadAppearance(2).light).toEqual({ accent: '#1e7268' });
+    // У сотрудника без настроек — оформление по умолчанию.
+    expect(loadAppearance(3)).toEqual(DEFAULT_APPEARANCE);
+    // Без сотрудника (экран входа) ничего не пишется.
+    storeAppearance(normalizeAppearance({ light: { accent: '#000000' } }), null);
+    expect(loadAppearance(3)).toEqual(DEFAULT_APPEARANCE);
+    localStorage.clear();
+  });
+
+  it('настройки из прежнего общего ключа переезжают к сотруднику, испорченное содержимое не роняет', () => {
+    localStorage.clear();
+    localStorage.setItem('task-control:appearance', JSON.stringify({ light: { accent: '#7a1f3d' } }));
+    expect(loadAppearance(5).light).toEqual({ accent: '#7a1f3d' });
+    // Личные настройки главнее прежних.
+    storeAppearance(normalizeAppearance({ light: { accent: '#1e7268' } }), 5);
+    expect(loadAppearance(5).light).toEqual({ accent: '#1e7268' });
+    localStorage.setItem('task-control:appearance:6', 'не json');
+    expect(loadAppearance(6)).toEqual(DEFAULT_APPEARANCE);
+    localStorage.clear();
   });
 
   it('все токены со спутником «-rgb» есть в списке цветов', () => {

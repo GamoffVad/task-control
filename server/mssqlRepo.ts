@@ -3,7 +3,7 @@
 // Изменения пишутся в транзакции под общей блокировкой sp_getapplock — как в PostgreSQL-хранилище.
 import sql from 'mssql';
 import { DEFAULT_DICTIONARIES } from '../src/lib/seed';
-import { ACCESS_VERSION, DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS, withAddedAdminPermissions } from '../src/lib/access';
+import { ACCESS_VERSION, DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS, withAddedPermissions } from '../src/lib/access';
 import { planRows as DEFAULT_PLAN_ROWS, sortedPlanRows } from '../src/lib/data';
 import type { Absence, ChatRead, Data, Notice, DictionaryEntry, DocumentTemplate, Entitlement, ManagedUser, Message, Permission, PlanRow, Report, RoleDefinition, Task, Unit } from '../src/lib/types';
 import { DEFAULT_UNITS } from '../src/lib/units';
@@ -164,7 +164,7 @@ const readAll = async (q: Q): Promise<Data | null> => {
       })
     : DEFAULT_ROLES;
   // Права, добавленные позже, дописываются администратору при чтении старой базы.
-  const migratedRoles = accessVersion === ACCESS_VERSION ? storedRoles : withAddedAdminPermissions(storedRoles);
+  const migratedRoles = accessVersion === ACCESS_VERSION ? storedRoles : withAddedPermissions(storedRoles);
 
   return {
     tasks: tasks.map((x) => {

@@ -6,15 +6,15 @@ import { CELLS, SIZE, STEP, VIEW_BOX } from './logoSteps';
 const PAD = 4.77;
 const RADIUS = 10.7;
 
-export type FaviconColors = { dark: string; accent: string; paper: string };
+export type FaviconColors = { dark: string; accent: string; paper: string; /** Прозрачность «тёмных» кубиков, 0–1. */ darkAlpha?: number };
 
-export const faviconSvg = ({ dark, accent, paper }: FaviconColors): string => {
+export const faviconSvg = ({ dark, accent, paper, darkAlpha = 1 }: FaviconColors): string => {
   const x = VIEW_BOX.x - PAD;
   const y = VIEW_BOX.y - PAD;
   const side = VIEW_BOX.side + PAD * 2;
   const cubes = CELLS.map(
     ([cx, cy, tone]) =>
-      `<rect x="${(cx * STEP).toFixed(1)}" y="${(cy * STEP).toFixed(1)}" width="${SIZE}" height="${SIZE}" rx="0.6" fill="${tone ? accent : dark}"/>`,
+      `<rect x="${(cx * STEP).toFixed(1)}" y="${(cy * STEP).toFixed(1)}" width="${SIZE}" height="${SIZE}" rx="0.6" fill="${tone ? accent : dark}"${tone || darkAlpha >= 1 ? '' : ` fill-opacity="${darkAlpha}"`}/>`,
   ).join('');
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x.toFixed(2)} ${y.toFixed(2)} ${side.toFixed(2)} ${side.toFixed(2)}">` +

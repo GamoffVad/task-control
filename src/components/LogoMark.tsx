@@ -13,7 +13,17 @@ export const LogoMark = ({ size = 40, className, svgRef, onPointerEnter }: { siz
       return (
         <g key={`${x}-${y}`} transform={`translate(${cx} ${cy})`}>
           <g data-cube={`${x}-${y}`} className="logo-cube">
-            <rect x={-SIZE / 2} y={-SIZE / 2} width={SIZE} height={SIZE} rx={0.6} fill={FILL[tone]} transform="rotate(45)" />
+            <rect
+              x={-SIZE / 2}
+              y={-SIZE / 2}
+              width={SIZE}
+              height={SIZE}
+              rx={0.6}
+              fill={FILL[tone]}
+              // Тон 0 — «тёмные» кубики: при смене акцента они остаются тем же цветом, но проступают слабее.
+              style={tone === 0 ? { fillOpacity: 'var(--logo-dark-alpha)' } : undefined}
+              transform="rotate(45)"
+            />
           </g>
         </g>
       );

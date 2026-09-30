@@ -17,7 +17,7 @@ type Mode = 'local' | 'remote';
 /** Режим по умолчанию: в тестах и при VITE_BACKEND=local — данные в браузере, иначе — база на сервере. */
 const defaultMode = (): Mode => (import.meta.env.MODE === 'test' || import.meta.env.VITE_BACKEND === 'local' ? 'local' : 'remote');
 
-const emptyState = (user: User | null): AppState => ({ version: 5, tasks: [], reports: [], messages: [], chatReads: [], absences: [], entitlements: [], planRows: planRows.map((row) => ({ ...row })), dictionaries: DEFAULT_DICTIONARIES, users: DEFAULT_USERS, roles: DEFAULT_ROLES, units: DEFAULT_UNITS.map((u) => ({ ...u })), templates: DEFAULT_TEMPLATES.map((t) => ({ ...t })), authentication: { ...DEFAULT_AUTHENTICATION }, scoring: { ...DEFAULT_SCORING }, appearance: loadAppearance(), user });
+const emptyState = (user: User | null): AppState => ({ version: 5, tasks: [], reports: [], messages: [], chatReads: [], absences: [], entitlements: [], planRows: planRows.map((row) => ({ ...row })), dictionaries: DEFAULT_DICTIONARIES, users: DEFAULT_USERS, roles: DEFAULT_ROLES, units: DEFAULT_UNITS.map((u) => ({ ...u })), templates: DEFAULT_TEMPLATES.map((t) => ({ ...t })), authentication: { ...DEFAULT_AUTHENTICATION }, scoring: { ...DEFAULT_SCORING }, appearance: loadAppearance(user?.employeeId), user });
 
 const BAD_LOGIN = 'Неверный логин или пароль. Проверьте данные и повторите вход.';
 const REFRESH_MS = 60_000;
@@ -27,7 +27,11 @@ export const StoreProvider = ({ children, initial, mode = defaultMode() }: { chi
 
 /** Данные в localStorage браузера: тесты и работа без сервера. */
 const LocalStore = ({ children, initial }: { children: ReactNode; initial?: AppState }) => {
-  const [state, dispatch] = useReducer(reducer, initial, (init) => init ?? loadState());
+  // Личное оформление читается при старте у сотрудника, чьё состояние открыто: как и в режиме с сервером.
+  const [state, dispatch] = useReducer(reducer, initial, (init) => {
+    const start = init ?? loadState();
+    return { ...start, appearance: loadAppearance(start.user?.employeeId) };
+  });
   useEffect(() => saveState(state), [state]);
   const signIn = useCallback(async (email: string, password: string) => {
     const a = authenticate(email, password, state.users, state.roles);
@@ -110,8 +114,8 @@ const RemoteStore = ({ children }: { children: ReactNode }) => {
 
   // Оформление хранится у сотрудника в браузере и не уходит на сервер.
   useEffect(() => {
-    storeAppearance(state.appearance);
-  }, [state.appearance]);
+    storeAppearance(state.appearance, state.user?.employeeId);
+  }, [state.appearance, state.user?.employeeId]);
 
   const dispatch = useCallback(
     (action: Action) => {
@@ -161,7 +165,8 @@ const RemoteStore = ({ children }: { children: ReactNode }) => {
       const s = await api.windowsLogin();
       session.current = s;
       writeSession(s);
-      setState((current) => ({ ...emptyState(s.user), authentication: current.authentication, scoring: current.scoring, appearance: current.appearance }));
+      // Оформление берётся у вошедшего сотрудника (emptyState читает его личный ключ), а не остаётся от прежнего.
+      setState((current) => ({ ...emptyState(s.user), authentication: current.authentication, scoring: current.scoring }));
       setSync((current) => ({ ...current, loading: true, error: null }));
       await load();
       return null;

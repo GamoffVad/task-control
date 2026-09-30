@@ -12,6 +12,7 @@ export const PERMISSIONS: { key: Permission; label: string; group: string }[] = 
   { key: 'dictionaries.manage', label: 'Словари: редактировать значения', group: 'Администрирование' },
   { key: 'planRows.manage', label: 'Разделы планирования: вести план', group: 'Администрирование' },
   { key: 'templates.manage', label: 'Шаблоны документов: редактировать', group: 'Администрирование' },
+  { key: 'appearance.manage', label: 'Редактирование UI: настраивать своё оформление', group: 'Администрирование' },
   { key: 'reports.view', label: 'Просматривать отчётность и показатели', group: 'Работа отдела' },
   { key: 'tasks.plan', label: 'Планировать задачи для сотрудников', group: 'Задачи' },
   { key: 'tasks.execute', label: 'Вести исполнение назначенных задач', group: 'Задачи' },
@@ -30,9 +31,9 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
   {
     role: 'manager',
     name: 'Руководитель',
-    permissions: ['reports.view', 'tasks.plan', 'tasks.execute', 'tasks.score', 'tasks.delete', 'absences.manage', 'absences.request', 'entitlements.manage'],
+    permissions: ['reports.view', 'tasks.plan', 'tasks.execute', 'tasks.score', 'tasks.delete', 'absences.manage', 'absences.request', 'entitlements.manage', 'appearance.manage'],
   },
-  { role: 'executor', name: 'Исполнитель', permissions: ['tasks.execute', 'absences.request'] },
+  { role: 'executor', name: 'Исполнитель', permissions: ['tasks.execute', 'absences.request', 'appearance.manage'] },
 ];
 
 export const DEFAULT_USERS: ManagedUser[] = [
@@ -49,18 +50,34 @@ export const DEFAULT_USERS: ManagedUser[] = [
 export const DEFAULT_AUTHENTICATION = { mode: 'form', allowEmergencyForm: true } as const;
 
 /**
- * Версия набора прав. Права, добавленные после выпуска базы, дописываются администратору
- * один раз при обновлении: иначе новый раздел администрирования остался бы недоступен.
+ * Версия набора прав. Права, добавленные после выпуска базы, дописываются один раз при обновлении:
+ * иначе новый раздел администрирования остался бы недоступен.
  */
-export const ACCESS_VERSION = '5';
+export const ACCESS_VERSION = '6';
+/** Дописываются администратору: доступ к этим вкладкам выдаётся осознанно. */
 const ADDED_ADMIN_PERMISSIONS: Permission[] = ['authentication.manage', 'scoring.manage', 'units.manage', 'planRows.manage', 'templates.manage'];
+/** Дописываются всем ролям: оформление личное и по умолчанию доступно каждому. */
+const ADDED_FOR_ALL_PERMISSIONS: Permission[] = ['appearance.manage'];
 
-export const withAddedAdminPermissions = (roles: RoleDefinition[]): RoleDefinition[] =>
+export const withAddedPermissions = (roles: RoleDefinition[]): RoleDefinition[] =>
   roles.map((role) => {
-    if (role.role !== 'administrator') return role;
-    const missing = ADDED_ADMIN_PERMISSIONS.filter((permission) => !role.permissions.includes(permission));
+    const wanted = [...(role.role === 'administrator' ? ADDED_ADMIN_PERMISSIONS : []), ...ADDED_FOR_ALL_PERMISSIONS];
+    const missing = wanted.filter((permission) => !role.permissions.includes(permission));
     return missing.length ? { ...role, permissions: [...role.permissions, ...missing] } : role;
   });
+
+/** Вкладки администрирования: доступ к каждой открывается своим разрешением. */
+export const ADMIN_TAB_PERMISSIONS: Permission[] = [
+  'users.manage',
+  'units.manage',
+  'roles.manage',
+  'authentication.manage',
+  'scoring.manage',
+  'appearance.manage',
+  'dictionaries.manage',
+  'planRows.manage',
+  'templates.manage',
+];
 
 /** По умолчанию считаются все: правила меняет администратор. */
 export const DEFAULT_SCORING: ScoringSettings = { excludedUnitIds: [], excludedEmployeeIds: [], averageBase: 'staff', byDirection: true };
