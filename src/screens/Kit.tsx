@@ -3,6 +3,8 @@ import { Icon } from '../components/Icons';
 import {
   Button,
   Checkbox,
+  ColorPicker,
+  Slider,
   DateField,
   DateTimeField,
   Dialog,
@@ -25,6 +27,8 @@ const TOKENS = ['--paper', '--sheet', '--ink', '--ink-3', '--accent', '--accent-
 
 /** Витрина библиотеки компонентов: все элементы интерфейса в текущей теме. */
 export const Kit = () => {
+  const [color, setColor] = useState('#2F5480');
+  const [size, setSize] = useState(14);
   const [date, setDate] = useState('2026-09-17');
   const [dateTime, setDateTime] = useState('2026-09-17T10:00');
   const [query, setQuery] = useState('отчёт');
@@ -99,6 +103,41 @@ export const Kit = () => {
             <TextInput readOnly defaultValue="Назначено руководителем" />
           </Field>
         </div>
+      </section>
+
+      <section>
+        <h2>Ползунок</h2>
+        <p className="kit-desc">
+          Slider вместо системного <code>&lt;input type="range"&gt;</code>: перетаскивается указателем, двигается стрелками,
+          PageUp/PageDown — крупный шаг, Home и End — края.
+        </p>
+        <FieldRow>
+          <Field label="Размер текста">
+            <Slider value={size} min={12} max={20} step={0.5} onChange={setSize} label="Размер текста" format={(v) => `${String(v).replace('.', ',')} px`} />
+          </Field>
+          <Field label="Недоступно">
+            <Slider value={16} min={12} max={20} onChange={() => {}} label="Недоступно" disabled />
+          </Field>
+        </FieldRow>
+      </section>
+
+      <section>
+        <h2>Выбор цвета</h2>
+        <p className="kit-desc">
+          ColorPicker вместо системного <code>&lt;input type="color"&gt;</code>: поле насыщенности и яркости, полоса тона, палитра приложения и код #RRGGBB.
+          Оба ползунка управляются стрелками (с Shift — крупный шаг), Escape закрывает панель.
+        </p>
+        <FieldRow>
+          <Field label="Цвет категории">
+            <ColorPicker value={color} onChange={setColor} label="Цвет категории" />
+          </Field>
+          <Field label="Только образец">
+            <ColorPicker value={color} onChange={setColor} label="Цвет" compact />
+          </Field>
+          <Field label="Недоступно">
+            <ColorPicker value="#8C816C" onChange={() => {}} disabled />
+          </Field>
+        </FieldRow>
       </section>
 
       <section>

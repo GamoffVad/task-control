@@ -1,13 +1,13 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Icon } from '../components/Icons';
 import { DirectoryUserAutocomplete } from '../components/DirectoryUserAutocomplete';
-import { Button, Checkbox, ColorField, Dialog, PageHeader, Segmented, Select, TextArea, TextInput } from '../kit';
+import { Button, Checkbox, ColorPicker, Dialog, PageHeader, Segmented, Select, Slider, TextArea, TextInput } from '../kit';
 import { DEFAULT_TEMPLATES, TEMPLATE_SCOPES, placeholdersFor, renderTemplate } from '../lib/templates';
 import { reportDocContext } from '../lib/reportExport';
 import { planDocContext, planItems } from '../lib/planExport';
 import { addDays, fmtRange, planWeekStart } from '../lib/dates';
 import { PERMISSIONS, hasPermission, permissionsFor } from '../lib/access';
-import { COLOR_GROUPS, DEFAULT_APPEARANCE, FONT_STACKS, isColor, MONO_STACKS, SIZE_TOKENS, tokenValue, type TokenDef } from '../lib/appearance';
+import { COLOR_GROUPS, COLOR_TOKENS, DEFAULT_APPEARANCE, FONT_STACKS, isPresetActive, MAX_PRESETS, MONO_STACKS, presetsFor, SIZE_TOKENS, tokenValue, type TokenDef } from '../lib/appearance';
 import { useTheme, type Theme } from '../lib/theme';
 import { DEFAULT_DICTIONARIES } from '../lib/seed';
 import { useStore } from '../lib/store';
@@ -425,45 +425,22 @@ const ScoringTab = ({ state, dispatch }: TabProps) => {
   </div>;
 };
 
-/** Строка цвета: образец, код и возврат к значению дизайн-системы. */
+/** Строка цвета: выбор цвета, название и возврат к значению дизайн-системы. */
 const ColorRow = ({ token, value, isDefault, onChange, onReset }: {
   token: TokenDef;
   value: string;
   isDefault: boolean;
   onChange: (value: string) => void;
   onReset: () => void;
-}) => {
-  // Пока код набирают, показываем набранное: промежуточный «#2F5» цветом ещё не является.
-  const [draft, setDraft] = useState<string | null>(null);
-  const [seen, setSeen] = useState(value);
-  // Возврат к значению по умолчанию меняет цвет извне — набранный текст тогда надо отпустить,
-  // иначе поле продолжит показывать прежний код, хотя цвет уже другой.
-  if (seen !== value) {
-    setSeen(value);
-    if (draft && draft.trim().toLowerCase() !== value.toLowerCase()) setDraft(null);
-  }
-  const text = draft ?? value;
-  return (
-    <div className="ui-color">
-      <span className="ui-color-swatch" style={{ background: isColor(text) ? text : value }} aria-hidden />
-      <span className="ui-color-label">{token.label}</span>
-      <TextInput
-        value={text}
-        aria-label={`Цвет: ${token.label}`}
-        invalid={!isColor(text)}
-        maxLength={7}
-        onChange={(e) => {
-          setDraft(e.target.value);
-          if (isColor(e.target.value)) onChange(e.target.value.trim().toLowerCase());
-        }}
-        onBlur={() => setDraft(null)}
-      />
-      <button type="button" className="text-action" disabled={isDefault} onClick={() => { setDraft(null); onReset(); }}>
-        по умолчанию
-      </button>
-    </div>
-  );
-};
+}) => (
+  <div className="ui-color">
+    <ColorPicker value={value} label={`Цвет: ${token.label}`} onChange={onChange} />
+    <span className="ui-color-label">{token.label}</span>
+    <button type="button" className="text-action" disabled={isDefault} onClick={onReset}>
+      по умолчанию
+    </button>
+  </div>
+);
 
 const AppearanceTab = ({ state, dispatch }: TabProps) => {
   const pageTheme = useTheme();
@@ -477,6 +454,8 @@ const AppearanceTab = ({ state, dispatch }: TabProps) => {
     save({ [theme]: rest } as Partial<AppearanceSettings>);
   };
   const changed = Object.keys(appearance.light).length + Object.keys(appearance.dark).length;
+  const presets = presetsFor(appearance, theme);
+  const [presetName, setPresetName] = useState('');
 
   return <div className="admin-section">
     <div className="card-head admin-content-head">
@@ -498,33 +477,47 @@ const AppearanceTab = ({ state, dispatch }: TabProps) => {
       <label className="field">
         <span className="caps">Основной шрифт</span>
         <Select value={appearance.fontBody} options={FONT_STACKS} onChange={(fontBody) => save({ fontBody })} label="Основной шрифт" />
+        <span className="ui-sample" style={{ fontFamily: appearance.fontBody, fontSize: appearance.sizes.base }}>
+          Подготовить отчёт по редизайну портала
+        </span>
       </label>
       <label className="field">
         <span className="caps">Шрифт чисел и дат</span>
         <Select value={appearance.fontMono} options={MONO_STACKS} onChange={(fontMono) => save({ fontMono })} label="Шрифт чисел и дат" />
+        <span className="ui-sample" style={{ fontFamily: appearance.fontMono, fontSize: appearance.sizes.base }}>
+          17.09.2026 · 10:00–12:30 · 4,5 балла
+        </span>
       </label>
     </div>
 
     <h3 className="admin-subhead">Размеры текста</h3>
-    <div className="ui-fields">
+    <p className="subtitle">Образец под ползунком показывает, как текст будет выглядеть.</p>
+    <div className="ui-sizes">
       {SIZE_TOKENS.map((item) => (
-        <label className="field" key={item.name}>
+        <div className="ui-size" key={item.name}>
           <span className="caps">{item.label}</span>
-          <TextInput
-            inputMode="decimal"
-            value={String(appearance.sizes[item.name])}
-            aria-label={`${item.label}, пикселей`}
-            onChange={(e) => {
-              const value = Number(e.target.value.replace(',', '.'));
-              if (Number.isFinite(value)) save({ sizes: { ...appearance.sizes, [item.name]: value } });
-            }}
+          <Slider
+            value={appearance.sizes[item.name]}
+            min={item.min}
+            max={item.max}
+            step={0.5}
+            label={`${item.label}, пикселей`}
+            format={(value) => `${String(value).replace('.', ',')} px`}
+            onChange={(value) => save({ sizes: { ...appearance.sizes, [item.name]: value } })}
           />
+          <span
+            className={`ui-sample ui-sample--${item.name}`}
+            style={{ fontFamily: appearance.fontBody, fontSize: appearance.sizes[item.name] }}
+          >
+            {item.sample}
+          </span>
           <span className="field-hint">{item.hint} От {item.min} до {item.max} пикселей, по умолчанию {item.base}.</span>
-        </label>
+        </div>
       ))}
     </div>
 
     <h3 className="admin-subhead">Цвета</h3>
+    <p className="subtitle">Готовая тема задаёт поверхности и акцент целиком; отдельные цвета можно поправить ниже и сохранить как свою тему.</p>
     <div className="ui-theme-switch">
       <Segmented
         label="Тема, цвета которой правятся"
@@ -534,6 +527,64 @@ const AppearanceTab = ({ state, dispatch }: TabProps) => {
       />
       {theme !== pageTheme && <span className="subtitle">Сейчас включена другая тема — переключите её в шапке, чтобы увидеть правки.</span>}
     </div>
+    <div className="ui-presets">
+      {presets.map((preset) => {
+        const active = isPresetActive(appearance, preset);
+        return (
+          <div key={preset.id} className={`ui-preset${active ? ' active' : ''}`}>
+            <button
+              type="button"
+              className="ui-preset-apply"
+              aria-pressed={active}
+              onClick={() => save({ [theme]: { ...preset.colors } } as Partial<AppearanceSettings>)}
+            >
+              <span className="ui-preset-dots" aria-hidden>
+                {['paper', 'sheet', 'soft-2', 'accent'].map((name) => (
+                  <i key={name} style={{ background: preset.colors[name] ?? COLOR_TOKENS.find((t) => t.name === name)![theme] }} />
+                ))}
+              </span>
+              <span className="ui-preset-name">{preset.name}</span>
+              <span className="ui-preset-kind">{preset.builtin ? 'готовая' : 'своя'}</span>
+            </button>
+            {!preset.builtin && (
+              <button
+                type="button"
+                className="text-action"
+                aria-label={`Удалить тему ${preset.name}`}
+                onClick={() => save({ presets: appearance.presets.filter((item) => item.id !== preset.id) })}
+              >
+                удалить
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+    <div className="ui-save-preset">
+      <TextInput
+        value={presetName}
+        maxLength={40}
+        placeholder="Название темы"
+        aria-label="Название новой темы"
+        onChange={(e) => setPresetName(e.target.value)}
+      />
+      <Button
+        disabled={!presetName.trim() || appearance.presets.length >= MAX_PRESETS}
+        onClick={() => {
+          save({
+            presets: [
+              ...appearance.presets,
+              { id: `p-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, name: presetName.trim(), theme, colors: { ...appearance[theme] } },
+            ],
+          });
+          setPresetName('');
+        }}
+      >
+        Сохранить текущие цвета как тему
+      </Button>
+      {appearance.presets.length >= MAX_PRESETS && <span className="field-hint">Сохранено {MAX_PRESETS} тем — больше нельзя, удалите ненужные.</span>}
+    </div>
+
     {COLOR_GROUPS.map((group) => (
       <section key={group.title} className="ui-group">
         <h4>{group.title}</h4>
@@ -611,7 +662,7 @@ const DictionaryDialog = ({ entry, kind, label, entries, onClose, onSave }: { en
         <label className="field"><span className="caps">Название</span><TextInput value={title} onChange={(event) => { setTitle(event.target.value); setError(''); }} placeholder="Название значения" maxLength={160} invalid={!!error} /></label>
         <div className="field"><label className="caps" htmlFor="dict-code">Код</label><TextInput id="dict-code" value={code} onChange={(event) => { setCode(event.target.value); setError(''); }} placeholder="internal-review" maxLength={48} mono invalid={!!error} aria-describedby="dict-code-hint" /><span className="field-hint" id="dict-code-hint">Связывает значение с данными; меняйте осторожно.</span></div>
       </div>
-      {withColor && <div className="field"><span className="caps">Цвет</span><ColorField value={color} onChange={(value) => { setColor(value); setError(''); }} label={kind === 'absenceType' ? 'Цвет вида отсутствия' : 'Цвет категории'} /><span className="field-hint">В тёмной теме цвет автоматически высветляется.</span></div>}
+      {withColor && <div className="field"><span className="caps">Цвет</span><ColorPicker value={color} onChange={(value) => { setColor(value); setError(''); }} label={kind === 'absenceType' ? 'Цвет вида отсутствия' : 'Цвет категории'} /><span className="field-hint">В тёмной теме цвет автоматически высветляется.</span></div>}
       {error && <p className="field-error" role="alert">{error}</p>}
       <div className="form-actions"><span className="spacer" /><Button type="submit" variant="primary" icon={<Icon.Save size={15} />}>{entry ? 'Сохранить' : 'Добавить'}</Button><Button onClick={onClose}>Отмена</Button></div>
     </form>

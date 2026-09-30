@@ -448,27 +448,32 @@ describe('календарь: поиск и категории', () => {
     const user = userEvent.setup();
     renderAt('/admin');
     await user.click(screen.getByRole('button', { name: 'Редактирование UI' }));
-    const accent = screen.getByLabelText('Цвет: Акцент');
     // Редактор открывается на теме страницы; в тестах это тёмная.
-    expect(accent).toHaveValue('#93B9F0');
-    fireEvent.change(accent, { target: { value: '#7a1f3d' } });
+    const trigger = screen.getByRole('button', { name: 'Цвет: Акцент: #93B9F0' });
+    await user.click(trigger);
+    await user.click(screen.getByRole('option', { name: '#A32D22' }));
     // Переопределение попадает в правило своей темы вместе со спутником «-rgb».
     const css = () => [...document.querySelectorAll('style')].map((s) => s.textContent).join(' ');
     expect(css()).toContain("[data-theme='dark']");
-    expect(css()).toContain('--accent: #7a1f3d;');
-    expect(css()).toContain('--accent-rgb: 122 31 61;');
-    const row = accent.closest('.ui-color')!;
+    expect(css()).toContain('--accent: #a32d22;');
+    expect(css()).toContain('--accent-rgb: 163 45 34;');
+    const row = trigger.closest('.ui-color')!;
     await user.click(within(row as HTMLElement).getByRole('button', { name: 'по умолчанию' }));
-    expect(css()).not.toContain('--accent: #7a1f3d;');
+    expect(css()).not.toContain('--accent: #a32d22;');
   });
 
   it('размер текста ограничивается допустимыми значениями', async () => {
     const user = userEvent.setup();
     renderAt('/admin');
     await user.click(screen.getByRole('button', { name: 'Редактирование UI' }));
-    fireEvent.change(screen.getByLabelText('Основной текст, пикселей'), { target: { value: '99' } });
+    // Ползунок доходит до края клавишей End — дальше границы он не пускает.
+    const slider = screen.getByRole('slider', { name: 'Основной текст, пикселей' });
+    fireEvent.keyDown(slider, { key: 'End' });
     const css = [...document.querySelectorAll('style')].map((s) => s.textContent).join(' ');
     expect(css).toContain('--size-base: 20px;');
+    expect(slider).toHaveAttribute('aria-valuenow', '20');
+    // Образец набран тем же размером.
+    expect(screen.getByText('Согласовать бюджет и обновить смету')).toHaveStyle({ fontSize: '20px' });
   });
 
   it('состояние мероприятия видно по классам: исполнено, просрочено, исполнитель отсутствует', () => {
@@ -660,7 +665,9 @@ describe('администрирование', () => {
     await user.click(screen.getByText('Виды отсутствий'));
     await user.click(screen.getByRole('button', { name: 'Изменить значение Отпуск' }));
     const colorDialog = screen.getByRole('dialog', { name: 'Изменить значение' });
-    await user.click(within(colorDialog).getByRole('radio', { name: '#2C6B45' }));
+    // Цвет выбирается в своей панели: сначала открываем её, потом берём образец из палитры.
+    await user.click(within(colorDialog).getByRole('button', { name: /^Цвет вида отсутствия:/ }));
+    await user.click(within(colorDialog).getByRole('option', { name: '#2C6B45' }));
     await user.click(within(colorDialog).getByRole('button', { name: 'Сохранить' }));
     expect(screen.getByText('#2C6B45')).toBeInTheDocument();
     expect([...document.querySelectorAll('style')].some((st) => st.textContent?.includes('--abs-vacation: #2C6B45'))).toBe(true);
@@ -668,8 +675,9 @@ describe('администрирование', () => {
     await user.click(screen.getByText('Категории задач'));
     await user.click(screen.getByRole('button', { name: 'Изменить значение Доклад руководству отдела' }));
     const catDialog = screen.getByRole('dialog', { name: 'Изменить значение' });
-    expect(within(catDialog).getByRole('radio', { name: '#2F5480' })).toHaveAttribute('aria-checked', 'true');
-    await user.click(within(catDialog).getByRole('radio', { name: '#A35A1F' }));
+    await user.click(within(catDialog).getByRole('button', { name: /^Цвет категории:/ }));
+    expect(within(catDialog).getByRole('option', { name: '#2F5480' })).toHaveAttribute('aria-selected', 'true');
+    await user.click(within(catDialog).getByRole('option', { name: '#A35A1F' }));
     await user.click(within(catDialog).getByRole('button', { name: 'Сохранить' }));
     expect([...document.querySelectorAll('style')].some((st) => st.textContent?.includes('--cat-reportDept: #A35A1F'))).toBe(true);
 

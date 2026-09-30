@@ -3,7 +3,7 @@
 // у кого соответствующий токен не переопределён.
 
 import type { Theme } from './theme';
-import type { AppearanceSettings } from './types';
+import type { AppearancePreset, AppearanceSettings } from './types';
 
 export type TokenKind = 'color' | 'size';
 
@@ -147,16 +147,89 @@ export const MONO_STACKS: { value: string; label: string }[] = [
 ];
 
 /** Размеры текста в пикселях: границы не дают сделать интерфейс нечитаемым или ломающим вёрстку. */
-export const SIZE_TOKENS: { name: keyof AppearanceSettings['sizes']; label: string; hint: string; min: number; max: number; base: number }[] = [
-  { name: 'base', label: 'Основной текст', hint: 'Размер большей части надписей.', min: 12, max: 20, base: 14 },
-  { name: 'heading', label: 'Заголовки разделов', hint: 'Заголовки карточек и окон.', min: 14, max: 24, base: 16 },
-  { name: 'caps', label: 'Подписи над полями', hint: 'Мелкие прописные надписи.', min: 9, max: 14, base: 11 },
-  { name: 'subtitle', label: 'Пояснения под заголовками', hint: 'Описания разделов и карточек.', min: 11, max: 18, base: 14 },
+export const SIZE_TOKENS: { name: keyof AppearanceSettings['sizes']; label: string; hint: string; sample: string; min: number; max: number; base: number }[] = [
+  { name: 'base', label: 'Основной текст', hint: 'Размер большей части надписей.', sample: 'Согласовать бюджет и обновить смету', min: 12, max: 20, base: 14 },
+  { name: 'heading', label: 'Заголовки разделов', hint: 'Заголовки карточек и окон.', sample: 'Баллы по направлениям', min: 14, max: 24, base: 16 },
+  { name: 'caps', label: 'Подписи над полями', hint: 'Мелкие прописные надписи.', sample: 'Исполнитель', min: 9, max: 14, base: 11 },
+  { name: 'subtitle', label: 'Пояснения под заголовками', hint: 'Описания разделов и карточек.', sample: 'Задачи отдела во времени', min: 11, max: 18, base: 14 },
 ];
+
+/**
+ * Готовые цветовые темы. Каждая задаёт поверхности и акцент одной темы;
+ * цвет текста не трогают, поэтому контраст остаётся прежним.
+ */
+export const BUILTIN_PRESETS: AppearancePreset[] = [
+  { id: 'light-chalk', name: 'Тёплый мел', theme: 'light', colors: {} },
+  {
+    id: 'light-sand',
+    name: 'Песочная',
+    theme: 'light',
+    colors: {
+      paper: '#efe8db', sheet: '#f8f2e7', soft: '#e6ddcb', 'soft-alt': '#ebe3d3', 'soft-2': '#ded3bd',
+      line: '#d8cfba', dash: '#c4b9a1', 'cal-surface': '#f8f2e7', 'cal-head': '#ded3bd', 'cal-hours': '#ebe3d3',
+      accent: '#6b4a16', 'accent-2': '#8a6323', 'accent-hover': '#4f360f', 'accent-bg': '#e8dcc4',
+    },
+  },
+  {
+    id: 'light-north',
+    name: 'Северная',
+    theme: 'light',
+    colors: {
+      paper: '#eceef2', sheet: '#f7f8fa', soft: '#e1e6ee', 'soft-alt': '#e6eaf1', 'soft-2': '#d7dde8',
+      line: '#d2d8e2', dash: '#bcc4d1', 'cal-surface': '#f7f8fa', 'cal-head': '#d7dde8', 'cal-hours': '#e6eaf1',
+      accent: '#1f3a5f', 'accent-2': '#2f5480', 'accent-hover': '#16293f', 'accent-bg': '#d8e1ef',
+    },
+  },
+  {
+    id: 'light-pine',
+    name: 'Хвойная',
+    theme: 'light',
+    colors: {
+      paper: '#ecefe9', sheet: '#f7f9f4', soft: '#dfe6da', 'soft-alt': '#e5ebe0', 'soft-2': '#d4ddcd',
+      line: '#d2dacb', dash: '#bcc7b3', 'cal-surface': '#f7f9f4', 'cal-head': '#d4ddcd', 'cal-hours': '#e5ebe0',
+      accent: '#1e5f4b', 'accent-2': '#2c7a61', 'accent-hover': '#164536', 'accent-bg': '#d7e7df',
+    },
+  },
+  { id: 'dark-chalk', name: 'Ночной мел', theme: 'dark', colors: {} },
+  {
+    id: 'dark-indigo',
+    name: 'Индиго',
+    theme: 'dark',
+    colors: {
+      paper: '#171e33', sheet: '#222a44', soft: '#1e2740', 'soft-alt': '#1b2439', 'soft-2': '#2b3555',
+      line: '#334066', dash: '#3c4a72', 'cal-surface': '#111729', 'cal-head': '#1f2841', 'cal-hours': '#1a2237',
+      accent: '#9bb4f5', 'accent-2': '#6f8fdd', 'accent-hover': '#bccbfa', 'accent-bg': '#2a3a63',
+    },
+  },
+  {
+    id: 'dark-coal',
+    name: 'Уголь',
+    theme: 'dark',
+    colors: {
+      paper: '#1e2124', sheet: '#292d31', soft: '#24282c', 'soft-alt': '#212528', 'soft-2': '#323740',
+      line: '#3a4046', dash: '#454c53', 'cal-surface': '#16191c', 'cal-head': '#272c31', 'cal-hours': '#202427',
+      accent: '#8fb6d9', 'accent-2': '#6d93b5', 'accent-hover': '#b0cee8', 'accent-bg': '#2c3a45',
+    },
+  },
+  {
+    id: 'dark-taiga',
+    name: 'Тайга',
+    theme: 'dark',
+    colors: {
+      paper: '#17221f', sheet: '#22302c', soft: '#1d2926', 'soft-alt': '#1a2522', 'soft-2': '#293b35',
+      line: '#2f4740', dash: '#38534b', 'cal-surface': '#101a17', 'cal-head': '#1f2d29', 'cal-hours': '#1a2724',
+      accent: '#7fd3b6', 'accent-2': '#5cae93', 'accent-hover': '#a3e5cd', 'accent-bg': '#234038',
+    },
+  },
+];
+
+/** Сколько своих тем можно сохранить: список выбора должен оставаться обозримым. */
+export const MAX_PRESETS = 24;
 
 export const DEFAULT_APPEARANCE: AppearanceSettings = {
   light: {},
   dark: {},
+  presets: [],
   fontBody: FONT_STACKS[0].value,
   fontMono: MONO_STACKS[0].value,
   sizes: { base: 14, heading: 16, caps: 11, subtitle: 14 },
@@ -192,9 +265,26 @@ export const normalizeAppearance = (raw: Partial<AppearanceSettings> | undefined
   }
   const font = (value: string | undefined, list: { value: string }[], fallback: string) =>
     list.some((item) => item.value === value) ? value! : fallback;
+  // Свои темы: имя обязательно, цвета проверяются как и остальные, повторные имена допустимы.
+  const seen = new Set<string>();
+  const presets = (raw?.presets ?? [])
+    .filter((preset): preset is AppearancePreset => !!preset && typeof preset === 'object')
+    .map((preset) => ({
+      id: String(preset.id ?? '').slice(0, 64),
+      name: String(preset.name ?? '').trim().slice(0, 40),
+      theme: preset.theme === 'dark' ? ('dark' as const) : ('light' as const),
+      colors: colors(preset.colors),
+    }))
+    .filter((preset) => {
+      if (!preset.id || !preset.name || seen.has(preset.id)) return false;
+      seen.add(preset.id);
+      return true;
+    })
+    .slice(0, MAX_PRESETS);
   return {
     light: colors(raw?.light),
     dark: colors(raw?.dark),
+    presets,
     fontBody: font(raw?.fontBody, FONT_STACKS, DEFAULT_APPEARANCE.fontBody),
     fontMono: font(raw?.fontMono, MONO_STACKS, DEFAULT_APPEARANCE.fontMono),
     sizes,
@@ -222,6 +312,19 @@ export const appearanceCss = (settings: AppearanceSettings): string => {
   // Тёмная тема — и по выбору пользователя, и по настройке системы.
   if (dark) rules.push(`:root[data-theme='dark'] { ${dark} }`);
   return rules.join('\n');
+};
+
+/** Готовые и сохранённые темы для выбранной темы страницы; готовые идут первыми. */
+export const presetsFor = (settings: AppearanceSettings, theme: Theme): (AppearancePreset & { builtin: boolean })[] => [
+  ...BUILTIN_PRESETS.filter((preset) => preset.theme === theme).map((preset) => ({ ...preset, builtin: true })),
+  ...settings.presets.filter((preset) => preset.theme === theme).map((preset) => ({ ...preset, builtin: false })),
+];
+
+/** Цвета набора совпадают с текущими — значит эта тема и выбрана. */
+export const isPresetActive = (settings: AppearanceSettings, preset: AppearancePreset): boolean => {
+  const current = settings[preset.theme];
+  const keys = new Set([...Object.keys(current), ...Object.keys(preset.colors)]);
+  return [...keys].every((key) => (current[key] ?? '') === (preset.colors[key] ?? ''));
 };
 
 /** Значение токена с учётом настроек — для образцов в редакторе. */

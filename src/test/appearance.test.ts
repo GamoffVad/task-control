@@ -2,6 +2,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   appearanceCss,
+  BUILTIN_PRESETS,
+  isPresetActive,
+  MAX_PRESETS,
+  presetsFor,
   COLOR_TOKENS,
   DEFAULT_APPEARANCE,
   FONT_STACKS,
@@ -70,6 +74,54 @@ describe('оформление интерфейса', () => {
     const settings = normalizeAppearance({ light: { accent: '#7a1f3d' } });
     expect(tokenValue(settings, accent, 'light')).toBe('#7a1f3d');
     expect(tokenValue(settings, accent, 'dark')).toBe(accent.dark);
+  });
+
+  it('готовые темы задают цвета обеих тем и не трогают чернила', () => {
+    const light = BUILTIN_PRESETS.filter((p) => p.theme === 'light');
+    const dark = BUILTIN_PRESETS.filter((p) => p.theme === 'dark');
+    expect(light.length).toBeGreaterThan(1);
+    expect(dark.length).toBeGreaterThan(1);
+    const known = new Set(COLOR_TOKENS.map((t) => t.name));
+    for (const preset of BUILTIN_PRESETS) {
+      for (const [name, value] of Object.entries(preset.colors)) {
+        expect(known.has(name), `${preset.id}: ${name}`).toBe(true);
+        expect(isColor(value), `${preset.id}: ${value}`).toBe(true);
+      }
+      // Цвет текста темы не меняется, поэтому контраст остаётся прежним.
+      for (const ink of ['ink', 'ink-2', 'ink-3', 'ink-4']) expect(preset.colors[ink]).toBeUndefined();
+    }
+    // Первые наборы — исходные темы без переопределений.
+    expect(light[0].colors).toEqual({});
+    expect(dark[0].colors).toEqual({});
+  });
+
+  it('свои темы проверяются: без имени и с чужими цветами не сохраняются', () => {
+    const settings = normalizeAppearance({
+      presets: [
+        { id: 'a', name: 'Моя', theme: 'light', colors: { paper: '#EEEEEE', выдумка: '#000000' } },
+        { id: 'b', name: '   ', theme: 'light', colors: {} },
+        { id: 'a', name: 'Повтор идентификатора', theme: 'dark', colors: {} },
+        { id: '', name: 'Без идентификатора', theme: 'dark', colors: {} },
+      ],
+    } as never);
+    expect(settings.presets).toEqual([{ id: 'a', name: 'Моя', theme: 'light', colors: { paper: '#eeeeee' } }]);
+  });
+
+  it('число своих тем ограничено', () => {
+    const many = Array.from({ length: MAX_PRESETS + 5 }, (_, i) => ({ id: `p${i}`, name: `Тема ${i}`, theme: 'light' as const, colors: {} }));
+    expect(normalizeAppearance({ presets: many }).presets.length).toBe(MAX_PRESETS);
+  });
+
+  it('список тем показывает готовые и свои, выбранная определяется по цветам', () => {
+    const mine = { id: 'mine', name: 'Моя', theme: 'light' as const, colors: { paper: '#eeeeee' } };
+    const settings = normalizeAppearance({ presets: [mine], light: { paper: '#eeeeee' } });
+    const list = presetsFor(settings, 'light');
+    expect(list.filter((p) => p.builtin).length).toBeGreaterThan(1);
+    expect(list.at(-1)).toMatchObject({ id: 'mine', builtin: false });
+    expect(isPresetActive(settings, mine)).toBe(true);
+    // Исходная тема без переопределений активна, только когда ничего не переопределено.
+    expect(isPresetActive(settings, BUILTIN_PRESETS[0])).toBe(false);
+    expect(isPresetActive(normalizeAppearance(undefined), BUILTIN_PRESETS[0])).toBe(true);
   });
 
   it('все токены со спутником «-rgb» есть в списке цветов', () => {

@@ -177,13 +177,63 @@ input[type='search']::-webkit-search-cancel-button, input[type='search']::-webki
 .plan-table th.emp, .plan-table td.cell, .plan-table tr.section td:not(.sticky-col) { border-right: 1px solid var(--grid-line); }
 
 /* Выбор цвета: палитра и код. */
-.colorfield { display: flex; flex-direction: column; gap: 8px; }
-.colorfield-swatches { display: grid; grid-template-columns: repeat(6, 30px); gap: 6px; }
-.colorfield-swatch { width: 30px; height: 30px; border: 2px solid transparent; border-radius: 2px; color: #fff; display: inline-grid; place-items: center; cursor: pointer; padding: 0; }
-.colorfield-swatch[aria-checked="true"] { border-color: var(--ink); box-shadow: 0 0 0 2px var(--paper) inset; }
-.colorfield-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.colorfield-input { display: flex; align-items: center; gap: 8px; max-width: 200px; }
-.colorfield-preview { flex: none; width: 38px; height: 38px; border-radius: 2px; border: 1px solid var(--dash); }
+/* Ползунок: свой, вместо системного <input type="range">. */
+.slider { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.slider-track {
+  position: relative; flex: 1 1 auto; min-width: 0; height: 22px; cursor: pointer; touch-action: none;
+  display: flex; align-items: center;
+}
+.slider-track::before {
+  content: ''; position: absolute; left: 0; right: 0; height: 3px; border-radius: 2px; background: var(--soft-2);
+}
+.slider-fill { position: absolute; left: 0; height: 3px; border-radius: 2px; background: var(--accent); }
+.slider-thumb {
+  position: absolute; width: 16px; height: 16px; border-radius: 50%; translate: -50% 0;
+  background: var(--sheet); border: 2px solid var(--accent);
+}
+.slider-track:hover .slider-thumb { background: var(--soft); }
+.slider-track:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+.slider-value { flex: none; min-width: 52px; text-align: right; font-size: 12.5px; color: var(--ink-2); }
+.slider--off { opacity: .5; }
+.slider--off .slider-track { cursor: not-allowed; }
+
+/* Выбор цвета: свой, вместо системного <input type="color">. */
+.cp { position: relative; display: inline-flex; min-width: 0; }
+.cp-trigger {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px 0 4px;
+  border: 1px solid var(--line); border-radius: 2px; background: var(--sheet); color: var(--ink); cursor: pointer;
+}
+.cp-trigger:hover:not(:disabled), .cp.open .cp-trigger { border-color: var(--accent); }
+.cp-trigger:disabled { opacity: .5; cursor: not-allowed; }
+.cp-trigger[aria-invalid='true'] { border-color: var(--danger); }
+.cp-chip { width: 24px; height: 24px; border-radius: 2px; border: 1px solid rgb(var(--ink-rgb) / 18%); display: inline-grid; place-items: center; flex: none; }
+.cp-code { font-size: 12px; letter-spacing: 0.02em; }
+
+.cp-pop {
+  position: absolute; z-index: 70; top: calc(100% + 4px); left: 0; width: 232px; padding: 10px;
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--sheet); border: 1px dashed var(--dash); border-radius: 2px;
+  box-shadow: 0 0 0 4px var(--paper), 0 12px 32px rgb(var(--ink-rgb) / 22%);
+}
+.cp-area { position: relative; height: 124px; border-radius: 2px; border: 1px solid var(--line); cursor: crosshair; touch-action: none; }
+.cp-hue {
+  position: relative; height: 14px; border-radius: 2px; border: 1px solid var(--line); cursor: pointer; touch-action: none;
+  background: linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%);
+}
+.cp-area:focus-visible, .cp-hue:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cp-thumb {
+  position: absolute; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--sheet);
+  box-shadow: 0 0 0 1px rgb(var(--ink-rgb) / 45%); translate: -50% -50%; pointer-events: none;
+}
+.cp-hue .cp-thumb { top: 50%; }
+.cp-swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.cp-swatch { height: 24px; border: 2px solid transparent; border-radius: 2px; display: inline-grid; place-items: center; cursor: pointer; padding: 0; }
+.cp-swatch[aria-selected='true'] { border-color: var(--ink); }
+.cp-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cp-hex { display: flex; align-items: center; gap: 8px; }
+.cp-hex .caps { color: var(--ink-3); }
+.cp-hex .input { flex: 1 1 auto; min-width: 0; min-height: 30px; padding: 0 8px; font-size: 12px; }
+
 .admin-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 2px; vertical-align: -2px; margin-right: 8px; border: 1px solid rgb(var(--ink-rgb) / 20%); }
 
 /* Окно задачи: название растягивается на свободную высоту левой колонки — поля документа внизу, над «Удалить». */

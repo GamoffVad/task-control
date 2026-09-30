@@ -102,10 +102,22 @@ export type ScoringSettings = {
  * Оформление приложения: цвета по темам, шрифты и размеры текста.
  * Хранятся только отличия от дизайн-системы, поэтому её правки доходят до незаданных токенов.
  */
+/** Сохранённый набор цветов одной темы — готовая или своя «цветовая тема». */
+export type AppearancePreset = {
+  id: string;
+  name: string;
+  /** К какой теме относится набор: светлой или тёмной. */
+  theme: 'light' | 'dark';
+  /** Цвета набора: имя переменной CSS без «--» → #RRGGBB. */
+  colors: Record<string, string>;
+};
+
 export type AppearanceSettings = {
   /** Переопределённые цвета светлой темы: имя переменной CSS без «--» → #RRGGBB. */
   light: Record<string, string>;
   dark: Record<string, string>;
+  /** Свои сохранённые наборы цветов; готовые приходят из кода. */
+  presets: AppearancePreset[];
   fontBody: string;
   fontMono: string;
   sizes: { base: number; heading: number; caps: number; subtitle: number };

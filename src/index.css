@@ -1334,8 +1334,36 @@ a.label:hover { color: var(--accent); }
 /* Вкладка «Редактирование UI» */
 .ui-fields { display: grid; grid-template-columns: 1fr; gap: 14px 22px; margin: 10px 0 20px; }
 .ui-fields .field-hint { display: block; margin-top: 4px; color: var(--ink-3); font-size: 12px; line-height: 1.4; }
+.ui-sizes { display: grid; grid-template-columns: 1fr; gap: 18px 26px; margin: 10px 0 20px; }
+.ui-size { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+/* Образец набирается настраиваемым шрифтом и размером — видно, каким текст станет. */
+.ui-sample {
+  display: block; margin-top: 2px; padding: 8px 10px; border: 1px dashed var(--dash); border-radius: 2px;
+  background: var(--soft-alt); color: var(--ink); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ui-sample--heading { font-weight: 700; }
+.ui-sample--caps { font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+.ui-sample--subtitle { color: var(--ink-3); }
+.ui-fields .ui-sample { margin-top: 6px; }
+
 .ui-theme-switch { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 10px 0 18px; }
 .ui-theme-switch .subtitle { margin: 0; }
+.ui-presets { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 4px 0 14px; }
+.ui-preset { display: flex; align-items: center; gap: 10px; }
+.ui-preset-apply {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 10px;
+  border: 1px solid var(--line); border-radius: 2px; background: transparent; color: var(--ink); text-align: left; cursor: pointer;
+}
+.ui-preset-apply:hover { border-color: var(--accent); background: var(--soft-alt); }
+.ui-preset.active .ui-preset-apply { border-color: var(--accent); background: var(--soft); }
+.ui-preset-dots { display: inline-flex; flex: none; }
+.ui-preset-dots i { width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgb(var(--ink-rgb) / 18%); margin-right: -5px; }
+.ui-preset-dots i:last-child { margin-right: 0; }
+.ui-preset-name { flex: 1 1 auto; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-preset-kind { flex: none; font-size: 11px; color: var(--ink-4); }
+.ui-save-preset { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+.ui-save-preset .input { max-width: 240px; }
+
 .ui-group { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px dashed var(--dash); }
 .ui-group:last-child { border-bottom: none; }
 .ui-group h4 { margin: 0; font-size: 13.5px; font-weight: 600; }
@@ -1372,6 +1400,8 @@ a.label:hover { color: var(--accent); }
   .scoring-people { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .ui-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ui-colors { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ui-sizes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ui-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 767px) {
   .admin-editor { grid-template-columns: 1fr; }
