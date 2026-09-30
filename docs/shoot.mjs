@@ -307,6 +307,11 @@ try {
   await page.setViewport({ width: 1440, height: 1500, deviceScaleFactor: 1.5 });
   await shot('34-admin-scoring', { clip: { x: 0, y: 130, width: 1440, height: 1180 } });
   await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1.5 });
+  await clickText('.admin-page .seg button', 'Редактирование UI');
+  // Верх вкладки: шрифты, размеры ползунками с образцами и готовые цветовые темы.
+  await page.setViewport({ width: 1440, height: 1500, deviceScaleFactor: 1.5 });
+  await shot('35-admin-ui', { clip: { x: 0, y: 130, width: 1440, height: 1250 } });
+  await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1.5 });
   await clickText('.admin-page .seg button', 'Роли и разрешения');
   await clickText('.admin-directory-list button', 'Руководитель');
   await shot('27-admin-roles');
@@ -338,6 +343,9 @@ try {
   await closeDialog();
   await go('/tetris');
   await shot('22-exec-absences');
+  // Исполнитель тоже открывает «Администрирование», но видит одну вкладку — своё оформление.
+  await go('/admin');
+  await shot('36-exec-admin', { clip: { x: 0, y: 0, width: 1440, height: 560 } });
   await go('/reports');
   if (!page.url().endsWith('/calendar')) problems.push('Исполнитель открыл /reports');
   await logout();

@@ -478,6 +478,30 @@ describe('календарь: поиск и категории', () => {
     localStorage.clear();
   });
 
+  it('переключатель «Светлая / Тёмная» в редакторе включает тему во всём приложении и следует за шапкой', async () => {
+    localStorage.clear();
+    const user = userEvent.setup();
+    renderAt('/admin');
+    await user.click(screen.getByRole('button', { name: 'Редактирование UI' }));
+    const group = screen.getByRole('group', { name: 'Тема, цвета которой правятся' });
+    const pressed = (name: string) => within(group).getByRole('button', { name }).getAttribute('aria-pressed');
+    // Стартуем на тёмной: она и выбрана.
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    expect(pressed('Тёмная')).toBe('true');
+
+    // Выбор «Светлая» включает светлую тему во всём приложении и запоминает её за сотрудником.
+    await user.click(within(group).getByRole('button', { name: 'Светлая' }));
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(localStorage.getItem('task-control:theme:1')).toBe('light');
+    expect(pressed('Светлая')).toBe('true');
+
+    // Переключатель в шапке возвращает тёмную — и выбор в редакторе следует за ним.
+    await user.click(screen.getByRole('button', { name: /Включить тёмную тему/ }));
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    expect(pressed('Тёмная')).toBe('true');
+    localStorage.clear();
+  });
+
   it('у каждой вкладки администрирования своё разрешение', async () => {
     const user = userEvent.setup();
     renderAt('/admin');

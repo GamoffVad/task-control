@@ -8,7 +8,7 @@ import { planDocContext, planItems } from '../lib/planExport';
 import { addDays, fmtRange, planWeekStart } from '../lib/dates';
 import { PERMISSIONS, hasPermission, permissionsFor } from '../lib/access';
 import { COLOR_GROUPS, COLOR_TOKENS, DEFAULT_APPEARANCE, FONT_STACKS, isPresetActive, MAX_PRESETS, MONO_STACKS, presetsFor, SIZE_TOKENS, tokenValue, type TokenDef } from '../lib/appearance';
-import { useTheme, type Theme } from '../lib/theme';
+import { applyTheme, useTheme, type Theme } from '../lib/theme';
 import { DEFAULT_DICTIONARIES } from '../lib/seed';
 import { useStore } from '../lib/store';
 import type { WindowsCheck } from '../lib/api';
@@ -450,8 +450,10 @@ const ColorRow = ({ token, value, isDefault, onChange, onReset }: {
 );
 
 const AppearanceTab = ({ state, dispatch }: TabProps) => {
-  const pageTheme = useTheme();
-  const [theme, setTheme] = useState<Theme>(pageTheme);
+  // Тема страницы — единственный источник: переключатель здесь включает тему во всём приложении,
+  // а переключатель в шапке переставляет выбор здесь. Правится всегда та тема, что перед глазами.
+  const theme = useTheme();
+  const setTheme = (next: Theme) => applyTheme(next, state.user?.employeeId);
   const appearance = state.appearance;
   const save = (patch: Partial<AppearanceSettings>) => dispatch({ type: 'saveAppearance', appearance: { ...appearance, ...patch } });
   const setColor = (name: string, value: string) => save({ [theme]: { ...appearance[theme], [name]: value } } as Partial<AppearanceSettings>);
@@ -532,7 +534,7 @@ const AppearanceTab = ({ state, dispatch }: TabProps) => {
         options={[{ value: 'light' as Theme, label: 'Светлая' }, { value: 'dark' as Theme, label: 'Тёмная' }]}
         onChange={setTheme}
       />
-      {theme !== pageTheme && <span className="subtitle">Сейчас включена другая тема — переключите её в шапке, чтобы увидеть правки.</span>}
+      <span className="subtitle">Переключатель включает тему во всём приложении: правки видны сразу.</span>
     </div>
     <div className="ui-presets">
       {presets.map((preset) => {
