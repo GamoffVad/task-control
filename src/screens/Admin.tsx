@@ -434,8 +434,8 @@ const ColorRow = ({ token, value, isDefault, onChange, onReset }: {
   onReset: () => void;
 }) => (
   <div className="ui-color">
-    <ColorPicker value={value} label={`Цвет: ${token.label}`} onChange={onChange} />
     <span className="ui-color-label">{token.label}</span>
+    <ColorPicker value={value} label={`Цвет: ${token.label}`} onChange={onChange} />
     <button type="button" className="text-action" disabled={isDefault} onClick={onReset}>
       по умолчанию
     </button>

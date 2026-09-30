@@ -2,6 +2,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { useState } from 'react';
 import { ColorPicker } from '../kit';
 import { clamp, hexToHsv, hsvToHex, isHex, readableInk } from '../kit/color';
@@ -41,6 +42,15 @@ describe('цветовая математика', () => {
     expect(clamp(400, 0, 360)).toBe(360);
     expect(isHex('#2F5480')).toBe(true);
     expect(isHex('#2F54')).toBe(false);
+  });
+});
+
+describe('стили', () => {
+  it('тени не строятся из цвета текста', () => {
+    // В тёмной теме --ink-rgb почти белый: такая «тень» превращается в свечение.
+    const css = readFileSync('src/kit/kit.css', 'utf8') + readFileSync('src/index.css', 'utf8');
+    const shadows = css.match(/box-shadow[^;]*--ink-rgb[^;]*/g) ?? [];
+    expect(shadows).toEqual([]);
   });
 });
 
