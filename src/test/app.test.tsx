@@ -444,6 +444,26 @@ describe('календарь: поиск и категории', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
+  it('у каждой вкладки администрирования своё разрешение', async () => {
+    const user = userEvent.setup();
+    renderAt('/admin');
+    await user.click(screen.getByRole('button', { name: 'Роли и разрешения' }));
+    // Список разрешений покрывает все вкладки, кроме личного оформления.
+    for (const label of [
+      'Открывать администрирование',
+      'Пользователи: вести и назначать роли',
+      'Подразделения: вести дерево',
+      'Роли и разрешения: настраивать',
+      'Аутентификация: настраивать способ входа',
+      'Оценка: настраивать правила подсчёта баллов',
+      'Словари: редактировать значения',
+      'Разделы планирования: вести план',
+      'Шаблоны документов: редактировать',
+    ]) {
+      expect(screen.getByText(label), label).toBeInTheDocument();
+    }
+  });
+
   it('редактор оформления меняет цвет и возвращает его по умолчанию', async () => {
     const user = userEvent.setup();
     renderAt('/admin');
@@ -710,9 +730,15 @@ describe('администрирование', () => {
     expect(screen.getByText('Работа с обращениями граждан')).toBeInTheDocument();
 
     unmount();
+    // Исполнитель тоже открывает раздел, но видит в нём только своё оформление.
     renderAt('/admin', executorIn());
-    expect(screen.getByRole('heading', { name: 'Календарь' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Администрирование' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Администрирование' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Администрирование' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Редактирование UI' })).toBeInTheDocument();
+    for (const tab of ['Пользователи', 'Подразделения', 'Роли и разрешения', 'Аутентификация', 'Оценка', 'Словари', 'Разделы планирования', 'Шаблоны документов']) {
+      expect(screen.queryByRole('button', { name: tab }), tab).toBeNull();
+    }
+    expect(screen.getByRole('heading', { name: 'Редактирование UI' })).toBeInTheDocument();
   });
 });
 

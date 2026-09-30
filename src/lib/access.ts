@@ -2,13 +2,16 @@ import { STAFF_USERS } from './staff';
 import type { ManagedUser, Permission, Role, RoleDefinition, ScoringSettings, User } from './types';
 
 export const PERMISSIONS: { key: Permission; label: string; group: string }[] = [
+  // По разрешению на каждую вкладку администрирования, чтобы доступ настраивался точно.
   { key: 'admin.access', label: 'Открывать администрирование', group: 'Администрирование' },
-  { key: 'authentication.manage', label: 'Настраивать способ входа', group: 'Администрирование' },
-  { key: 'scoring.manage', label: 'Настраивать правила подсчёта баллов', group: 'Администрирование' },
-  { key: 'appearance.manage', label: 'Настраивать оформление интерфейса', group: 'Администрирование' },
-  { key: 'users.manage', label: 'Назначать роли пользователям', group: 'Администрирование' },
-  { key: 'roles.manage', label: 'Настраивать роли и разрешения', group: 'Администрирование' },
-  { key: 'dictionaries.manage', label: 'Редактировать словари', group: 'Администрирование' },
+  { key: 'users.manage', label: 'Пользователи: вести и назначать роли', group: 'Администрирование' },
+  { key: 'units.manage', label: 'Подразделения: вести дерево', group: 'Администрирование' },
+  { key: 'roles.manage', label: 'Роли и разрешения: настраивать', group: 'Администрирование' },
+  { key: 'authentication.manage', label: 'Аутентификация: настраивать способ входа', group: 'Администрирование' },
+  { key: 'scoring.manage', label: 'Оценка: настраивать правила подсчёта баллов', group: 'Администрирование' },
+  { key: 'dictionaries.manage', label: 'Словари: редактировать значения', group: 'Администрирование' },
+  { key: 'planRows.manage', label: 'Разделы планирования: вести план', group: 'Администрирование' },
+  { key: 'templates.manage', label: 'Шаблоны документов: редактировать', group: 'Администрирование' },
   { key: 'reports.view', label: 'Просматривать отчётность и показатели', group: 'Работа отдела' },
   { key: 'tasks.plan', label: 'Планировать задачи для сотрудников', group: 'Задачи' },
   { key: 'tasks.execute', label: 'Вести исполнение назначенных задач', group: 'Задачи' },
@@ -49,8 +52,8 @@ export const DEFAULT_AUTHENTICATION = { mode: 'form', allowEmergencyForm: true }
  * Версия набора прав. Права, добавленные после выпуска базы, дописываются администратору
  * один раз при обновлении: иначе новый раздел администрирования остался бы недоступен.
  */
-export const ACCESS_VERSION = '4';
-const ADDED_ADMIN_PERMISSIONS: Permission[] = ['authentication.manage', 'scoring.manage', 'appearance.manage'];
+export const ACCESS_VERSION = '5';
+const ADDED_ADMIN_PERMISSIONS: Permission[] = ['authentication.manage', 'scoring.manage', 'units.manage', 'planRows.manage', 'templates.manage'];
 
 export const withAddedAdminPermissions = (roles: RoleDefinition[]): RoleDefinition[] =>
   roles.map((role) => {

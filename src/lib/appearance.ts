@@ -291,6 +291,19 @@ export const normalizeAppearance = (raw: Partial<AppearanceSettings> | undefined
   };
 };
 
+/**
+ * Логотип и значок вкладки идут за акцентом: сменили акцент — сменился и знак.
+ * Явно заданный цвет логотипа всегда главнее.
+ */
+const withLogo = (overrides: Record<string, string>): Record<string, string> => {
+  const out = { ...overrides };
+  if (overrides.accent && !overrides['logo-1']) out['logo-1'] = overrides.accent;
+  if (overrides['accent-2'] && !overrides['logo-dark']) out['logo-dark'] = overrides['accent-2'];
+  // Акцент задан, а дополнительного нет — тёмные кубики берут его же, иначе знак развалится по цвету.
+  if (overrides.accent && !overrides['accent-2'] && !overrides['logo-dark']) out['logo-dark'] = overrides.accent;
+  return out;
+};
+
 const declarations = (overrides: Record<string, string>): string =>
   Object.entries(overrides)
     .flatMap(([name, value]) => [`--${name}: ${value};`, ...(RGB_TOKENS.has(name) ? [`--${name}-rgb: ${rgbChannels(value)};`] : [])])
@@ -306,9 +319,9 @@ export const appearanceCss = (settings: AppearanceSettings): string => {
     const value = settings.sizes[item.name];
     if (value !== item.base) base.push(`--size-${item.name}: ${value}px;`);
   }
-  const light = declarations(settings.light);
+  const light = declarations(withLogo(settings.light));
   if (base.length || light) rules.push(`:root { ${[...base, light].filter(Boolean).join(' ')} }`);
-  const dark = declarations(settings.dark);
+  const dark = declarations(withLogo(settings.dark));
   // Тёмная тема — и по выбору пользователя, и по настройке системы.
   if (dark) rules.push(`:root[data-theme='dark'] { ${dark} }`);
   return rules.join('\n');
@@ -325,6 +338,29 @@ export const isPresetActive = (settings: AppearanceSettings, preset: AppearanceP
   const current = settings[preset.theme];
   const keys = new Set([...Object.keys(current), ...Object.keys(preset.colors)]);
   return [...keys].every((key) => (current[key] ?? '') === (preset.colors[key] ?? ''));
+};
+
+// ——— Хранение у сотрудника ———
+
+/** Оформление — личное: у каждого своё и живёт в его браузере, а не в общей базе. */
+const STORAGE_KEY = 'task-control:appearance';
+
+export const loadAppearance = (): AppearanceSettings => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return normalizeAppearance(raw ? (JSON.parse(raw) as Partial<AppearanceSettings>) : undefined);
+  } catch {
+    // Приватное окно или запрет на хранение: работаем с оформлением по умолчанию.
+    return normalizeAppearance(undefined);
+  }
+};
+
+export const storeAppearance = (settings: AppearanceSettings): void => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    // Не сохранилось — оформление действует до конца сеанса.
+  }
 };
 
 /** Значение токена с учётом настроек — для образцов в редакторе. */

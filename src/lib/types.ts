@@ -7,10 +7,12 @@ export type Permission =
   | 'admin.access'
   | 'authentication.manage'
   | 'scoring.manage'
-  | 'appearance.manage'
   | 'users.manage'
+  | 'units.manage'
   | 'roles.manage'
   | 'dictionaries.manage'
+  | 'planRows.manage'
+  | 'templates.manage'
   | 'reports.view'
   | 'tasks.plan'
   | 'tasks.execute'
@@ -311,8 +313,6 @@ export type Data = Omit<AppState, 'version' | 'user' | 'planRows' | 'units' | 't
   chatReads?: ChatRead[];
   /** Правила подсчёта баллов; отсутствуют в базах прежних версий. */
   scoring?: ScoringSettings;
-  /** Оформление; отсутствует в базах прежних версий. */
-  appearance?: AppearanceSettings;
   /**
    * Версия набора прав в этих данных. Отличается от текущей — администратору дописываются
    * права, добавленные после выпуска базы. PostgreSQL и SQL Server держат ту же отметку в tc_meta.

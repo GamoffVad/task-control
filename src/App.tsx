@@ -4,6 +4,7 @@ import { NAV } from './components/nav';
 import { Shell } from './components/Shell';
 import { TooltipLayer } from './kit';
 import { AppearanceStyles } from './components/AppearanceStyles';
+import { Favicon } from './components/Favicon';
 import { DictionaryColors } from './components/DictionaryColors';
 import { canOpenPath } from './lib/permissions';
 import { useStore } from './lib/store';
@@ -61,6 +62,7 @@ export const AppRoutes = () => (
     <Title />
     <TooltipLayer />
     <AppearanceStyles />
+    <Favicon />
     <DictionaryColors />
     <Routes>
       <Route path="/login" element={<Login />} />

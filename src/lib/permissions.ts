@@ -34,7 +34,8 @@ export const taskAccess = (u: User | null, task: Task | null): TaskAccess => {
 
 /** Разделы, недоступные исполнителю. */
 export const canOpenPath = (u: User | null, path: string): boolean => {
-  if (path.startsWith('/admin')) return hasPermission(u, 'admin.access');
+  // Раздел открыт всем: у каждого есть хотя бы вкладка «Редактирование UI» со своим оформлением.
+  if (path.startsWith('/admin')) return !!u;
   if (path.startsWith('/reports') || path.startsWith('/kpi')) return hasPermission(u, 'reports.view');
   return !!u;
 };

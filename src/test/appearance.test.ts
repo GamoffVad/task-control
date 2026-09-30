@@ -1,7 +1,10 @@
 // Оформление интерфейса (src/lib/appearance.ts): приведение настроек к допустимым и стили поверх дизайн-системы.
 import { describe, expect, it } from 'vitest';
+import { faviconHref, faviconSvg } from '../lib/favicon';
 import {
   appearanceCss,
+  loadAppearance,
+  storeAppearance,
   BUILTIN_PRESETS,
   isPresetActive,
   MAX_PRESETS,
@@ -122,6 +125,40 @@ describe('оформление интерфейса', () => {
     // Исходная тема без переопределений активна, только когда ничего не переопределено.
     expect(isPresetActive(settings, BUILTIN_PRESETS[0])).toBe(false);
     expect(isPresetActive(normalizeAppearance(undefined), BUILTIN_PRESETS[0])).toBe(true);
+  });
+
+  it('логотип и значок идут за акцентом, явный цвет логотипа главнее', () => {
+    const byAccent = appearanceCss(normalizeAppearance({ light: { accent: '#7a1f3d', 'accent-2': '#a33f5e' } }));
+    expect(byAccent).toContain('--logo-1: #7a1f3d;');
+    expect(byAccent).toContain('--logo-dark: #a33f5e;');
+    // Без дополнительного акцента тёмные кубики берут основной, чтобы знак не распался по цвету.
+    expect(appearanceCss(normalizeAppearance({ light: { accent: '#7a1f3d' } }))).toContain('--logo-dark: #7a1f3d;');
+    // Заданный вручную цвет логотипа не перебивается.
+    const explicit = appearanceCss(normalizeAppearance({ light: { accent: '#7a1f3d', 'logo-1': '#123456' } }));
+    expect(explicit).toContain('--logo-1: #123456;');
+    expect(explicit).not.toContain('--logo-1: #7a1f3d;');
+  });
+
+  it('значок вкладки строится из той же геометрии и данных URI', () => {
+    const svg = faviconSvg({ dark: '#1f2b3a', accent: '#7a1f3d', paper: '#f1ede6' });
+    expect(svg.startsWith('<svg xmlns=')).toBe(true);
+    // Девять кубиков знака и подложка.
+    expect(svg.match(/<rect /g)!.length).toBe(10);
+    expect(svg).toContain('fill="#7a1f3d"');
+    expect(svg).toContain('fill="#1f2b3a"');
+    expect(faviconHref({ dark: '#000000', accent: '#ffffff', paper: '#f1ede6' }).startsWith('data:image/svg+xml,')).toBe(true);
+  });
+
+  it('оформление хранится у сотрудника в браузере', () => {
+    storeAppearance(normalizeAppearance({ light: { accent: '#7a1f3d' }, sizes: { base: 16, heading: 16, caps: 11, subtitle: 14 } }));
+    const back = loadAppearance();
+    expect(back.light).toEqual({ accent: '#7a1f3d' });
+    expect(back.sizes.base).toBe(16);
+    // Испорченное содержимое не роняет приложение: берём оформление по умолчанию.
+    localStorage.setItem('task-control:appearance', 'не json');
+    expect(loadAppearance()).toEqual(DEFAULT_APPEARANCE);
+    localStorage.clear();
+    expect(loadAppearance()).toEqual(DEFAULT_APPEARANCE);
   });
 
   it('все токены со спутником «-rgb» есть в списке цветов', () => {

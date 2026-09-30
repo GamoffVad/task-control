@@ -36,7 +36,8 @@ export const Shell = () => {
   const [confirmReset, setConfirmReset] = useState(false);
   const user = state.user!;
   const manager = isManager(user);
-  const administrator = hasPermission(user, 'admin.access');
+  // Раздел администрирования открыт всем: без прав в нём одна вкладка — своё оформление.
+  const canAdmin = !!user;
   const managedAccount = state.users.find((account) => account.employeeId === user.employeeId);
   const managedParts = managedAccount?.fullName.trim().split(/\s+/) ?? [];
   const managedShortName = managedAccount && managedParts.length > 1 ? `${managedParts[0]} ${managedParts.slice(1, 3).map((part) => `${part[0]}.`).join('')}` : shortName(user.employeeId);
@@ -131,7 +132,7 @@ export const Shell = () => {
                 {overdue > 0 && <span className="badge">{overdue}</span>}
               </Link>
               <ThemeToggle />
-              {administrator && (
+              {canAdmin && (
                 <Link to="/admin" className="icon-btn" aria-label="Администрирование" data-tip="Администрирование">
                   <Icon.Gear size={16} />
                 </Link>

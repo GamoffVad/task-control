@@ -91,7 +91,6 @@ const readAll = async (q: Q): Promise<Data | null> => {
   const accessVersion = await q.query(`select value from tc_meta where key = 'access-version'`);
   const authentication = await q.query(`select value from tc_meta where key = 'authentication-settings'`);
   const scoring = await q.query(`select value from tc_meta where key = 'scoring-settings'`);
-  const appearance = await q.query(`select value from tc_meta where key = 'appearance-settings'`);
   const tasks = await q.query('select * from tc_tasks order by seq');
   const absences = await q.query('select * from tc_absences order by date_from, id');
   const entitlements = await q.query('select * from tc_entitlements order by year, employee_id');
@@ -161,7 +160,6 @@ const readAll = async (q: Q): Promise<Data | null> => {
     roles: migratedRoles,
     authentication: authentication.rowCount ? JSON.parse(authentication.rows[0].value) : { ...DEFAULT_AUTHENTICATION },
     scoring: scoring.rowCount ? JSON.parse(scoring.rows[0].value) : { ...DEFAULT_SCORING },
-    ...(appearance.rowCount ? { appearance: JSON.parse(appearance.rows[0].value) } : {}),
     // Отметка версии прав: без неё общий код дописывал бы их администратору при каждом чтении.
     ...(accessVersion.rowCount ? { accessVersion: accessVersion.rows[0].value as string } : {}),
   };
@@ -386,13 +384,6 @@ export const createPgRepo = (connectionString: string, opts: { max?: number } = 
         if (accessVersion.rows[0]?.value !== ACCESS_VERSION) {
           for (const role of next.roles) await ROLES.upsert(client, role);
           await client.query(`insert into tc_meta (key, value) values ('access-version', $1) on conflict (key) do update set value = excluded.value`, [ACCESS_VERSION]);
-        }
-        if (next.appearance && stable(before.appearance) !== stable(next.appearance)) {
-          await client.query(
-            `insert into tc_meta (key, value) values ('appearance-settings', $1)
-             on conflict (key) do update set value = excluded.value`,
-            [JSON.stringify(next.appearance)],
-          );
         }
         if (stable(before.scoring ?? DEFAULT_SCORING) !== stable(next.scoring ?? DEFAULT_SCORING)) {
           await client.query(

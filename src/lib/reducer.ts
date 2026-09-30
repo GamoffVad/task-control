@@ -95,7 +95,6 @@ export const PERSISTED: Action['type'][] = [
   'saveRolePermissions',
   'saveAuthentication',
   'saveScoring',
-  'saveAppearance',
   'reset',
 ];
 
@@ -236,7 +235,7 @@ export const reducer = (state: AppState, action: Action): AppState => {
       return { ...state, dictionaries: state.dictionaries.filter((entry) => entry.id !== action.id) };
     }
     case 'savePlanRow': {
-      if (!hasPermission(state.user, 'dictionaries.manage')) return state;
+      if (!hasPermission(state.user, 'planRows.manage')) return state;
       const originalId = action.draft.originalId;
       const id = action.draft.id.trim().slice(0, 48);
       const title = action.draft.title.trim().slice(0, 200);
@@ -267,7 +266,7 @@ export const reducer = (state: AppState, action: Action): AppState => {
       return { ...state, tasks, planRows: sortedPlanRows(rows) };
     }
     case 'deletePlanRow': {
-      if (!hasPermission(state.user, 'dictionaries.manage') || !state.planRows.some((row) => row.id === action.id)) return state;
+      if (!hasPermission(state.user, 'planRows.manage') || !state.planRows.some((row) => row.id === action.id)) return state;
       if (state.tasks.some((task) => task.rowId === action.id)) return state;
       return { ...state, planRows: state.planRows.filter((row) => row.id !== action.id) };
     }
@@ -306,7 +305,7 @@ export const reducer = (state: AppState, action: Action): AppState => {
     }
     case 'saveUnit': {
       // Подразделения: организация → управление → отдел → отделение, родитель — строго уровнем выше.
-      if (!hasPermission(state.user, 'users.manage')) return state;
+      if (!hasPermission(state.user, 'units.manage')) return state;
       const d = action.draft;
       const name = d.name.trim().slice(0, 200);
       if (!name || !(d.kind in PARENT_KIND)) return state;
@@ -323,7 +322,7 @@ export const reducer = (state: AppState, action: Action): AppState => {
     }
     case 'saveTemplate': {
       // Шаблоны документов: название и текст с подстановками; неразбираемый шаблон не сохраняется.
-      if (!hasPermission(state.user, 'dictionaries.manage')) return state;
+      if (!hasPermission(state.user, 'templates.manage')) return state;
       const name = action.draft.name.trim().slice(0, 160);
       const body = action.draft.body.slice(0, 20000);
       if (!name || !body.trim()) return state;
@@ -339,11 +338,11 @@ export const reducer = (state: AppState, action: Action): AppState => {
       return { ...state, templates };
     }
     case 'deleteTemplate': {
-      if (!hasPermission(state.user, 'dictionaries.manage') || !state.templates.some((t) => t.id === action.id)) return state;
+      if (!hasPermission(state.user, 'templates.manage') || !state.templates.some((t) => t.id === action.id)) return state;
       return { ...state, templates: state.templates.filter((t) => t.id !== action.id) };
     }
     case 'deleteUnit': {
-      if (!hasPermission(state.user, 'users.manage')) return state;
+      if (!hasPermission(state.user, 'units.manage')) return state;
       if (!state.units.some((u) => u.id === action.id)) return state;
       // Удалить можно только пустое подразделение: без вложенных и без сотрудников.
       if (state.units.some((u) => u.parentId === action.id) || state.users.some((u) => (u.unitId ?? DEFAULT_UNIT_OF[u.employeeId]) === action.id)) return state;
@@ -387,7 +386,7 @@ export const reducer = (state: AppState, action: Action): AppState => {
       };
     }
     case 'saveAppearance':
-      if (!hasPermission(state.user, 'appearance.manage')) return state;
+      // Оформление у каждого своё и хранится в браузере, поэтому отдельного разрешения не требует.
       return { ...state, appearance: normalizeAppearance(action.appearance) };
     case 'reset':
       if (!hasPermission(state.user, 'data.reset')) return state;
@@ -476,7 +475,6 @@ export const toData = (s: AppState): Data => ({
   templates: s.templates,
   authentication: s.authentication,
   scoring: s.scoring,
-  appearance: s.appearance,
   accessVersion: ACCESS_VERSION,
 });
 
@@ -490,5 +488,5 @@ export const fromData = (d: Data, user: User | null): AppState => {
     return { ...account, windowsLogin: account.windowsLogin || account.email.split('@')[0], fullName: account.fullName || (employee ? `${employee.lastname} ${employee.name} ${employee.patronymic}` : account.windowsLogin), position: account.position || employee?.position || '', unitId: account.unitId ?? DEFAULT_UNIT_OF[account.employeeId] };
   });
   const { notices: _notices, accessVersion: _accessVersion, ...rest } = d;
-  return { version: 5, ...rest, chatReads: d.chatReads ?? [], units: d.units ?? DEFAULT_UNITS.map((u) => ({ ...u })), templates: (d.templates ?? DEFAULT_TEMPLATES).map((t) => ({ ...t, scope: templateScope(t) })), planRows: sortedPlanRows(d.planRows ?? planRows), dictionaries: d.dictionaries ?? DEFAULT_DICTIONARIES, users: normalizedUsers, roles, authentication: d.authentication ?? { ...DEFAULT_AUTHENTICATION }, scoring: d.scoring ?? { ...DEFAULT_SCORING }, appearance: normalizeAppearance(d.appearance), user: effectiveUser(user, normalizedUsers, roles) };
+  return { version: 5, ...rest, chatReads: d.chatReads ?? [], units: d.units ?? DEFAULT_UNITS.map((u) => ({ ...u })), templates: (d.templates ?? DEFAULT_TEMPLATES).map((t) => ({ ...t, scope: templateScope(t) })), planRows: sortedPlanRows(d.planRows ?? planRows), dictionaries: d.dictionaries ?? DEFAULT_DICTIONARIES, users: normalizedUsers, roles, authentication: d.authentication ?? { ...DEFAULT_AUTHENTICATION }, scoring: d.scoring ?? { ...DEFAULT_SCORING }, appearance: normalizeAppearance(undefined), user: effectiveUser(user, normalizedUsers, roles) };
 };

@@ -44,7 +44,9 @@ const maxX = Math.max(...corners.map((c) => c[0]));
 const minY = Math.min(...corners.map((c) => c[1]));
 const maxY = Math.max(...corners.map((c) => c[1]));
 const side = Math.max(maxX - minX, maxY - minY) + 6;
-export const VIEW = `${((minX + maxX) / 2 - side / 2).toFixed(2)} ${((minY + maxY) / 2 - side / 2).toFixed(2)} ${side.toFixed(2)} ${side.toFixed(2)}`;
+/** Рамка знака: из неё строятся и viewBox логотипа, и значок вкладки. */
+export const VIEW_BOX = { x: (minX + maxX) / 2 - side / 2, y: (minY + maxY) / 2 - side / 2, side };
+export const VIEW = `${VIEW_BOX.x.toFixed(2)} ${VIEW_BOX.y.toFixed(2)} ${VIEW_BOX.side.toFixed(2)} ${VIEW_BOX.side.toFixed(2)}`;
 
 export const FILL = ['var(--logo-dark)', 'var(--logo-1)'];
 

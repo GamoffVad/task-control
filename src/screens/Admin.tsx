@@ -17,16 +17,17 @@ import { PARENT_KIND, UNIT_KINDS, unitKindLabel, unitPath, unitTree, unitWithDes
 import { unitOf } from '../lib/data';
 
 type Tab = 'users' | 'units' | 'roles' | 'authentication' | 'scoring' | 'appearance' | 'dictionaries' | 'planRows' | 'templates';
-const ALL_TABS: { value: Tab; label: string; permission: Permission }[] = [
+// permission не задан — вкладка доступна каждому.
+const ALL_TABS: { value: Tab; label: string; permission?: Permission }[] = [
   { value: 'users', label: 'Пользователи', permission: 'users.manage' },
-  { value: 'units', label: 'Подразделения', permission: 'users.manage' },
+  { value: 'units', label: 'Подразделения', permission: 'units.manage' },
   { value: 'roles', label: 'Роли и разрешения', permission: 'roles.manage' },
   { value: 'authentication', label: 'Аутентификация', permission: 'authentication.manage' },
   { value: 'scoring', label: 'Оценка', permission: 'scoring.manage' },
-  { value: 'appearance', label: 'Редактирование UI', permission: 'appearance.manage' },
+  { value: 'appearance', label: 'Редактирование UI' },
   { value: 'dictionaries', label: 'Словари', permission: 'dictionaries.manage' },
-  { value: 'planRows', label: 'Разделы планирования', permission: 'dictionaries.manage' },
-  { value: 'templates', label: 'Шаблоны документов', permission: 'dictionaries.manage' },
+  { value: 'planRows', label: 'Разделы планирования', permission: 'planRows.manage' },
+  { value: 'templates', label: 'Шаблоны документов', permission: 'templates.manage' },
 ];
 const ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: 'administrator', label: 'Администратор' },
@@ -45,12 +46,19 @@ type TabProps = { state: ReturnType<typeof useStore>['state']; dispatch: ReturnT
 
 export const Admin = () => {
   const { state, dispatch } = useStore();
-  const tabs = ALL_TABS.filter((item) => hasPermission(state.user, item.permission));
+  const tabs = ALL_TABS.filter((item) => !item.permission || hasPermission(state.user, item.permission));
   const [tab, setTab] = useState<Tab>(() => tabs[0]?.value ?? 'users');
   const activeTab = tabs.some((item) => item.value === tab) ? tab : tabs[0]?.value;
   return (
     <section className="admin-page">
-      <PageHeader title="Администрирование" subtitle="Пользователи и подразделения, доступ, способ входа, правила оценки, разделы планирования, справочники и шаблоны документов." />
+      <PageHeader
+        title="Администрирование"
+        subtitle={
+          tabs.length > 1
+            ? 'Пользователи и подразделения, доступ, способ входа, правила оценки, разделы планирования, справочники и шаблоны документов.'
+            : 'Оформление интерфейса: цвета, шрифты и размеры текста. Настройки личные — действуют только у вас.'
+        }
+      />
       {tabs.length > 0 && <Segmented value={activeTab!} options={tabs} onChange={setTab} label="Раздел администрирования" />}
       {activeTab === 'users' && <UsersTab state={state} dispatch={dispatch} />}
       {activeTab === 'units' && <UnitsTab state={state} dispatch={dispatch} />}
@@ -461,7 +469,7 @@ const AppearanceTab = ({ state, dispatch }: TabProps) => {
     <div className="card-head admin-content-head">
       <div>
         <h2>Редактирование UI</h2>
-        <p className="subtitle">Цвета, шрифты и размеры текста. Изменения видны сразу и действуют для всех пользователей. Сохраняются только отличия от оформления по умолчанию.</p>
+        <p className="subtitle">Цвета, шрифты и размеры текста. Настройки личные: хранятся в вашем браузере и других сотрудников не касаются. Сохраняются только отличия от оформления по умолчанию.</p>
       </div>
       <Button
         onClick={() => dispatch({ type: 'saveAppearance', appearance: { ...DEFAULT_APPEARANCE, light: {}, dark: {}, sizes: { ...DEFAULT_APPEARANCE.sizes } } })}
