@@ -75,6 +75,16 @@ for %%a in (%*) do (
 rem --- Сборка комплекта ---------------------------------------
 if defined SKIPBUILD goto :copy
 
+rem Папка dist-iis — результат сборки, в GitHub её нет. Нет исходников проекта (не поставлен npm install) —
+rem берём готовый комплект, привезённый в архиве; нет и его — объясняем, что делать.
+if not exist "%~dp0node_modules" (
+  if exist "%SOURCE%\server.cjs" (
+    echo [1/7] Исходников проекта нет — беру готовый комплект из папки dist-iis.
+    goto :copy
+  )
+  goto :nocomplect
+)
+
 echo [1/7] Сборка комплекта...
 pushd "%~dp0"
 call npm run build:iis
@@ -86,10 +96,7 @@ if not "%BUILD%"=="0" (
 )
 
 :copy
-if not exist "%SOURCE%\server.cjs" (
-  echo ОШИБКА: не найден комплект %SOURCE%. Запустите файл без ключа /nobuild.
-  goto :fail
-)
+if not exist "%SOURCE%\server.cjs" goto :nocomplect
 
 echo [2/7] Копирование файлов...
 if not exist "%TARGET%" mkdir "%TARGET%"
@@ -190,6 +197,20 @@ echo  3. Заполнить Windows-логины сотрудников и вк�
 echo  4. Полная инструкция: docs\corporate-offline.md
 echo.
 goto :end
+
+:nocomplect
+echo.
+echo ОШИБКА: не найден готовый комплект "%SOURCE%\server.cjs".
+echo.
+echo   Папка dist-iis — результат сборки, в GitHub её нет, а на сервере без интернета
+echo   собрать её нельзя: npm install скачивает пакеты из интернета.
+echo.
+echo   Что сделать:
+echo   1. На компьютере с интернетом выполнить в папке проекта  npm install  и  npm run pack:iis
+echo      (готовый архив task-control-iis-ВЕРСИЯ.zip есть и в релизе проекта на GitHub).
+echo   2. Перенести архив на сервер на съёмном носителе и распаковать.
+echo   3. Запустить deploy-iis.bat из распакованной папки: в ней уже лежит собранный dist-iis.
+goto :fail
 
 :fail
 echo.

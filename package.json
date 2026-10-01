@@ -1,7 +1,7 @@
 {
   "name": "task-control",
   "private": true,
-  "version": "5.25.2",
+  "version": "5.25.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,6 +15,7 @@
     "docs": "node docs/build-docs.mjs",
     "build:vercel": "node scripts/build-vercel.mjs",
     "build:iis": "node scripts/build-iis.mjs",
+    "pack:iis": "node scripts/pack-iis.mjs",
     "deploy": "node scripts/deploy-vercel.mjs"
   },
   "dependencies": {

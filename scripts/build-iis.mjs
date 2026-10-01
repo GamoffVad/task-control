@@ -82,16 +82,20 @@ writeFileSync(
 `,
 );
 
-writeFileSync(
-  path.join(out, 'ЧИТАТЬ.txt'),
-  [
-    'Комплект публикации «Контроль задач» для IIS.',
-    '',
-    'Состав: server.cjs — сервер приложения, public\\ — интерфейс, web.config — настройки IIS, data\\ — файловое хранилище.',
-    'Хранилище: задайте MSSQL_SERVER — база и таблицы в SQL Server создадутся сами при первом запуске.',
-    'Настройки правятся в разделе appSettings файла web.config; после правки IIS перезапускает приложение сам.',
-    'Порядок развёртывания и настройка Windows-входа: docs\\corporate-offline.md.',
-  ].join('\r\n'),
-);
+// Имя латиницей: кириллица в именах файлов портится в архивах, собранных Windows PowerShell 5.1.
+const readme = [
+  'Комплект публикации «Контроль задач» для IIS.',
+  '',
+  'Состав: server.cjs — сервер приложения, public\\ — интерфейс, web.config — настройки IIS,',
+  'setup-sql.ps1 — подготовка SQL Server, data\\ — файловое хранилище.',
+  '',
+  'Публикация: запустить deploy-iis.bat от имени администратора. Он копирует этот комплект в IIS,',
+  'создаёт сайт, пул и Windows-аутентификацию, заводит учётную запись и базу SQL Server.',
+  '',
+  'Настройки правятся в разделе appSettings файла web.config; после правки IIS перезапускает приложение сам.',
+  'Порядок развёртывания и настройка Windows-входа: corporate-offline.md (в архиве релиза) или docs\\corporate-offline.md.',
+].join(String.fromCharCode(13, 10));
+// BOM нужен, чтобы Блокнот показал кириллицу правильно.
+writeFileSync(path.join(out, 'README.txt'), String.fromCharCode(0xfeff) + readme);
 
 console.log(`Готово: ${path.relative(root, out)}`);
