@@ -8,6 +8,7 @@ rem  Адрес: http://10.199.127.27:1500  Папка: C:\inetpub\wwwroot\PLAN
 rem  Запускать от имени администратора.
 rem  Ключи: /nobuild — без пересборки, /nosql — не трогать SQL Server,
 rem         /resetsql — задать учётной записи приложения новый пароль.
+rem  С другого компьютера в сети: deploy-iis-remote.bat -Server ИМЯ_СЕРВЕРА (см. docs/corporate-offline.md).
 rem ============================================================
 
 set "SITE=PLAN"
@@ -22,6 +23,16 @@ set "SQLDB=TaskControl"
 set "SQLLOGIN=tc_app"
 set "APPCMD=%windir%\system32\inetsrv\appcmd.exe"
 set "SECTION=system.webServer/security/authentication"
+rem Переопределение настроек без правки файла: так запускает публикацию с другого компьютера deploy-remote.ps1.
+if defined TC_IIS_SITE set "SITE=%TC_IIS_SITE%"
+if defined TC_IIS_SITE set "POOL=%TC_IIS_SITE%"
+if defined TC_IIS_POOL set "POOL=%TC_IIS_POOL%"
+if defined TC_IIS_IP set "IP=%TC_IIS_IP%"
+if defined TC_IIS_PORT set "PORT=%TC_IIS_PORT%"
+if defined TC_IIS_TARGET set "TARGET=%TC_IIS_TARGET%"
+if defined TC_SQLSERVER set "SQLSERVER=%TC_SQLSERVER%"
+if defined TC_SQLDB set "SQLDB=%TC_SQLDB%"
+if defined TC_SQLLOGIN set "SQLLOGIN=%TC_SQLLOGIN%"
 
 echo.
 echo === Контроль задач: публикация в IIS ===

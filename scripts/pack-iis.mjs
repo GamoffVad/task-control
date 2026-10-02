@@ -24,6 +24,10 @@ rmSync(release, { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
 cpSync(path.join(root, 'dist-iis'), path.join(stage, 'dist-iis'), { recursive: true });
 copyFileSync(path.join(root, 'deploy-iis.bat'), path.join(stage, 'deploy-iis.bat'));
+// Публикация с другого компьютера сети и скрипт базы данных — в тех же папках, что и в репозитории.
+copyFileSync(path.join(root, 'deploy-iis-remote.bat'), path.join(stage, 'deploy-iis-remote.bat'));
+mkdirSync(path.join(stage, 'scripts'), { recursive: true });
+for (const file of ['deploy-remote.ps1', 'create-database.sql']) copyFileSync(path.join(root, 'scripts', file), path.join(stage, 'scripts', file));
 copyFileSync(path.join(root, 'docs', 'corporate-offline.md'), path.join(stage, 'corporate-offline.md'));
 
 // Короткая памятка в корне архива. Сервер без интернета: всё нужное привозится заранее, на носителе.
@@ -40,6 +44,13 @@ const steps = [
   '2. Запустите deploy-iis.bat от имени администратора. Файл сам поймёт, что исходников проекта нет,',
   '   и возьмёт готовую папку dist-iis; ключ /nobuild указывать не обязательно.',
   '3. Откройте http://<адрес>:<порт>/api/health — должно быть {"ok":true,"storage":"sqlserver"}.',
+  '',
+  'Публикация с другого компьютера сети (на сервере запускать ничего не нужно):',
+  '   deploy-iis-remote.bat -Server ИМЯ_СЕРВЕРА            (проверка сервера: добавьте -Check)',
+  '   Нужны права администратора на сервере и включённый WinRM (Enable-PSRemoting -Force).',
+  '',
+  'База данных вручную: scripts\\create-database.sql — выполните в SQL Server Management Studio',
+  '(перед этим замените пароль в разделе 2), затем публикуйте с ключом /nosql.',
   '',
   'Подробная инструкция — corporate-offline.md в этом архиве.',
 ];

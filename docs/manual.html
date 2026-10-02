@@ -651,6 +651,7 @@ npm run build        # проверка типов и сборка интерф�
 npm run build:vercel # интерфейс + функции API в .vercel/output
 npm run build:iis    # комплект для публикации в IIS в dist-iis/
 npm run pack:iis     # архив для переноса на сервер без интернета в release/
+npm run build:sql    # скрипт создания базы SQL Server scripts/create-database.sql
 npm test             # модульные и интерфейсные тесты
 npm run lint         # статический анализ (oxlint)
 npm run docs         # скриншоты + дымовая проверка + этот PDF</div>
@@ -690,6 +691,11 @@ npm run docs         # скриншоты + дымовая проверка + э
     <li><b>Заполнить Windows-логины</b> сотрудников в их карточках и только после этого включить режим «Windows-аутентификация».</li>
   </ol>
   <p class="note"><b>Повторная публикация.</b> Для обновления привезите новый архив и снова запустите <code>deploy-iis.bat</code>: он обновляет файлы и настройки IIS (ключ <code>/nobuild</code> — без пересборки, если рядом лежат исходники); <code>/nosql</code> не трогает SQL Server, <code>/resetsql</code> задаёт учётной записи новый пароль. Файл <code>web.config</code> с настройками, папка <code>data</code> с файловым хранилищем и папка <code>iisnode</code> с журналами не перезаписываются и не удаляются. Адрес, порт, имя сайта и папку можно изменить переменными в первых строках батника. Путь к <code>node.exe</code> определяется при первой публикации и записывается в <code>web.config</code>.</p>
+
+  <h3>Публикация с другого компьютера сети</h3>
+  <p>Публиковать в IIS можно с любого компьютера сети: <code>deploy-iis-remote.bat -Server ИМЯ_СЕРВЕРА</code>. Комплект передаётся на сервер по PowerShell Remoting (WinRM), и там выполняется тот же <code>deploy-iis.bat</code>. Нужны права администратора на сервере и включённый WinRM (<code>Enable-PSRemoting -Force</code>). Ключ <code>-Check</code> только проверяет сервер, <code>-AskCredential</code> запрашивает другую учётную запись, <code>-NoSql</code> и <code>-ResetSql</code> действуют как <code>/nosql</code> и <code>/resetsql</code>. Журнал сохраняется в <code>deploy-remote-СЕРВЕР.log</code>.</p>
+  <h3>Скрипт базы данных</h3>
+  <p>Файл <code>scripts/create-database.sql</code> создаёт базу <code>TaskControl</code>, учётную запись <code>tc_app</code> и все таблицы приложения — для случая, когда базу удобнее подготовить вручную или SQL Server стоит на другом компьютере. Замените пароль в разделе 2, выполните скрипт в SQL Server Management Studio, впишите настройки в <code>web.config</code> и публикуйте с ключом <code>/nosql</code>. Скрипт можно запускать повторно; он создаётся командой <code>npm run build:sql</code> из схемы приложения.</p>
 
   <h3>Версии</h3>
   <p>Приложение использует семантическое версионирование <b>MAJOR.MINOR.PATCH</b>: MAJOR — смена модели данных, ролей или облика; MINOR — новые возможности; PATCH — исправления. Версия хранится в <code>package.json</code>, показывается в подвале приложения, на экране входа и на обложке документации. История изменений — в файле <code>CHANGELOG.md</code>. Перед каждой публикацией версия повышается, документация пересобирается.</p>
