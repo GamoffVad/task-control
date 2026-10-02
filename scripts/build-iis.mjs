@@ -2,7 +2,7 @@
 //   npm run build:iis → deploy-iis.bat копирует папку в C:\inetpub\wwwroot\PLAN
 import { build } from 'esbuild';
 import { execSync } from 'node:child_process';
-import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -96,6 +96,8 @@ const readme = [
   'Порядок развёртывания и настройка Windows-входа: corporate-offline.md (в архиве релиза) или docs\\corporate-offline.md.',
 ].join(String.fromCharCode(13, 10));
 // BOM нужен, чтобы Блокнот показал кириллицу правильно.
+// Версия комплекта: deploy-iis.bat показывает её до и после копирования и проверяет, что файлы обновились.
+writeFileSync(path.join(out, 'version.txt'), JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')).version);
 writeFileSync(path.join(out, 'README.txt'), String.fromCharCode(0xfeff) + readme);
 
 console.log(`Готово: ${path.relative(root, out)}`);

@@ -99,6 +99,13 @@ if not "%BUILD%"=="0" (
 if not exist "%SOURCE%\server.cjs" goto :nocomplect
 
 echo [2/7] Копирование файлов...
+set "NEWVER=нет"
+if exist "%SOURCE%\version.txt" set /p NEWVER=<"%SOURCE%\version.txt"
+set "OLDVER=нет"
+if exist "%TARGET%\version.txt" set /p OLDVER=<"%TARGET%\version.txt"
+echo   Версия комплекта: %NEWVER%. На сервере сейчас: %OLDVER%.
+rem Останавливаем пул, чтобы Node.js не держал старые файлы и после запуска работала новая версия.
+"%APPCMD%" stop apppool "%POOL%" >nul 2>&1
 if not exist "%TARGET%" mkdir "%TARGET%"
 if not exist "%TARGET%\web.config" (
   copy /y "%SOURCE%\web.config" "%TARGET%\web.config" >nul
@@ -109,6 +116,7 @@ rem Настройки и данные сохраняются: web.config и п�
 robocopy "%SOURCE%" "%TARGET%" /MIR /XF web.config /XD data iisnode /NFL /NDL /NJH /NJS /NP >nul
 if errorlevel 8 (
   echo ОШИБКА: копирование не выполнено.
+  "%APPCMD%" start apppool "%POOL%" >nul 2>&1
   goto :fail
 )
 if not exist "%TARGET%\data" mkdir "%TARGET%\data"
@@ -185,8 +193,18 @@ if errorlevel 1 netsh advfirewall firewall add rule name="TaskControl %PORT%" di
 "%APPCMD%" start apppool "%POOL%" >nul 2>&1
 "%APPCMD%" start site "%SITE%" >nul 2>&1
 
+set "CURVER=нет"
+if exist "%TARGET%\version.txt" set /p CURVER=<"%TARGET%\version.txt"
+if not "%CURVER%"=="%NEWVER%" (
+  echo.
+  echo ВНИМАНИЕ: после копирования в %TARGET% версия %CURVER%, а в комплекте %NEWVER%.
+  echo Файлы не обновились: проверьте сообщения выше, права и не открыта ли папка в другой программе.
+  goto :fail
+)
+
 echo.
-echo Готово. Приложение доступно по адресу http://%IP%:%PORT%/
+echo Готово. Установлена версия %CURVER%. Приложение доступно по адресу http://%IP%:%PORT%/
+echo Если в браузере прежняя версия — обновите страницу через Ctrl+F5.
 echo.
 echo Дальше:
 echo  1. Проверить раздел appSettings файла %TARGET%\web.config: строки MSSQL_ и AUTH_SECRET
