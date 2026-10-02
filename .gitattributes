@@ -14,3 +14,6 @@
 
 # Скрипты PowerShell запускает Windows PowerShell 5.1: нужны CRLF и BOM в UTF-8.
 *.ps1 text eol=crlf
+
+# Скрипт базы данных: SSMS и sqlcmd — переводы строк Windows; тест сверяет файл с генератором.
+*.sql text eol=crlf
