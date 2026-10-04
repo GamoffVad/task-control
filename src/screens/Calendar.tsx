@@ -159,9 +159,6 @@ export const Calendar = () => {
         <FilterCard label="Исполнитель">
           <EmployeeFilter value={employee} onChange={setEmployee} />
         </FilterCard>
-        <FilterCard label="Поиск">
-          <SearchField value={query} onChange={setQuery} placeholder="Название, результат, документ…" label="Поиск мероприятий по содержанию" />
-        </FilterCard>
         <FilterCard label="Категории">
           <MultiSelect<CatKey>
             label="Категории мероприятий"
@@ -170,6 +167,9 @@ export const Calendar = () => {
             value={allCats.filter((k) => cats.has(k))}
             onChange={(shown) => setHiddenCats(new Set(allCats.filter((k) => !shown.includes(k))))}
           />
+        </FilterCard>
+        <FilterCard label="Поиск">
+          <SearchField value={query} onChange={setQuery} placeholder="Название, результат, документ…" label="Поиск мероприятий по содержанию" />
         </FilterCard>
       </div>
       </div>

@@ -29,6 +29,10 @@ copyFileSync(path.join(root, 'deploy-iis-remote.bat'), path.join(stage, 'deploy-
 mkdirSync(path.join(stage, 'scripts'), { recursive: true });
 for (const file of ['deploy-remote.ps1', 'create-database.sql']) copyFileSync(path.join(root, 'scripts', file), path.join(stage, 'scripts', file));
 copyFileSync(path.join(root, 'docs', 'corporate-offline.md'), path.join(stage, 'corporate-offline.md'));
+// PDF-инструкция по публикации (docs/build-iis-guide.mjs), если она собрана для этой версии.
+const guide = path.join(root, 'docs', `Контроль-задач-инструкция-IIS-v${version}.pdf`);
+// В архиве имя латиницей: Compress-Archive кладёт кириллические имена в кодировке консоли, и сторонние архиваторы их искажают.
+if (existsSync(guide)) copyFileSync(guide, path.join(stage, `IIS-guide-v${version}.pdf`));
 
 // Короткая памятка в корне архива. Сервер без интернета: всё нужное привозится заранее, на носителе.
 const steps = [
