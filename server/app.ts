@@ -10,7 +10,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { validateAbsence, type AbsenceDraft } from '../src/lib/absences';
 import { authenticate } from '../src/lib/auth';
-import { DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_USERS, effectiveUser, hasPermission, PERMISSIONS, sessionUser } from '../src/lib/access';
+import { ACCESS_VERSION, DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_USERS, effectiveUser, hasPermission, PERMISSIONS, sessionUser, withAddedPermissions } from '../src/lib/access';
 import { CATEGORIES, employeeById, planRows, syncCategories, syncStaff } from '../src/lib/data';
 import { DEFAULT_UNITS } from '../src/lib/units';
 import { validateTask, type TaskDraft } from '../src/lib/logic';
@@ -23,6 +23,7 @@ import type { ActiveDirectory } from './activeDirectory';
 import type { WindowsAuthCheck } from './windowsAuth';
 import { dayKey, detectEvents, hourOf, overdueNotice, type NoticeEvent } from '../src/lib/notify';
 import { newId } from '../src/lib/reducer';
+import { scopeOf, visibleReports, visibleTasks } from '../src/lib/visibility';
 
 export class HttpError extends Error {
   status: number;
@@ -360,7 +361,15 @@ const fresh = (data: Data, now: Date) => (data.notices ?? []).filter((n) => now.
 /** Клиенту не нужны чужие отметки «прочитано» и журнал уведомлений (свои уведомления — через /api/notices). */
 const forUser = (data: Data, user: User): Data => {
   const { notices: _notices, ...rest } = data;
-  return { ...rest, chatReads: (data.chatReads ?? []).filter((r) => r.employeeId === user.employeeId) };
+  // Задачи и строки отчётов — только по иерархии: подчинённый видит свои, начальник отделения — своего подразделения,
+  // начальник отдела и администратор — все (src/lib/visibility.ts).
+  const scope = scopeOf(user.employeeId, data.users, data.units ?? DEFAULT_UNITS, data.roles);
+  return {
+    ...rest,
+    tasks: visibleTasks(data.tasks, scope),
+    reports: visibleReports(data.reports, scope),
+    chatReads: (data.chatReads ?? []).filter((r) => r.employeeId === user.employeeId),
+  };
 };
 
 export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentity, windowsCheck, directory }: Options) => {
@@ -369,7 +378,11 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
     // Выбранный режим сохраняется как есть. Если сервер не умеет Windows-вход, приложение
     // не переписывает настройку, а пускает по форме (см. POST /api/login) — иначе переключатель
     // в администрировании «не держится», а причина остаётся неизвестной.
-    const access = recoverAdministrativeAccess(normalizeUsers(data.users ?? DEFAULT_USERS), data.roles ?? DEFAULT_ROLES, authentication.mode === 'form' || !windowsIdentity);
+    // Права, добавленные после выпуска базы (например, «Видеть задачи всего отдела»), дописываются при чтении,
+    // а не только при первой записи: иначе до неё администратор видел бы лишь своё подразделение.
+    const storedRoles = data.roles ?? DEFAULT_ROLES;
+    const roles = data.accessVersion === ACCESS_VERSION ? storedRoles : withAddedPermissions(storedRoles);
+    const access = recoverAdministrativeAccess(normalizeUsers(data.users ?? DEFAULT_USERS), roles, authentication.mode === 'form' || !windowsIdentity);
     return { ...data, ...access, authentication };
   };
   /** Данные; пустая база заполняется демонстрационными данными. */
@@ -513,8 +526,9 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
         case 'GET /api/state': {
           const tokenUser = authed(req);
           const data = await load();
-          if (!effectiveUser(tokenUser, data.users, data.roles)) throw new HttpError(401, 'Учётная запись отключена.');
-          return send(res, 200, { data: forUser(data, tokenUser) });
+          const stateUser = effectiveUser(tokenUser, data.users, data.roles);
+          if (!stateUser) throw new HttpError(401, 'Учётная запись отключена.');
+          return send(res, 200, { data: forUser(data, stateUser) });
         }
         case 'POST /api/action': {
           const tokenUser = authed(req);
@@ -540,7 +554,8 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
             const events = NOTIFYING.has(action.type) ? detectEvents(current, next, user) : [];
             return { ...next, notices: [...fresh(current, t), ...toNotices(events, t)] };
           });
-          return send(res, 200, { data: forUser(data, tokenUser) });
+          // Права после действия могли измениться (например, роль), поэтому видимость считаем по новым данным.
+          return send(res, 200, { data: forUser(data, effectiveUser(tokenUser, data.users, data.roles) ?? tokenUser) });
         }
         default:
           throw new HttpError(404, 'Нет такого адреса API.');

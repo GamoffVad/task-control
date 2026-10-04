@@ -3,6 +3,8 @@
 // забирает свои уведомления и показывает их средствами Chrome. Всё работает внутри корпоративной сети, без интернета.
 
 import { shortName } from './data';
+import { DEFAULT_UNITS } from './units';
+import { scopeOf, taskVisible } from './visibility';
 import type { Absence, Data, ManagedUser, Permission, Task, User } from './types';
 
 export type NoticeEvent = {
@@ -69,7 +71,9 @@ export const detectEvents = (before: Data, after: Data, actor: User, timeZone = 
       events.push({ to: kept, title: 'Изменён срок задачи', body: `${clip(t.title, 140)}\nНовый ${deadline(t).toLowerCase()} · ${who}`, url: '/control' });
     }
     if (!was.done && t.done) {
-      const to = others(holders(after, 'tasks.plan'), me);
+      // Руководителям — тем, кто видит эту задачу по иерархии подразделений.
+      const units = after.units ?? DEFAULT_UNITS;
+      const to = others(holders(after, 'tasks.plan').filter((id) => taskVisible(t, scopeOf(id, after.users, units, after.roles))), me);
       if (to.length) events.push({ to, title: `Задача исполнена · ${who}`, body: clip(`${t.title}${t.result ? `. ${t.result}` : ''}`, 200), url: '/control' });
     }
   }

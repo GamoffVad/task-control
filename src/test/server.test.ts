@@ -148,15 +148,32 @@ describe('API', () => {
   });
 
   it('проверяет права на сервере', async () => {
+    // Чужую задачу исполнителю сервер не отдаёт вовсе, но и по известному идентификатору её не удалить.
+    const admin = await login('user@example.com');
+    const all = await call('/api/state', { token: admin });
+    const foreign = all.json.data!.tasks.find((t) => !t.assigneeIds.includes(3))!;
     const token = await login('sidorov@example.com');
     const { json } = await call('/api/state', { token });
-    const foreign = json.data!.tasks.find((t) => !t.assigneeIds.includes(3))!;
+    expect(json.data!.tasks.some((t) => t.id === foreign.id)).toBe(false);
     const del = await call('/api/action', { method: 'POST', token, body: { action: { type: 'deleteTask', id: foreign.id } } });
     expect(del.status).toBe(403);
     const report = await call('/api/action', { method: 'POST', token, body: { action: { type: 'submitReport', weekStart: '2026-09-11T00:00:00.000Z' } } });
     expect(report.status).toBe(403);
-    const after = await call('/api/state', { token });
+    const after = await call('/api/state', { token: admin });
     expect(after.json.data!.tasks.some((t) => t.id === foreign.id)).toBe(true);
+  });
+
+  it('отдаёт задачи по иерархии: подчинённый — свои, руководитель — подразделения, администратор — все', async () => {
+    const adminTasks = (await call('/api/state', { token: await login('user@example.com') })).json.data!.tasks;
+    const executor = (await call('/api/state', { token: await login('sidorov@example.com') })).json.data!.tasks;
+    const manager = (await call('/api/state', { token: await login('petrov@example.com') })).json.data!.tasks;
+    expect(adminTasks.length).toBeGreaterThan(executor.length);
+    expect(executor.length).toBeGreaterThan(0);
+    expect(executor.every((t) => t.assigneeIds.includes(3))).toBe(true);
+    // Петров — руководитель отделения «Руководство» (Иванов и Петров): чужих исполнителей в его выдаче нет.
+    expect(manager.length).toBeGreaterThan(0);
+    expect(manager.every((t) => t.assigneeIds.some((id) => id === 1 || id === 2))).toBe(true);
+    expect(manager.length).toBeLessThan(adminTasks.length);
   });
 
   it('исполнитель создаёт заявку только на себя, даже если прислал чужой id', async () => {

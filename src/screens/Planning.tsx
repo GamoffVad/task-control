@@ -13,6 +13,8 @@ import { isManager } from '../lib/permissions';
 import { visibleBottom } from '../lib/viewport';
 import { useStore } from '../lib/store';
 import { useClashes } from '../lib/useClashes';
+import { useScope } from '../lib/useScope';
+import { inScope } from '../lib/visibility';
 import { absenceInPeriod, fmtSpan, type Clash } from '../lib/absences';
 import { AbsentTag } from '../components/AbsentTag';
 import type { Task } from '../lib/types';
@@ -50,7 +52,9 @@ export const Planning = () => {
   const cells = useMemo(() => groupByCell(weekTasks), [weekTasks]);
   // Исполнитель видит и планирует только свой столбец.
   // Руководитель сужает матрицу до группы отдела, а внутри неё — до одного сотрудника.
-  const people = groupMembers(group);
+  // Руководитель видит столбцы только тех, чьи задачи ему видны (его подразделение, а у начальника отдела — все).
+  const scope = useScope();
+  const people = groupMembers(group).filter((e) => inScope(scope, e.id));
   const shownId = manager ? employee : me;
   const columns = shownId ? employees.filter((e) => e.id === shownId) : people;
   const [docOpen, setDocOpen] = useState(false);
@@ -60,7 +64,7 @@ export const Planning = () => {
   const changeGroup = (g: string) => {
     setGroup(g);
     // Сотрудник из другой группы сбрасывается, иначе матрица показала бы человека вне выбранной группы.
-    if (employee && !groupMembers(g).some((e) => e.id === employee)) setEmployee(null);
+    if (employee && !groupMembers(g).some((e) => e.id === employee && inScope(scope, e.id))) setEmployee(null);
   };
   const weekEnd = addDays(weekStart, 6);
   const report = findReport(state.reports, weekStart);
@@ -158,7 +162,8 @@ export const Planning = () => {
       )}
 
       <div className="plan-wrap" ref={wrap}>
-        <table className="plan-table">
+        {/* Один столбец сотрудника (он сам или выбранный в фильтре) делается шире столбца разделов. */}
+        <table className={`plan-table${columns.length === 1 ? ' plan-table--single' : ''}`}>
           <thead>
             <tr>
               <th className="sticky-col pos-cell">Разделы планирования</th>

@@ -667,6 +667,9 @@ td.name { color: var(--ink); font-weight: 600; }
 .plan-table tr.section .sticky-col { background: var(--soft-alt); }
 .plan-table td.score-cell { white-space: nowrap; width: 72px; font-family: var(--font-mono); color: var(--ink-3); text-align: right; }
 .plan-table td.cell { padding: 6px; min-width: 168px; }
+/* Один столбец сотрудника (он сам или выбранный в фильтре): шире столбца разделов планирования, а не равен ему. */
+.plan-table--single th.emp, .plan-table--single td.cell { min-width: 340px; }
+.plan-table--single th.pos-cell, .plan-table--single td.pos-cell { width: 300px; min-width: 240px; max-width: 320px; }
 .plan-table td.cell:hover { background: var(--soft); }
 /* Кнопка «+ задача»: в пустой ячейке заполняет её и видна при наведении, под задачами видна всегда. */
 .cell-add {

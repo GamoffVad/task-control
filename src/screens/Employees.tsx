@@ -11,11 +11,14 @@ import { isManager } from '../lib/permissions';
 import { absenceInPeriod } from '../lib/absences';
 import { AbsentTag } from '../components/AbsentTag';
 import { useStore } from '../lib/store';
+import { useScope } from '../lib/useScope';
+import { inScope } from '../lib/visibility';
 import type { Period } from '../lib/types';
 
 export const Employees = () => {
   const { id } = useParams();
   const { state } = useStore();
+  const scope = useScope();
   const selected = id ? Number(id) : null;
 
   const counts = useMemo(() => {
@@ -39,15 +42,17 @@ export const Employees = () => {
     if (selected !== me) return <Navigate to={`/employees/${me}`} replace />;
     return <EmployeeCard key={me} id={me} />;
   }
+  // Начальник отделения видит карточки своего подразделения, начальник отдела — всех.
+  if (!inScope(scope, selected)) return <Navigate to={`/employees/${me}`} replace />;
 
   return (
     <div className="split split--300 employees-layout">
       <aside className="panel employee-directory" aria-label="Структура подразделения">
         <span className="caps">{department.name}</span>
-        {department.groups.map((g) => (
+        {department.groups.filter((g) => g.employeeIds.some((eid) => inScope(scope, eid))).map((g) => (
           <div className="tree-group" key={g.id}>
             <span className="caps" style={{ color: 'var(--ink-4)' }}>{g.name}</span>
-            {g.employeeIds.map((eid) => {
+            {g.employeeIds.filter((eid) => inScope(scope, eid)).map((eid) => {
               const e = employeeById.get(eid)!;
               const c = counts.get(eid);
               return (
@@ -72,7 +77,7 @@ export const Employees = () => {
             })}
           </div>
         ))}
-        {state.users.some((account) => !employeeById.has(account.employeeId)) && <div className="tree-group">
+        {scope === null && state.users.some((account) => !employeeById.has(account.employeeId)) && <div className="tree-group">
           <span className="caps" style={{ color: 'var(--ink-4)' }}>Active Directory</span>
           {state.users.filter((account) => !employeeById.has(account.employeeId)).map((account) => {
             const parts = account.fullName.split(/\s+/);

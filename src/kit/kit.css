@@ -276,3 +276,16 @@ input[type='search']::-webkit-search-cancel-button, input[type='search']::-webki
 .template-help dl div { display: grid; grid-template-columns: minmax(180px, 280px) minmax(0, 1fr); gap: 10px; }
 .template-help dt code { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink); }
 .template-help dd { margin: 0; color: var(--ink-3); }
+
+/* Строка фильтров не слипается: у ячеек есть минимальная ширина, а когда места не хватает — они переносятся на вторую строку.
+   Раньше поле поиска (min-width 200px) выступало за свою ячейку и наезжало на список категорий. */
+@media (min-width: 1024px) {
+  .filters { flex-wrap: wrap; }
+  .filter-card:has(.search) { flex: 2 1 300px; min-width: 300px; }
+  .filter-card:has(.dd) { flex: 1 1 210px; min-width: 210px; }
+}
+
+/* Заголовок и фильтры, закреплённые под шапкой приложения (например, в «Календаре»). */
+@media (min-width: 1024px) {
+  .sticky-head { position: sticky; top: var(--topbar-h, 64px); z-index: 20; background: var(--paper); }
+}

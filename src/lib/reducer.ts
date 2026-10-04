@@ -7,6 +7,7 @@ import { normalizeAppearance } from './appearance';
 import { buildReportEntries, clampScore, upsertReport, type TaskDraft } from './logic';
 import { absenceAccess, isManager, taskAccess } from './permissions';
 import { toDateKey } from './dates';
+import { scopeOf, taskVisible, type Scope } from './visibility';
 import type { AbsenceDraft } from './absences';
 import type { Absence, AbsenceStatus, AppearanceSettings, AppState, ChatRead, AuthenticationMode, Data, DictionaryEntry, DictionaryKind, Entitlement, ManagedUser, Message, Permission, PlanRow, Role, RoleDefinition, ScoringSettings, Task, TemplateScope, Unit, UnitKind, User } from './types';
 import { DEFAULT_UNIT_OF, DEFAULT_UNITS, PARENT_KIND } from './units';
@@ -102,9 +103,17 @@ let counter = 0;
 export const newId = (prefix: string) =>
   `${prefix}-${Date.now().toString(36)}-${(counter++).toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
+/** Область видимости задач вошедшего пользователя по данным состояния. */
+const userScope = (state: AppState): Scope => (state.user ? scopeOf(state.user.employeeId, state.users, state.units, state.roles) : new Set<number>());
+
 /** Применяет правку с учётом прав: исполнитель меняет только поля исполнения своих задач. */
-const applyDraft = (user: User | null, existing: Task | undefined, draft: TaskDraft): TaskDraft | null => {
+const applyDraft = (user: User | null, existing: Task | undefined, draft: TaskDraft, scope: Scope): TaskDraft | null => {
   const access = taskAccess(user, existing ?? null);
+  // Задачу вне своей области видимости не изменить, а исполнителей можно назначать только из неё
+  // (оставить уже назначенных вне области можно: иначе правка видимой задачи была бы невозможна).
+  if (existing && !taskVisible(existing, scope)) return null;
+  // (Исполнитель и так создаёт задачу только себе — его список подменяется ниже.)
+  if (access.plan && isManager(user) && scope !== null && !draft.assigneeIds.every((id) => scope.has(id) || existing?.assigneeIds.includes(id))) return null;
   if (!existing) {
     if (!access.plan) return null;
     // Исполнитель создаёт задачу только для себя и без индивидуальных баллов.
@@ -147,7 +156,7 @@ export const reducer = (state: AppState, action: Action): AppState => {
     case 'saveTask': {
       const now = action.now ?? new Date();
       const existing = action.draft.id ? state.tasks.find((t) => t.id === action.draft.id) : undefined;
-      const allowed = applyDraft(state.user, existing, action.draft);
+      const allowed = applyDraft(state.user, existing, action.draft, userScope(state));
       if (!allowed) return state;
       const { id: _id, ...rest } = allowed;
       const doneAt = rest.done ? (existing?.done && existing.doneAt ? existing.doneAt : now.toISOString()) : null;
@@ -158,6 +167,8 @@ export const reducer = (state: AppState, action: Action): AppState => {
     }
     case 'deleteTask':
       if (!hasPermission(state.user, 'tasks.delete')) return state;
+      // Удалить можно только то, что видишь.
+      if (!taskVisible(state.tasks.find((t) => t.id === action.id) ?? { assigneeIds: [] }, userScope(state))) return state;
       return { ...state, tasks: state.tasks.filter((t) => t.id !== action.id) };
     case 'submitReport': {
       if (!hasPermission(state.user, 'reports.view') || !hasPermission(state.user, 'tasks.plan')) return state;

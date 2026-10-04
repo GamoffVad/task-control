@@ -2,10 +2,12 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { PeriodPicker } from '../components/ui';
 import { FilterCard, PageHeader } from '../kit';
-import { employeeById, shortName } from '../lib/data';
+import { department, employeeById, shortName } from '../lib/data';
 import { fmtDate, fmtDayMonth, fmtNum, PERIOD_LABELS, periodStart, plural, points } from '../lib/dates';
 import { kpiByDirection, kpiByEmployee, reportWeek, summarize, type ScoringContext } from '../lib/logic';
 import { useStore } from '../lib/store';
+import { useScope } from '../lib/useScope';
+import { inScope } from '../lib/visibility';
 import type { Period, ScoringAverageBase } from '../lib/types';
 
 /** Чем делится общий балл — подпись под средним значением. */
@@ -21,8 +23,10 @@ export const Kpi = () => {
   // «Сейчас» фиксируется на время просмотра: иначе пересчёт шёл бы на каждой отрисовке.
   const now = useMemo(() => new Date(), []);
   const ctx = useMemo<ScoringContext>(() => ({ scoring: state.scoring, users: state.users, units: state.units }), [state.scoring, state.users, state.units]);
-  const rows = useMemo(() => kpiByEmployee(state.reports, period, now, ctx), [state.reports, period, now, ctx]);
-  const directions = useMemo(() => (state.scoring.byDirection ? kpiByDirection(state.reports, period, now, ctx) : []), [state.reports, period, now, ctx, state.scoring.byDirection]);
+  const scope = useScope();
+  // Начальник отделения видит показатели своего подразделения: баллы остальных ему не показываются (в отчётах их строки скрыты).
+  const rows = useMemo(() => kpiByEmployee(state.reports, period, now, ctx).filter((r) => inScope(scope, r.employeeId)), [state.reports, period, now, ctx, scope]);
+  const directions = useMemo(() => (state.scoring.byDirection ? kpiByDirection(state.reports, period, now, ctx).filter((d) => scope === null || department.groups.find((g) => g.id === d.id)?.employeeIds.some((id) => scope.has(id))) : []), [state.reports, period, now, ctx, state.scoring.byDirection, scope]);
   // Итоги считаются по правилам оценки: исключённые сотрудники в них не входят.
   const summary = useMemo(() => summarize(new Map(rows.map((r) => [r.employeeId, r.total])), ctx), [rows, ctx]);
   const counted = rows.filter((r) => !r.excluded);

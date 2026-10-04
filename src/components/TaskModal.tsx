@@ -5,6 +5,7 @@ import { fmtNum, fromInputDateTime, toInputDateTime } from '../lib/dates';
 import { baseScore, MAX_SCORE, MIN_SCORE, validateTask, type TaskDraft, type TaskErrors } from '../lib/logic';
 import { taskAccess } from '../lib/permissions';
 import { useStore } from '../lib/store';
+import { useScopeEmployees } from '../lib/useScope';
 import { covers, fmtSpan, isActive } from '../lib/absences';
 import { absenceType } from '../lib/data';
 import type { Category, User } from '../lib/types';
@@ -136,7 +137,11 @@ const TaskModal = ({ task, defaults, context, onClose }: OpenArgs & { onClose: (
 
   const row = draft.rowId ? state.planRows.find((item) => item.id === draft.rowId) : null;
   const rowIsHeader = !!row?.isHeader;
-  const assigneeChoices = access.plan && user?.role === 'executor' ? employees.filter((e) => e.id === user.employeeId) : employees;
+  // Исполнитель назначает только себя, руководитель — тех, чьи задачи ему видны; уже назначенные остаются в списке.
+  const visibleEmployees = useScopeEmployees();
+  const assigneeChoices = access.plan && user?.role === 'executor'
+    ? employees.filter((e) => e.id === user.employeeId)
+    : employees.filter((e) => visibleEmployees.some((v) => v.id === e.id) || draft.assigneeIds.includes(e.id));
 
   return (
     <Dialog

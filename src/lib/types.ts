@@ -18,6 +18,7 @@ export type Permission =
   | 'tasks.plan'
   | 'tasks.execute'
   | 'tasks.score'
+  | 'tasks.viewAll'
   | 'tasks.delete'
   | 'absences.manage'
   | 'absences.request'
@@ -323,7 +324,7 @@ export type Data = Omit<AppState, 'version' | 'user' | 'planRows' | 'units' | 't
   notices?: Notice[];
 };
 
-export type CalendarView = 'day' | 'workWeek' | 'week' | 'month';
+export type CalendarView = 'day' | 'week' | 'month';
 
 export type Period = 'all' | 'month' | 'quarter' | 'half' | 'year';
 

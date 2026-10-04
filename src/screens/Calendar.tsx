@@ -21,6 +21,7 @@ import {
 import { isOverdue, searchTasks } from '../lib/logic';
 import { FIRST_HOUR, LAST_HOUR, layoutDay } from '../lib/calendarLayout';
 import { isManager } from '../lib/permissions';
+import { loadCalendarView, storeCalendarView } from '../lib/calendarView';
 import { useStore } from '../lib/store';
 import { useClashes } from '../lib/useClashes';
 import type { Clash } from '../lib/absences';
@@ -30,7 +31,6 @@ const HOURS = Array.from({ length: LAST_HOUR - FIRST_HOUR }, (_, i) => FIRST_HOU
 
 const VIEWS: { value: CalendarView; label: string }[] = [
   { value: 'day', label: 'День' },
-  { value: 'workWeek', label: 'Рабочая неделя' },
   { value: 'week', label: 'Неделя' },
   { value: 'month', label: 'Месяц' },
 ];
@@ -63,7 +63,13 @@ export const Calendar = () => {
   const { state } = useStore();
   const { openTask } = useTaskEditor();
   const manager = isManager(state.user);
-  const [view, setView] = useState<CalendarView>('workWeek');
+  const employeeId = state.user?.employeeId;
+  // Вид запоминается за сотрудником: при следующем заходе календарь открывается в том же виде.
+  const [view, setViewState] = useState<CalendarView>(() => loadCalendarView(employeeId));
+  const setView = (next: CalendarView) => {
+    setViewState(next);
+    storeCalendarView(next, employeeId);
+  };
   const [cursor, setCursor] = useState(() => startOfDay(new Date()));
   // Исполнитель по умолчанию видит свои задачи, но может посмотреть и весь отдел.
   const [employee, setEmployee] = useState<number | null>(manager ? null : (state.user?.employeeId ?? null));
@@ -92,7 +98,7 @@ export const Calendar = () => {
   const days = useMemo(() => {
     if (view === 'day') return [cursor];
     const monday = startOfWeek(cursor);
-    return Array.from({ length: view === 'workWeek' ? 5 : 7 }, (_, i) => addDays(monday, i));
+    return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   }, [view, cursor]);
 
   const step = (dir: 1 | -1) => {
@@ -125,6 +131,8 @@ export const Calendar = () => {
 
   return (
     <div className="calendar-layout">
+      {/* Заголовок и фильтры закреплены под шапкой приложения: при прокрутке они остаются на месте. */}
+      <div className="sticky-head">
       <PageHeader
         title="Календарь"
         subtitle="Задачи отдела во времени. Свободное время — новая задача, задача — открыть."
@@ -159,7 +167,7 @@ export const Calendar = () => {
           />
         </FilterCard>
       </div>
-
+      </div>
 
       {query.trim() && (
         <section className="search-results" aria-label="Результаты поиска">

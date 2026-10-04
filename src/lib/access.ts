@@ -17,6 +17,7 @@ export const PERMISSIONS: { key: Permission; label: string; group: string }[] = 
   { key: 'tasks.plan', label: 'Планировать задачи для сотрудников', group: 'Задачи' },
   { key: 'tasks.execute', label: 'Вести исполнение назначенных задач', group: 'Задачи' },
   { key: 'tasks.score', label: 'Назначать баллы', group: 'Задачи' },
+  { key: 'tasks.viewAll', label: 'Видеть задачи всего отдела (иначе — свои и своего подразделения)', group: 'Задачи' },
   { key: 'tasks.delete', label: 'Удалять задачи', group: 'Задачи' },
   { key: 'absences.manage', label: 'Вести отсутствия и согласовывать заявки', group: 'Отсутствия' },
   { key: 'absences.request', label: 'Подавать заявки на отсутствие', group: 'Отсутствия' },
@@ -53,9 +54,9 @@ export const DEFAULT_AUTHENTICATION = { mode: 'form', allowEmergencyForm: true }
  * Версия набора прав. Права, добавленные после выпуска базы, дописываются один раз при обновлении:
  * иначе новый раздел администрирования остался бы недоступен.
  */
-export const ACCESS_VERSION = '6';
+export const ACCESS_VERSION = '7';
 /** Дописываются администратору: доступ к этим вкладкам выдаётся осознанно. */
-const ADDED_ADMIN_PERMISSIONS: Permission[] = ['authentication.manage', 'scoring.manage', 'units.manage', 'planRows.manage', 'templates.manage'];
+const ADDED_ADMIN_PERMISSIONS: Permission[] = ['authentication.manage', 'scoring.manage', 'units.manage', 'planRows.manage', 'templates.manage', 'tasks.viewAll'];
 /** Дописываются всем ролям: оформление личное и по умолчанию доступно каждому. */
 const ADDED_FOR_ALL_PERMISSIONS: Permission[] = ['appearance.manage'];
 
