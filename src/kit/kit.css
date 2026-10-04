@@ -289,3 +289,20 @@ input[type='search']::-webkit-search-cancel-button, input[type='search']::-webki
 @media (min-width: 1024px) {
   .sticky-head { position: sticky; top: var(--topbar-h, 64px); z-index: 20; background: var(--paper); }
 }
+
+/* Панель управления в строке заголовка (Календарь): период и вид рядом с названием, как подпись у других разделов. */
+.page-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; align-self: center; min-width: 0; }
+.page-toolbar .tool { display: flex; align-items: center; gap: 10px; padding: 0 18px; border-left: 1px dashed var(--dash); min-width: 0; }
+.page-toolbar .tool:first-child { border-left: none; padding-left: 4px; }
+.page-toolbar .tool > .caps { flex: none; white-space: nowrap; }
+.page-toolbar .stepper { flex-wrap: nowrap; white-space: nowrap; }
+.page-toolbar .seg { flex-wrap: nowrap; }
+.page-toolbar .seg button { white-space: nowrap; }
+@media (max-width: 767px) {
+  .page-toolbar { flex-basis: 100%; }
+  .page-toolbar .tool { flex-wrap: wrap; padding: 6px 14px 6px 0; border-left: none; }
+}
+
+/* Выпадающий список без рамки внутри формы (например, «Роль»): ширина по значению, а не на всю строку,
+   иначе стрелка уезжает далеко вправо от текста. */
+.field > .dd--plain { width: fit-content; min-width: 200px; max-width: 100%; }

@@ -135,7 +135,18 @@ export const Calendar = () => {
       <div className="sticky-head">
       <PageHeader
         title="Календарь"
-        subtitle="Задачи отдела во времени. Свободное время — новая задача, задача — открыть."
+        toolbar={
+          <>
+            <div className="tool">
+              <span className="caps">Период</span>
+              <Stepper label="Период" value={title} onPrev={() => step(-1)} onNext={() => step(1)} onToday={() => setCursor(startOfDay(new Date()))} />
+            </div>
+            <div className="tool">
+              <span className="caps">Вид</span>
+              <Segmented label="Вид календаря" value={view} options={VIEWS} onChange={setView} />
+            </div>
+          </>
+        }
         actions={
           <>
             <button type="button" className="btn btn--primary" onClick={() => create(nextQuarter())}>
@@ -145,16 +156,10 @@ export const Calendar = () => {
         }
       />
       <div className="filters">
-        <FilterCard label="Период">
-          <Stepper label="Период" value={title} onPrev={() => step(-1)} onNext={() => step(1)} onToday={() => setCursor(startOfDay(new Date()))} />
-        </FilterCard>
-        <FilterCard label="Вид">
-          <Segmented label="Вид календаря" value={view} options={VIEWS} onChange={setView} />
-        </FilterCard>
         <FilterCard label="Исполнитель">
           <EmployeeFilter value={employee} onChange={setEmployee} />
         </FilterCard>
-        <FilterCard label="Поиск по содержанию">
+        <FilterCard label="Поиск">
           <SearchField value={query} onChange={setQuery} placeholder="Название, результат, документ…" label="Поиск мероприятий по содержанию" />
         </FilterCard>
         <FilterCard label="Категории">
