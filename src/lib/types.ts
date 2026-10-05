@@ -20,6 +20,7 @@ export type Permission =
   | 'tasks.score'
   | 'tasks.viewAll'
   | 'tasks.delete'
+  | 'chat.moderate'
   | 'absences.manage'
   | 'absences.request'
   | 'entitlements.manage'

@@ -1055,6 +1055,19 @@ a.label:hover { color: var(--accent); }
 .msg .when { font-family: var(--font-mono); font-size: 11px; color: var(--ink-4); margin-left: 8px; font-weight: 400; }
 .msg .text { font-size: 13.5px; color: var(--ink-2); line-height: 1.55; white-space: pre-wrap; word-break: break-word; margin-top: 1px; }
 .msg.mine .who { color: var(--accent); }
+/* Удаление сообщения: кнопка видна при наведении на сообщение и при фокусе с клавиатуры. */
+.msg .msg-delete { width: 22px; height: 22px; margin-left: 6px; vertical-align: middle; opacity: 0; }
+.msg:hover .msg-delete, .msg .msg-delete:focus-visible { opacity: 1; }
+@media (hover: none) { .msg .msg-delete { opacity: 1; } }
+.chat-period-fields { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.chat-period-fields .datefield { width: 132px; flex: none; }
+@media (max-width: 559px) {
+  /* На телефоне «с» и «по» — по строке на всю ширину, чтобы дата помещалась целиком. */
+  .chat-period-fields { display: grid; grid-template-columns: auto minmax(0, 1fr); flex: 1 1 100%; }
+  .chat-period-fields .datefield { width: 100%; }
+}
+.chat-earlier { margin: 4px 0 8px; font-size: 12.5px; }
+.chat-delete-text { white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow: auto; }
 .composer { display: flex; gap: 10px; padding-top: 14px; border-top: 1px dashed var(--dash); align-items: flex-end; }
 .composer textarea { flex: 1 1 auto; min-height: 44px; max-height: 160px; }
 @media (max-width: 559px) {

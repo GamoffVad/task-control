@@ -14,6 +14,7 @@ export const PERMISSIONS: { key: Permission; label: string; group: string }[] = 
   { key: 'templates.manage', label: 'Шаблоны документов: редактировать', group: 'Администрирование' },
   { key: 'appearance.manage', label: 'Редактирование UI: настраивать своё оформление', group: 'Администрирование' },
   { key: 'reports.view', label: 'Просматривать отчётность и показатели', group: 'Работа отдела' },
+  { key: 'chat.moderate', label: 'Переписка: удалять сообщения', group: 'Работа отдела' },
   { key: 'tasks.plan', label: 'Планировать задачи для сотрудников', group: 'Задачи' },
   { key: 'tasks.execute', label: 'Вести исполнение назначенных задач', group: 'Задачи' },
   { key: 'tasks.score', label: 'Назначать баллы', group: 'Задачи' },
@@ -54,9 +55,9 @@ export const DEFAULT_AUTHENTICATION = { mode: 'form', allowEmergencyForm: true }
  * Версия набора прав. Права, добавленные после выпуска базы, дописываются один раз при обновлении:
  * иначе новый раздел администрирования остался бы недоступен.
  */
-export const ACCESS_VERSION = '7';
+export const ACCESS_VERSION = '8';
 /** Дописываются администратору: доступ к этим вкладкам выдаётся осознанно. */
-const ADDED_ADMIN_PERMISSIONS: Permission[] = ['authentication.manage', 'scoring.manage', 'units.manage', 'planRows.manage', 'templates.manage', 'tasks.viewAll'];
+const ADDED_ADMIN_PERMISSIONS: Permission[] = ['authentication.manage', 'scoring.manage', 'units.manage', 'planRows.manage', 'templates.manage', 'tasks.viewAll', 'chat.moderate'];
 /** Дописываются всем ролям: оформление личное и по умолчанию доступно каждому. */
 const ADDED_FOR_ALL_PERMISSIONS: Permission[] = ['appearance.manage'];
 

@@ -42,6 +42,7 @@ export type Action =
   | { type: 'deleteTask'; id: string }
   | { type: 'submitReport'; weekStart: Date; now?: Date }
   | { type: 'sendMessage'; text: string; now?: Date }
+  | { type: 'deleteMessage'; id: string }
   | { type: 'markChatRead'; now?: Date }
   | { type: 'saveAbsence'; draft: AbsenceDraft; now?: Date }
   | { type: 'deleteAbsence'; id: string }
@@ -77,6 +78,7 @@ export const PERSISTED: Action['type'][] = [
   'deleteTask',
   'submitReport',
   'sendMessage',
+  'deleteMessage',
   'markChatRead',
   'saveAbsence',
   'deleteAbsence',
@@ -191,6 +193,10 @@ export const reducer = (state: AppState, action: Action): AppState => {
       };
       return { ...state, messages: [...state.messages, message], chatReads: markRead(state.chatReads, state.user.employeeId, message.sentAt) };
     }
+    case 'deleteMessage':
+      // Удаляет сообщение из общего канала тот, кому выдано право (по умолчанию — администратор).
+      if (!hasPermission(state.user, 'chat.moderate') || !state.messages.some((m) => m.id === action.id)) return state;
+      return { ...state, messages: state.messages.filter((m) => m.id !== action.id) };
     case 'markChatRead':
       // Отметка «прочитано» только для себя; время — серверное, поэтому состояние всегда новое.
       if (!state.user) return state;

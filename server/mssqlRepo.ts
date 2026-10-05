@@ -526,17 +526,26 @@ export const ensureDatabase = async (settings: MssqlSettings): Promise<void> => 
 export const createMssqlRepo = (settings: MssqlSettings): Repo => {
   const pool = new sql.ConnectionPool(poolConfig(settings, settings.database));
   let ready: Promise<sql.ConnectionPool> | null = null;
+  /** Были ли таблицы приложения до первого подключения: от этого зависит, писать ли демоданные. */
+  let tablesExisted = true;
 
   const connect = () =>
     (ready ??= (async () => {
       await ensureDatabase(settings);
       await pool.connect();
+      // Таблицы создаются, только если их нет (if object_id ... is null), и ничего не удаляется.
+      const found = await rows(pool, "select count(*) as [n] from sys.tables where [name] like N'tc[_]%'");
+      tablesExisted = Number((found[0] as { n?: number } | undefined)?.n ?? 0) > 0;
       for (const statement of SCHEMA) await pool.request().query(statement);
       return pool;
     })().catch((e) => ((ready = null), Promise.reject(e))));
 
   return {
     kind: 'sqlserver',
+    seedDemo: async () => {
+      await connect();
+      return !tablesExisted;
+    },
     ping: async () => {
       // connect() создаёт базу и таблицы, поэтому проверка охватывает всю готовность хранилища.
       await connect();

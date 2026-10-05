@@ -240,6 +240,16 @@ if errorlevel 1 netsh advfirewall firewall add rule name="TaskControl %PORT%" di
 "%APPCMD%" start apppool "%POOL%" >nul 2>&1
 "%APPCMD%" start site "%SITE%" >nul 2>&1
 
+rem Первое обращение к приложению: оно подключается к SQL Server, создаёт недостающие таблицы и, если
+rem таблиц до этого не было, заполняет их тестовыми данными. Так база готова сразу после публикации.
+echo   Проверка приложения и базы данных...
+set "HEALTH=1"
+powershell -NoProfile -Command "try { $u='http://%IP%:%PORT%/api'; $h = Invoke-RestMethod -Uri ($u + '/health') -TimeoutSec 90; [void](Invoke-RestMethod -Uri ($u + '/authentication') -TimeoutSec 90); if ($h.storage -eq 'sqlserver') { exit 0 } else { exit 3 } } catch { exit 1 }"
+set "HEALTH=%errorlevel%"
+if "%HEALTH%"=="0" echo   База %SQLDB% на %SQLSERVER% готова: таблицы созданы, приложение работает с ней.
+if "%HEALTH%"=="3" echo   ВНИМАНИЕ: приложение работает не с SQL Server, а с файлом data\db.json: в web.config не заполнены MSSQL_ ^(смотрите шаг 7^).
+if "%HEALTH%"=="1" echo   ВНИМАНИЕ: приложение не ответило или база недоступна. Откройте http://%IP%:%PORT%/api/health, причина — в журнале %TARGET%\iisnode.
+
 set "CURVER=нет"
 if exist "%TARGET%\version.txt" set /p CURVER=<"%TARGET%\version.txt"
 if not "%CURVER%"=="%NEWVER%" (
@@ -255,7 +265,7 @@ echo Если в браузере прежняя версия — обновит
 echo.
 echo Дальше:
 echo  1. Проверить раздел appSettings файла %TARGET%\web.config: строки MSSQL_ и AUTH_SECRET
-echo     заполняются шагом 7 автоматически. Таблицы создадутся при первом открытии приложения.
+echo     заполняются шагом 7 автоматически, таблицы созданы при проверке выше.
 echo  2. Войти администратором, открыть Администрирование ^> Аутентификация
 echo     и нажать «Проверить настройку»: там видно, какой доменный логин получил сервер.
 echo  3. Заполнить Windows-логины сотрудников и выбрать способ входа «Windows» — IIS и web.config

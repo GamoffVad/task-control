@@ -268,6 +268,45 @@ describe('API', () => {
     expect((await call('/api/state', { token: worker })).json.data!.chatReads!.map((r) => r.employeeId)).toEqual([3]);
   });
 
+  it('в уже существующие пустые таблицы демоданные не пишутся, но администратор по умолчанию входит', async () => {
+    // Так ведёт себя SQL Server, если таблицы были до запуска (например, созданы скриптом create-database.sql).
+    repo = { ...createMemoryRepo(), seedDemo: async () => false };
+    const admin = await login('user@example.com');
+    const { json } = await call('/api/state', { token: admin });
+    expect(json.data!.tasks).toEqual([]);
+    expect(json.data!.messages).toEqual([]);
+    expect(json.data!.absences).toEqual([]);
+    expect(json.data!.users.map((u) => u.email)).toEqual(['user@example.com']);
+    // Справочники и роли нужны для работы и записываются.
+    expect(json.data!.dictionaries.length).toBeGreaterThan(0);
+    expect(json.data!.roles.length).toBeGreaterThan(0);
+    // Сохранение не подмешивает демоданные.
+    await call('/api/action', { method: 'POST', token: admin, body: { action: { type: 'sendMessage', text: 'Первое сообщение' } } });
+    const after = (await call('/api/state', { token: admin })).json.data!;
+    expect(after.messages.map((m) => m.text)).toEqual(['Первое сообщение']);
+    expect(after.tasks).toEqual([]);
+  });
+
+  it('пустая база без таблиц заполняется демоданными', async () => {
+    repo = { ...createMemoryRepo(), seedDemo: async () => true };
+    const admin = await login('user@example.com');
+    expect((await call('/api/state', { token: admin })).json.data!.tasks.length).toBeGreaterThan(0);
+  });
+
+  it('удаляет сообщение переписки только с правом «Переписка: удалять сообщения»', async () => {
+    const admin = await login('user@example.com');
+    const worker = await login('sidorov@example.com');
+    const sent = await call('/api/action', { method: 'POST', token: worker, body: { action: { type: 'sendMessage', text: 'Лишнее сообщение' } } });
+    const message = sent.json.data!.messages.find((m) => m.text === 'Лишнее сообщение')!;
+    // Исполнитель удалить не может — даже своё сообщение.
+    expect((await call('/api/action', { method: 'POST', token: worker, body: { action: { type: 'deleteMessage', id: message.id } } })).status).toBe(403);
+    const removed = await call('/api/action', { method: 'POST', token: admin, body: { action: { type: 'deleteMessage', id: message.id } } });
+    expect(removed.status).toBe(200);
+    expect(removed.json.data!.messages.some((m) => m.id === message.id)).toBe(false);
+    // Повторное удаление того же сообщения ничего не меняет.
+    expect((await call('/api/action', { method: 'POST', token: admin, body: { action: { type: 'deleteMessage', id: message.id } } })).status).toBe(403);
+  });
+
   it('неизвестный адрес — 404', async () => {
     expect((await call('/api/nothing')).status).toBe(404);
   });

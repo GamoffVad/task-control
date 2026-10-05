@@ -163,6 +163,9 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
     case 'sendMessage':
       if (!str(a.text, 1000)) bad('сообщение');
       return { type: 'sendMessage', text: a.text as string, now };
+    case 'deleteMessage':
+      if (!str(a.id, 100)) bad('идентификатор сообщения');
+      return { type: 'deleteMessage', id: a.id as string };
     case 'saveAbsence':
       return { type: 'saveAbsence', draft: checkAbsenceDraft(a.draft, data, now), now };
     case 'deleteAbsence':
@@ -398,9 +401,23 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
     const access = recoverAdministrativeAccess(normalizeUsers(data.users ?? DEFAULT_USERS), roles, authentication.mode === 'form' || !windowsIdentity);
     return { ...data, ...access, authentication };
   };
+  /**
+   * Начальные данные пустой базы: демонстрационные, если хранилище это разрешает (для SQL Server — только
+   * когда таблиц до запуска не было). Иначе — только справочники, роли и подразделения по умолчанию,
+   * без задач, сообщений и демонстрационных сотрудников; войти можно администратором по умолчанию.
+   */
+  const initialData = (t: Date, demo: boolean): Data => {
+    const seed = toData(createSeed(t));
+    if (demo) return seed;
+    return { ...seed, tasks: [], absences: [], entitlements: [], reports: [], messages: [], chatReads: [], notices: [], users: [] };
+  };
+  const allowDemo = async () => (await repo.seedDemo?.()) ?? true;
   /** Данные; пустая база заполняется демонстрационными данными. */
   const load = async (): Promise<Data> => {
-    const data = (await repo.read()) ?? await repo.update((cur) => cur ?? toData(createSeed(now())));
+    const data = (await repo.read()) ?? await (async () => {
+      const demo = await allowDemo();
+      return repo.update((cur) => cur ?? initialData(now(), demo));
+    })();
     // Проверки сотрудников (исполнители, отсутствия, нормы) — по актуальному составу из базы.
     syncStaff(data.users ?? DEFAULT_USERS, data.units ?? DEFAULT_UNITS);
     syncCategories(data.dictionaries ?? DEFAULT_DICTIONARIES);
@@ -549,8 +566,9 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
           const tokenUser = authed(req);
           const body = await readBody(req);
           const t = now();
+          const demo = await allowDemo();
           const data = await repo.update((cur) => {
-            const raw = cur ?? toData(createSeed(t));
+            const raw = cur ?? initialData(t, demo);
             const current = normalizeData(raw);
             const action = parseAction(isObj(body) ? body.action : undefined, current, t);
             // Режим «Windows» разрешено включать заранее: пока сервер не настроен, вход идёт по форме,
