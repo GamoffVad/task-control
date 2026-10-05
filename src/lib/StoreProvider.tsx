@@ -146,7 +146,9 @@ const RemoteStore = ({ children }: { children: ReactNode }) => {
   const signIn = useCallback(
     async (email: string, password: string) => {
       try {
-        const s = await api.login(email, password);
+        // Вход по паролю при включённом режиме «Windows» — резервный вход администратора: его не подменяем.
+        const via = state.authentication.mode === 'windows' ? ('emergency' as const) : ('form' as const);
+        const s = { ...(await api.login(email, password)), via };
         session.current = s;
         writeSession(s);
         setState(emptyState(s.user));
@@ -157,23 +159,46 @@ const RemoteStore = ({ children }: { children: ReactNode }) => {
         return e instanceof Error ? e.message : BAD_LOGIN;
       }
     },
-    [load],
+    [load, state.authentication.mode],
   );
+
+  /** Сеанс, полученный входом через Windows, становится текущим. */
+  const adoptWindowsSession = useCallback(async (next: { token: string; user: User }) => {
+    const s = { ...next, via: 'windows' as const };
+    session.current = s;
+    writeSession(s);
+    // Оформление берётся у вошедшего сотрудника (emptyState читает его личный ключ), а не остаётся от прежнего.
+    setState((current) => ({ ...emptyState(s.user), authentication: current.authentication, scoring: current.scoring }));
+    setSync((current) => ({ ...current, loading: true, error: null }));
+    await load();
+  }, [load]);
 
   const signInWindows = useCallback(async () => {
     try {
-      const s = await api.windowsLogin();
-      session.current = s;
-      writeSession(s);
-      // Оформление берётся у вошедшего сотрудника (emptyState читает его личный ключ), а не остаётся от прежнего.
-      setState((current) => ({ ...emptyState(s.user), authentication: current.authentication, scoring: current.scoring }));
-      setSync((current) => ({ ...current, loading: true, error: null }));
-      await load();
+      await adoptWindowsSession(await api.windowsLogin());
       return null;
     } catch (error) {
       return error instanceof Error ? error.message : 'Не удалось выполнить вход через Windows.';
     }
-  }, [load]);
+  }, [adoptWindowsSession]);
+
+  // В режиме «Windows» сотрудник — тот, под чьей учётной записью Windows открыт браузер. Сеанс, открытый
+  // по паролю (до переключения режима или резервный вход администратора), заменяется входом через Windows,
+  // как только тот удаётся; не удался — остаётся прежний сеанс. Пробуем после сохранения режима на сервере
+  // и один раз для каждого сеанса.
+  const windowsAttempt = useRef<string | null>(null);
+  useEffect(() => {
+    if (!authenticationReady || !windowsAuthAvailable || state.authentication.mode !== 'windows' || sync.saving) return;
+    const current = session.current;
+    if (!current || current.via === 'windows' || current.via === 'emergency' || windowsAttempt.current === current.token) return;
+    windowsAttempt.current = current.token;
+    api.windowsLogin().then(
+      (next) => {
+        if (session.current?.token === current.token) void adoptWindowsSession(next);
+      },
+      () => undefined,
+    );
+  }, [authenticationReady, windowsAuthAvailable, state.authentication.mode, state.user, sync.saving, adoptWindowsSession]);
 
   const searchDirectory = useCallback(async (query: string): Promise<DirectoryUser[]> => {
     const token = session.current?.token;

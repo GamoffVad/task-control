@@ -67,7 +67,8 @@ export const api = {
 
 export const SESSION_KEY = 'task-control:session';
 
-export type Session = { token: string; user: User };
+/** via — как открыт сеанс: в режиме «Windows» сеанс по паролю заменяется входом под учётной записью Windows. */
+export type Session = { token: string; user: User; via?: 'form' | 'emergency' | 'windows' };
 
 export const readSession = (): Session | null => {
   try {
