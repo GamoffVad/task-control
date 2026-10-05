@@ -26,7 +26,8 @@ await build({
   platform: 'node',
   target: 'node22',
   format: 'cjs',
-  external: ['pg-native'],
+  // msnodesqlv8 — вход Windows в SQL Server, нужен только на сервере IIS.
+  external: ['pg-native', 'msnodesqlv8'],
   // Обработчик — module.exports, как ожидает среда Node.js на Vercel.
   footer: { js: 'module.exports = module.exports.default;' },
   logLevel: 'warning',

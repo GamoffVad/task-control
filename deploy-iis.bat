@@ -8,8 +8,11 @@ rem  Адрес: http://10.199.127.27:1500  Папка: C:\inetpub\wwwroot\PLAN
 rem  Запускать от имени администратора.
 rem  Недостающее ставит сам: роли Windows Server (IIS, проверка подлинности Windows, модуль AD) —
 rem  из состава системы; Node.js, URL Rewrite и iisnode — установщики .msi из папки installers рядом.
+rem  Пул приложений работает под учётной записью Windows того, кто публикует (пароль спрашивается один раз),
+rem  и под ней же приложение входит в SQL Server — без отдельной учётной записи SQL Server и пароля в web.config.
 rem  Ключи: /nobuild — без пересборки, /nosql — не трогать SQL Server,
-rem         /resetsql — задать учётной записи приложения новый пароль.
+rem         /password — спросить пароль Windows заново (после его смены),
+rem         /sqllogin — прежний способ: учётная запись SQL Server tc_app с паролем (/resetsql — новый пароль).
 rem  С другого компьютера в сети: deploy-iis-remote.bat -Server ИМЯ_СЕРВЕРА (см. docs/corporate-offline.md).
 rem ============================================================
 
@@ -108,12 +111,17 @@ if not errorlevel 1 set "ADSEARCH=true"
 rem --- Ключи запуска ------------------------------------------
 set "SKIPBUILD="
 set "SKIPSQL="
-set "RESETSQL="
+set "SQLMODE="
+set "ASKPASS="
 for %%a in (%*) do (
   if /i "%%~a"=="/nobuild" set "SKIPBUILD=1"
   if /i "%%~a"=="/nosql" set "SKIPSQL=1"
-  if /i "%%~a"=="/resetsql" set "RESETSQL=-Reset"
+  if /i "%%~a"=="/sqllogin" set "SQLMODE=-SqlLogin"
+  if /i "%%~a"=="/resetsql" set "SQLMODE=-SqlLogin -Reset"
+  if /i "%%~a"=="/password" set "ASKPASS=-Ask"
 )
+rem Учётная запись, под которой работает пул и приложение входит в SQL Server, — тот, кто публикует.
+for /f "delims=" %%u in ('powershell -NoProfile -Command "[Security.Principal.WindowsIdentity]::GetCurrent().Name"') do set "ME=%%u"
 
 rem --- Сборка комплекта ---------------------------------------
 if defined SKIPBUILD goto :copy
@@ -182,6 +190,16 @@ rem Без управляемого кода, без простоя и пере�
 "%APPCMD%" set apppool "%POOL%" /managedRuntimeVersion:"" /startMode:"AlwaysRunning" /processModel.idleTimeout:"00:00:00" /recycling.periodicRestart.time:"00:00:00" >nul
 icacls "%TARGET%\data" /grant "IIS AppPool\%POOL%:(OI)(CI)(M)" /T /C >nul
 icacls "%TARGET%\iisnode" /grant "IIS AppPool\%POOL%:(OI)(CI)(M)" /T /C >nul
+rem Пул — под учётной записью публикующего: под ней приложение входит в SQL Server (вход Windows).
+set "POOLSETUP=%~dp0scripts\set-pool-identity.ps1"
+if not exist "%POOLSETUP%" set "POOLSETUP=%TARGET%\set-pool-identity.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%POOLSETUP%" -Pool "%POOL%" %ASKPASS%
+if errorlevel 1 (
+  echo ОШИБКА: не удалось запустить пул %POOL% под учётной записью %ME% — смотрите сообщение выше.
+  goto :fail
+)
+icacls "%TARGET%\data" /grant "%ME%:(OI)(CI)(M)" /T /C >nul
+icacls "%TARGET%\iisnode" /grant "%ME%:(OI)(CI)(M)" /T /C >nul
 
 rem --- Сайт ----------------------------------------------------
 echo [5/7] Сайт и привязка...
@@ -211,7 +229,7 @@ rem Правило URL Rewrite прежних версий (X-Windows-User = {LO
 rem до проверки подлинности, и логин в нём был пустым. Пользователя передаёт iisnode.
 "%APPCMD%" set config "%SITE%" -section:system.webServer/rewrite/rules /-"[name='Windows user']" /commit:apphost >nul 2>&1
 
-rem --- SQL Server: база и учётная запись приложения ------------
+rem --- SQL Server: база и подключение приложения ----------------
 echo [7/7] SQL Server...
 rem Внутри блока «if (...)» переменная не успевает раскрыться, поэтому путь ищем заранее.
 set "SQLSETUP=%~dp0scripts\setup-sql.ps1"
@@ -222,9 +240,9 @@ if not exist "%SQLSETUP%" (
   echo   ВНИМАНИЕ: не найден %SQLSETUP% — настройка SQL Server пропущена.
   goto :sqldone
 )
-rem Скрипт создаёт учётную запись и базу от имени текущего администратора и вписывает
-rem настройки в web.config. Таблицы приложение создаёт само при первом запуске.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%SQLSETUP%" -Server "%SQLSERVER%" -Database "%SQLDB%" -Login "%SQLLOGIN%" -ConfigPath "%TARGET%\web.config" %RESETSQL%
+rem Скрипт создаёт базу (если её нет) от имени текущего пользователя и вписывает настройки в web.config:
+rem вход Windows учётной записью пула, без учётной записи SQL Server. Таблицы приложение создаёт само.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SQLSETUP%" -Server "%SQLSERVER%" -Database "%SQLDB%" -Login "%SQLLOGIN%" -WindowsAccount "%ME%" -ConfigPath "%TARGET%\web.config" %SQLMODE%
 if errorlevel 1 (
   echo.
   echo   ВНИМАНИЕ: настроить SQL Server не удалось — смотрите сообщение выше.

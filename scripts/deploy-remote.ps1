@@ -181,6 +181,8 @@ try {
   if ($SqlServer) { $envs.TC_SQLSERVER = $SqlServer }
   if ($SqlDb) { $envs.TC_SQLDB = $SqlDb }
   if ($SqlLogin) { $envs.TC_SQLLOGIN = $SqlLogin }
+  # Пул запускается под учётной записью публикующего; окна для пароля на сервере нет — передаём его отсюда.
+  if ($Credential) { $envs.TC_IIS_POOL_PASSWORD = $Credential.GetNetworkCredential().Password }
   $flags = @()
   if ($NoSql) { $flags += '/nosql' }
   if ($ResetSql) { $flags += '/resetsql' }

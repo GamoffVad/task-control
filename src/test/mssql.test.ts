@@ -2,9 +2,10 @@
 // Хранилище Microsoft SQL Server (server/mssqlRepo.ts): настройки подключения, схема и запись изменений.
 // Проверка на настоящем сервере включается переменными MSSQL_TEST_SERVER/USER/PASSWORD:
 //   npm run test:mssql — см. README, раздел «Проверки».
+// Без MSSQL_TEST_USER — вход Windows под текущей учётной записью (ODBC, msnodesqlv8).
 import sql from 'mssql';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createMssqlRepo, mssqlSettingsFromEnv, SCHEMA } from '../../server/mssqlRepo';
+import { createMssqlRepo, mssqlSettingsFromEnv, odbcConnectionString, pickOdbcDriver, SCHEMA, usesWindowsLogin } from '../../server/mssqlRepo';
 import { secretFromEnv } from '../../server/auth';
 import { storageKindFromEnv } from '../../server/storage';
 import type { Repo } from '../../server/repo';
@@ -50,6 +51,21 @@ describe('SQL Server: настройки подключения', () => {
     expect(secretFromEnv({ MSSQL_SERVER: 'SQLSRV' })).not.toBe(secretFromEnv({ MSSQL_SERVER: 'OTHER' }));
   });
 
+  it('без MSSQL_USER — вход Windows через ODBC, с ним — учётная запись SQL Server', () => {
+    expect(usesWindowsLogin(mssqlSettingsFromEnv({ MSSQL_SERVER: 'localhost' })!)).toBe(true);
+    expect(usesWindowsLogin(mssqlSettingsFromEnv({ MSSQL_SERVER: 'localhost', MSSQL_USER: 'tc_app', MSSQL_PASSWORD: 'x' })!)).toBe(false);
+    // Самый новый установленный драйвер; заданный в настройках — важнее; «SQL Server» есть в любой Windows.
+    expect(pickOdbcDriver(['SQL Server', 'ODBC Driver 17 for SQL Server', 'ODBC Driver 18 for SQL Server'])).toBe('ODBC Driver 18 for SQL Server');
+    expect(pickOdbcDriver(['SQL Server'])).toBe('SQL Server');
+    expect(pickOdbcDriver([])).toBe('SQL Server');
+    expect(pickOdbcDriver(['ODBC Driver 18 for SQL Server'], 'ODBC Driver 17 for SQL Server')).toBe('ODBC Driver 17 for SQL Server');
+    const named = mssqlSettingsFromEnv({ MSSQL_SERVER: 'SQLSRV\\BUH', MSSQL_PORT: '1450' })!;
+    expect(odbcConnectionString(named, 'TaskControl', 'ODBC Driver 18 for SQL Server')).toBe(
+      'Driver={ODBC Driver 18 for SQL Server};Server=SQLSRV\\BUH,1450;Database=TaskControl;Trusted_Connection=yes;Encrypt=yes;TrustServerCertificate=yes;',
+    );
+    expect(odbcConnectionString(mssqlSettingsFromEnv({ MSSQL_SERVER: 'localhost' })!, 'master', 'SQL Server')).toBe('Driver={SQL Server};Server=localhost;Database=master;Trusted_Connection=yes;');
+  });
+
   it('схема создаётся отдельными операторами и повторный запуск её не ломает', () => {
     expect(SCHEMA.length).toBeGreaterThan(10);
     // Каждый оператор защищён проверкой существования, иначе второй запуск упал бы.
@@ -81,7 +97,13 @@ const pools = new Map<string, Promise<sql.ConnectionPool>>();
 const poolFor = (db: string) => {
   let pool = pools.get(db);
   if (!pool) {
-    pool = new sql.ConnectionPool({ ...masterConfig(), database: db }).connect();
+    pool = user
+      ? new sql.ConnectionPool({ ...masterConfig(), database: db }).connect()
+      : import('mssql/msnodesqlv8').then((odbc) => {
+          const settings = { server: server!, database: db, encrypt: false, trustServerCertificate: true };
+          const driver = process.env.MSSQL_TEST_ODBC_DRIVER || 'SQL Server';
+          return new (odbc.default as unknown as typeof sql).ConnectionPool({ connectionString: odbcConnectionString(settings, db, driver) } as unknown as sql.config).connect();
+        });
     pools.set(db, pool);
   }
   return pool;
@@ -111,6 +133,18 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
     expect(await repo.read()).toBeNull();
     const tables = await raw('select count(*) as n from sys.tables');
     expect((tables.recordset[0] as { n: number }).n).toBeGreaterThan(10);
+  });
+
+  it('демоданные разрешены, только если таблиц до подключения не было', async () => {
+    // Первое хранилище создало таблицы само — ему можно заполнить базу демоданными.
+    expect(await repo.seedDemo!()).toBe(true);
+    // Следующий запуск видит уже существующие (пусть и пустые) таблицы — демоданных не будет.
+    const again = createMssqlRepo({ server: server!, database, ...(user ? { user } : {}), ...(password ? { password } : {}), encrypt: false, trustServerCertificate: true });
+    try {
+      expect(await again.seedDemo!()).toBe(false);
+    } finally {
+      await again.close?.();
+    }
   });
 
   it('после заполнения данные читаются без искажений', async () => {

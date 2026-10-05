@@ -17,6 +17,8 @@ cpSync(path.join(root, 'dist'), path.join(out, 'public'), { recursive: true });
 
 // Скрипт подготовки SQL Server кладётся рядом с сервером: на сервере может не быть папки проекта.
 cpSync(path.join(root, 'scripts', 'setup-sql.ps1'), path.join(out, 'setup-sql.ps1'));
+// Запуск пула под учётной записью публикующего (deploy-iis.bat берёт его отсюда, если рядом нет папки scripts).
+cpSync(path.join(root, 'scripts', 'set-pool-identity.ps1'), path.join(out, 'set-pool-identity.ps1'));
 
 await build({
   entryPoints: [path.join(root, 'server', 'iis.ts')],
@@ -25,9 +27,19 @@ await build({
   platform: 'node',
   target: 'node18',
   format: 'cjs',
-  external: ['pg-native'],
+  // Драйвер ODBC для входа в SQL Server учётной записью Windows — двоичный модуль, в server.cjs не собирается.
+  external: ['pg-native', 'msnodesqlv8'],
   logLevel: 'warning',
 });
+
+// Двоичный модуль msnodesqlv8 (Node-API, подходит для Node.js 18 и новее) и его загрузчик — рядом с сервером.
+// Берётся только сборка для Windows x64: на сервере IIS другой не нужно.
+const modules = path.join(out, 'node_modules');
+const driver = path.join(root, 'node_modules', 'msnodesqlv8');
+for (const item of ['package.json', 'LICENSE', 'lib', path.join('prebuilds', 'win32-x64')]) {
+  cpSync(path.join(driver, item), path.join(modules, 'msnodesqlv8', item), { recursive: true });
+}
+cpSync(path.join(root, 'node_modules', 'node-gyp-build'), path.join(modules, 'node-gyp-build'), { recursive: true });
 
 // Настройки из appSettings iisnode передаёт процессу Node.js как переменные окружения.
 writeFileSync(
@@ -46,7 +58,8 @@ writeFileSync(
     <!-- SQL Server: имя сервера или СЕРВЕР\\ЭКЗЕМПЛЯР. База и таблицы создаются при первом запуске. -->
     <add key="MSSQL_SERVER" value="" />
     <add key="MSSQL_DATABASE" value="TaskControl" />
-    <!-- Учётная запись SQL Server. Для доменной учётной записи заполните ещё MSSQL_DOMAIN. -->
+    <!-- Пустые MSSQL_USER и MSSQL_PASSWORD — вход Windows учётной записью пула IIS, без пароля (так настраивает deploy-iis.bat).
+         Заполненные — учётная запись SQL Server; для доменной учётной записи с паролем — ещё MSSQL_DOMAIN. -->
     <add key="MSSQL_USER" value="" />
     <add key="MSSQL_PASSWORD" value="" />
     <add key="MSSQL_DOMAIN" value="" />

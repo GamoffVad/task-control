@@ -1,6 +1,10 @@
 // Хранилище в Microsoft SQL Server (2016 и новее, проверено на 2025). База и таблицы создаются
 // при первом обращении, поэтому на сервере достаточно учётной записи с правом создавать базы.
 // Изменения пишутся в транзакции под общей блокировкой sp_getapplock — как в PostgreSQL-хранилище.
+// Вход: MSSQL_USER задан — учётная запись SQL Server (драйвер tedious); не задан — учётная запись Windows,
+// под которой работает приложение (пул IIS), через ODBC (драйвер msnodesqlv8), без пароля в настройках.
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import sql from 'mssql';
 import { DEFAULT_DICTIONARIES } from '../src/lib/seed';
 import { ACCESS_VERSION, DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS, withAddedPermissions } from '../src/lib/access';
@@ -108,7 +112,8 @@ export type Q = { request(): sql.Request };
 
 const run = async (q: Q, text: string, params: Param[] = []): Promise<sql.IResult<Record<string, unknown>>> => {
   const request = q.request();
-  params.forEach((p, i) => request.input(`p${i + 1}`, p.type, p.value));
+  // Не @p1: драйвер ODBC сам называет параметры @P1, @P2…, и имена совпали бы (регистр в SQL Server не важен).
+  params.forEach((p, i) => request.input(`v${i + 1}`, p.type, p.value));
   return request.query(text);
 };
 
@@ -127,7 +132,7 @@ const json = <T>(v: string | null, fallback: T): T => {
 };
 
 const meta = async (q: Q, key: string): Promise<string | null> => {
-  const found = await rows(q, 'select [value] from dbo.tc_meta where [key] = @p1', [S(key, 64)]);
+  const found = await rows(q, 'select [value] from dbo.tc_meta where [key] = @v1', [S(key, 64)]);
   return found.length ? (found[0] as { value: string }).value : null;
 };
 
@@ -295,13 +300,13 @@ const TASKS: Table<Task> = {
     upsert(
       q,
       'tc_tasks',
-      '[id] = @p1',
-      '[title]=@p2, [row_id]=@p3, [category]=@p4, [assignee_ids]=@p5, [start_at]=@p6, [end_at]=@p7, [doc_name]=@p8, [doc_number]=@p9, [result]=@p10, [done]=@p11, [score]=@p12, [done_at]=@p13',
+      '[id] = @v1',
+      '[title]=@v2, [row_id]=@v3, [category]=@v4, [assignee_ids]=@v5, [start_at]=@v6, [end_at]=@v7, [doc_name]=@v8, [doc_number]=@v9, [result]=@v10, [done]=@v11, [score]=@v12, [done_at]=@v13',
       '[id],[title],[row_id],[category],[assignee_ids],[start_at],[end_at],[doc_name],[doc_number],[result],[done],[score],[done_at]',
-      '@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9,@p10,@p11,@p12,@p13',
+      '@v1,@v2,@v3,@v4,@v5,@v6,@v7,@v8,@v9,@v10,@v11,@v12,@v13',
       [S(t.id, 64), S(t.title), S(t.rowId, 64), S(t.category, 64), J(t.assigneeIds), DT(t.start), DT(t.end), S(t.docName), S(t.docNumber), S(t.result), BIT(t.done), NUM(t.score), DT(t.doneAt)],
     ),
-  remove: (q, t) => run(q, 'delete from dbo.tc_tasks where [id] = @p1', [S(t.id, 64)]),
+  remove: (q, t) => run(q, 'delete from dbo.tc_tasks where [id] = @v1', [S(t.id, 64)]),
 };
 
 const ABSENCES: Table<Absence> = {
@@ -310,13 +315,13 @@ const ABSENCES: Table<Absence> = {
     upsert(
       q,
       'tc_absences',
-      '[id] = @p1',
-      '[employee_id]=@p2, [type]=@p3, [date_from]=@p4, [date_to]=@p5, [status]=@p6, [note]=@p7, [decided_by]=@p8',
+      '[id] = @v1',
+      '[employee_id]=@v2, [type]=@v3, [date_from]=@v4, [date_to]=@v5, [status]=@v6, [note]=@v7, [decided_by]=@v8',
       '[id],[employee_id],[type],[date_from],[date_to],[status],[note],[decided_by],[created_at]',
-      '@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8,@p9',
+      '@v1,@v2,@v3,@v4,@v5,@v6,@v7,@v8,@v9',
       [S(a.id, 64), I(a.employeeId), S(a.type, 16), S(a.from, 10), S(a.to, 10), S(a.status, 16), S(a.note), I(a.decidedBy), DT(a.createdAt)],
     ),
-  remove: (q, a) => run(q, 'delete from dbo.tc_absences where [id] = @p1', [S(a.id, 64)]),
+  remove: (q, a) => run(q, 'delete from dbo.tc_absences where [id] = @v1', [S(a.id, 64)]),
 };
 
 const ENTITLEMENTS: Table<Entitlement> = {
@@ -325,32 +330,32 @@ const ENTITLEMENTS: Table<Entitlement> = {
     upsert(
       q,
       'tc_entitlements',
-      '[employee_id] = @p1 and [year] = @p2',
-      '[vacation_days]=@p3, [carried_over]=@p4, [dayoff_accrued]=@p5',
+      '[employee_id] = @v1 and [year] = @v2',
+      '[vacation_days]=@v3, [carried_over]=@v4, [dayoff_accrued]=@v5',
       '[employee_id],[year],[vacation_days],[carried_over],[dayoff_accrued]',
-      '@p1,@p2,@p3,@p4,@p5',
+      '@v1,@v2,@v3,@v4,@v5',
       [I(e.employeeId), I(e.year), I(e.vacationDays), I(e.carriedOver), I(e.dayoffAccrued)],
     ),
-  remove: (q, e) => run(q, 'delete from dbo.tc_entitlements where [employee_id] = @p1 and [year] = @p2', [I(e.employeeId), I(e.year)]),
+  remove: (q, e) => run(q, 'delete from dbo.tc_entitlements where [employee_id] = @v1 and [year] = @v2', [I(e.employeeId), I(e.year)]),
 };
 
 const REPORTS: Table<Report> = {
   key: (r) => r.weekStart,
   upsert: (q, r) =>
-    upsert(q, 'tc_reports', '[week_start] = @p1', '[submitted_at]=@p2, [entries]=@p3', '[week_start],[submitted_at],[entries]', '@p1,@p2,@p3', [S(r.weekStart, 10), DT(r.submittedAt), J(r.entries)]),
-  remove: (q, r) => run(q, 'delete from dbo.tc_reports where [week_start] = @p1', [S(r.weekStart, 10)]),
+    upsert(q, 'tc_reports', '[week_start] = @v1', '[submitted_at]=@v2, [entries]=@v3', '[week_start],[submitted_at],[entries]', '@v1,@v2,@v3', [S(r.weekStart, 10), DT(r.submittedAt), J(r.entries)]),
+  remove: (q, r) => run(q, 'delete from dbo.tc_reports where [week_start] = @v1', [S(r.weekStart, 10)]),
 };
 
 const MESSAGES: Table<Message> = {
   key: (m) => m.id,
-  upsert: (q, m) => upsert(q, 'tc_messages', '[id] = @p1', '[text]=@p3', '[id],[author_id],[text],[sent_at]', '@p1,@p2,@p3,@p4', [S(m.id, 64), I(m.authorId), S(m.text), DT(m.sentAt)]),
-  remove: (q, m) => run(q, 'delete from dbo.tc_messages where [id] = @p1', [S(m.id, 64)]),
+  upsert: (q, m) => upsert(q, 'tc_messages', '[id] = @v1', '[text]=@v3', '[id],[author_id],[text],[sent_at]', '@v1,@v2,@v3,@v4', [S(m.id, 64), I(m.authorId), S(m.text), DT(m.sentAt)]),
+  remove: (q, m) => run(q, 'delete from dbo.tc_messages where [id] = @v1', [S(m.id, 64)]),
 };
 
 const CHAT_READS: Table<ChatRead> = {
   key: (r) => String(r.employeeId),
-  upsert: (q, r) => upsert(q, 'tc_chat_reads', '[employee_id] = @p1', '[read_at]=@p2', '[employee_id],[read_at]', '@p1,@p2', [I(r.employeeId), DT(r.readAt)]),
-  remove: (q, r) => run(q, 'delete from dbo.tc_chat_reads where [employee_id] = @p1', [I(r.employeeId)]),
+  upsert: (q, r) => upsert(q, 'tc_chat_reads', '[employee_id] = @v1', '[read_at]=@v2', '[employee_id],[read_at]', '@v1,@v2', [I(r.employeeId), DT(r.readAt)]),
+  remove: (q, r) => run(q, 'delete from dbo.tc_chat_reads where [employee_id] = @v1', [I(r.employeeId)]),
 };
 
 const NOTICES: Table<Notice> = {
@@ -359,13 +364,13 @@ const NOTICES: Table<Notice> = {
     upsert(
       q,
       'tc_notices',
-      '[id] = @p1',
-      '[at]=@p2, [recipients]=@p3, [title]=@p4, [body]=@p5, [url]=@p6',
+      '[id] = @v1',
+      '[at]=@v2, [recipients]=@v3, [title]=@v4, [body]=@v5, [url]=@v6',
       '[id],[at],[recipients],[title],[body],[url]',
-      '@p1,@p2,@p3,@p4,@p5,@p6',
+      '@v1,@v2,@v3,@v4,@v5,@v6',
       [S(n.id, 64), DT(n.at), J(n.to), S(n.title, 256), S(n.body), S(n.url, 256)],
     ),
-  remove: (q, n) => run(q, 'delete from dbo.tc_notices where [id] = @p1', [S(n.id, 64)]),
+  remove: (q, n) => run(q, 'delete from dbo.tc_notices where [id] = @v1', [S(n.id, 64)]),
 };
 
 const DICTIONARIES: Table<DictionaryEntry> = {
@@ -374,20 +379,20 @@ const DICTIONARIES: Table<DictionaryEntry> = {
     upsert(
       q,
       'tc_dictionaries',
-      '[id] = @p1',
-      '[dictionary]=@p2, [code]=@p3, [title]=@p4, [color]=@p5',
+      '[id] = @v1',
+      '[dictionary]=@v2, [code]=@v3, [title]=@v4, [color]=@v5',
       '[id],[dictionary],[code],[title],[color]',
-      '@p1,@p2,@p3,@p4,@p5',
+      '@v1,@v2,@v3,@v4,@v5',
       [S(entry.id, 64), S(entry.dictionary, 64), S(entry.code, 64), S(entry.title, 256), S(entry.color ?? null, 32)],
     ),
-  remove: (q, entry) => run(q, 'delete from dbo.tc_dictionaries where [id] = @p1', [S(entry.id, 64)]),
+  remove: (q, entry) => run(q, 'delete from dbo.tc_dictionaries where [id] = @v1', [S(entry.id, 64)]),
 };
 
 const PLAN_ROWS: Table<PlanRow> = {
   key: (row) => row.id,
   upsert: (q, row) =>
-    upsert(q, 'tc_plan_rows', '[id] = @p1', '[title]=@p2, [is_header]=@p3, [base_score]=@p4', '[id],[title],[is_header],[base_score]', '@p1,@p2,@p3,@p4', [S(row.id, 64), S(row.title), BIT(row.isHeader), NUM(row.baseScore)]),
-  remove: (q, row) => run(q, 'delete from dbo.tc_plan_rows where [id] = @p1', [S(row.id, 64)]),
+    upsert(q, 'tc_plan_rows', '[id] = @v1', '[title]=@v2, [is_header]=@v3, [base_score]=@v4', '[id],[title],[is_header],[base_score]', '@v1,@v2,@v3,@v4', [S(row.id, 64), S(row.title), BIT(row.isHeader), NUM(row.baseScore)]),
+  remove: (q, row) => run(q, 'delete from dbo.tc_plan_rows where [id] = @v1', [S(row.id, 64)]),
 };
 
 const USERS: Table<ManagedUser> = {
@@ -396,34 +401,34 @@ const USERS: Table<ManagedUser> = {
     upsert(
       q,
       'tc_users',
-      '[employee_id] = @p1',
-      '[email]=@p2, [full_name]=@p3, [position]=@p4, [windows_login]=@p5, [role]=@p6, [active]=@p7, [unit_id]=@p8',
+      '[employee_id] = @v1',
+      '[email]=@v2, [full_name]=@v3, [position]=@v4, [windows_login]=@v5, [role]=@v6, [active]=@v7, [unit_id]=@v8',
       '[employee_id],[email],[full_name],[position],[windows_login],[role],[active],[unit_id]',
-      '@p1,@p2,@p3,@p4,@p5,@p6,@p7,@p8',
+      '@v1,@v2,@v3,@v4,@v5,@v6,@v7,@v8',
       [I(user.employeeId), S(user.email, 256), S(user.fullName, 256), S(user.position, 256), S(user.windowsLogin, 128), S(user.role, 32), BIT(user.active), S(user.unitId ?? null, 64)],
     ),
-  remove: (q, user) => run(q, 'delete from dbo.tc_users where [employee_id] = @p1', [I(user.employeeId)]),
+  remove: (q, user) => run(q, 'delete from dbo.tc_users where [employee_id] = @v1', [I(user.employeeId)]),
 };
 
 const UNITS: Table<Unit> = {
   key: (unit) => unit.id,
   upsert: (q, unit) =>
-    upsert(q, 'tc_units', '[id] = @p1', '[parent_id]=@p2, [kind]=@p3, [name]=@p4', '[id],[parent_id],[kind],[name]', '@p1,@p2,@p3,@p4', [S(unit.id, 64), S(unit.parentId, 64), S(unit.kind, 32), S(unit.name, 256)]),
-  remove: (q, unit) => run(q, 'delete from dbo.tc_units where [id] = @p1', [S(unit.id, 64)]),
+    upsert(q, 'tc_units', '[id] = @v1', '[parent_id]=@v2, [kind]=@v3, [name]=@v4', '[id],[parent_id],[kind],[name]', '@v1,@v2,@v3,@v4', [S(unit.id, 64), S(unit.parentId, 64), S(unit.kind, 32), S(unit.name, 256)]),
+  remove: (q, unit) => run(q, 'delete from dbo.tc_units where [id] = @v1', [S(unit.id, 64)]),
 };
 
 const TEMPLATES: Table<DocumentTemplate> = {
   key: (t) => t.id,
   upsert: (q, t) =>
-    upsert(q, 'tc_templates', '[id] = @p1', '[name]=@p2, [body]=@p3, [scope]=@p4', '[id],[name],[body],[scope]', '@p1,@p2,@p3,@p4', [S(t.id, 64), S(t.name, 256), S(t.body), S(t.scope, 32)]),
-  remove: (q, t) => run(q, 'delete from dbo.tc_templates where [id] = @p1', [S(t.id, 64)]),
+    upsert(q, 'tc_templates', '[id] = @v1', '[name]=@v2, [body]=@v3, [scope]=@v4', '[id],[name],[body],[scope]', '@v1,@v2,@v3,@v4', [S(t.id, 64), S(t.name, 256), S(t.body), S(t.scope, 32)]),
+  remove: (q, t) => run(q, 'delete from dbo.tc_templates where [id] = @v1', [S(t.id, 64)]),
 };
 
 const ROLES: Table<RoleDefinition> = {
   key: (role) => role.role,
   upsert: (q, role) =>
-    upsert(q, 'tc_roles', '[role] = @p1', '[name]=@p2, [permissions]=@p3', '[role],[name],[permissions]', '@p1,@p2,@p3', [S(role.role, 32), S(role.name, 128), J(role.permissions)]),
-  remove: (q, role) => run(q, 'delete from dbo.tc_roles where [role] = @p1', [S(role.role, 32)]),
+    upsert(q, 'tc_roles', '[role] = @v1', '[name]=@v2, [permissions]=@v3', '[role],[name],[permissions]', '@v1,@v2,@v3', [S(role.role, 32), S(role.name, 128), J(role.permissions)]),
+  remove: (q, role) => run(q, 'delete from dbo.tc_roles where [role] = @v1', [S(role.role, 32)]),
 };
 
 /** Сравнение без учёта порядка ключей: объекты из базы приходят с переставленными полями. */
@@ -443,10 +448,10 @@ const sync = async <T>(q: Q, table: Table<T>, before: T[], after: T[]) => {
 };
 
 const setMeta = (q: Q, key: string, value: string) =>
-  run(q, 'update dbo.tc_meta set [value] = @p2 where [key] = @p1; if @@rowcount = 0 insert into dbo.tc_meta ([key],[value]) values (@p1,@p2);', [S(key, 64), S(value)]);
+  run(q, 'update dbo.tc_meta set [value] = @v2 where [key] = @v1; if @@rowcount = 0 insert into dbo.tc_meta ([key],[value]) values (@v1,@v2);', [S(key, 64), S(value)]);
 
 const setMetaOnce = (q: Q, key: string, value: string) =>
-  run(q, 'if not exists (select 1 from dbo.tc_meta where [key] = @p1) insert into dbo.tc_meta ([key],[value]) values (@p1,@p2);', [S(key, 64), S(value)]);
+  run(q, 'if not exists (select 1 from dbo.tc_meta where [key] = @v1) insert into dbo.tc_meta ([key],[value]) values (@v1,@v2);', [S(key, 64), S(value)]);
 
 // ——— Настройки подключения ———
 
@@ -463,6 +468,36 @@ export type MssqlSettings = {
   domain?: string;
   encrypt: boolean;
   trustServerCertificate: boolean;
+  /** Драйвер ODBC для входа Windows (MSSQL_ODBC_DRIVER); по умолчанию — самый новый установленный. */
+  odbcDriver?: string;
+};
+
+/** Вход Windows: учётная запись SQL Server не задана, подключаемся под учётной записью процесса. */
+export const usesWindowsLogin = (s: MssqlSettings): boolean => !s.user;
+
+/** Драйверы ODBC для SQL Server от новых к старым; «SQL Server» есть в любой Windows. */
+export const ODBC_DRIVERS = ['ODBC Driver 18 for SQL Server', 'ODBC Driver 17 for SQL Server', 'SQL Server Native Client 11.0', 'SQL Server'];
+
+export const pickOdbcDriver = (installed: string[], preferred?: string): string =>
+  preferred || ODBC_DRIVERS.find((name) => installed.includes(name)) || 'SQL Server';
+
+/** Установленные драйверы ODBC — из реестра Windows. */
+const installedOdbcDrivers = async (): Promise<string[]> => {
+  try {
+    const { stdout } = await promisify(execFile)('reg', ['query', 'HKLM\\SOFTWARE\\ODBC\\ODBCINST.INI\\ODBC Drivers'], { windowsHide: true });
+    return stdout.split(/\r?\n/).map((line) => /^\s+(.+?)\s+REG_SZ\s+/.exec(line)?.[1]).filter((name): name is string => !!name);
+  } catch {
+    return [];
+  }
+};
+
+/** Строка подключения ODBC с проверкой подлинности Windows (Trusted_Connection). */
+export const odbcConnectionString = (s: MssqlSettings, database: string, driver: string): string => {
+  const server = `${s.server}${s.instanceName ? `\\${s.instanceName}` : ''}${s.port ? `,${s.port}` : ''}`;
+  const parts = [`Driver={${driver}}`, `Server=${server}`, `Database=${database}`, 'Trusted_Connection=yes'];
+  // Шифрование настраивается только у драйверов «ODBC Driver …»; старым драйверам эти ключи не нужны.
+  if (driver.startsWith('ODBC Driver')) parts.push(`Encrypt=${s.encrypt ? 'yes' : 'no'}`, `TrustServerCertificate=${s.trustServerCertificate ? 'yes' : 'no'}`);
+  return `${parts.join(';')};`;
 };
 
 const bool = (v: string | undefined, fallback: boolean) => (v == null || v === '' ? fallback : v === 'true' || v === '1');
@@ -488,6 +523,7 @@ export const mssqlSettingsFromEnv = (env: Record<string, string | undefined>): M
     // Внутри корпоративной сети сертификат обычно самоподписанный, поэтому доверие включено.
     encrypt: bool(env.MSSQL_ENCRYPT, true),
     trustServerCertificate: bool(env.MSSQL_TRUST_SERVER_CERTIFICATE, true),
+    ...(env.MSSQL_ODBC_DRIVER?.trim() ? { odbcDriver: env.MSSQL_ODBC_DRIVER.trim() } : {}),
   };
 };
 
@@ -510,13 +546,27 @@ const poolConfig = (s: MssqlSettings, database: string): sql.config => ({
   requestTimeout: 30_000,
 });
 
+/** Пул соединений: tedious для учётной записи SQL Server, ODBC (msnodesqlv8) для входа Windows. */
+const openPool = async (s: MssqlSettings, database: string): Promise<sql.ConnectionPool> => {
+  if (!usesWindowsLogin(s)) return new sql.ConnectionPool(poolConfig(s, database));
+  // Модуль загружается только для входа Windows: он нужен лишь на сервере Windows.
+  const odbc = (await import('mssql/msnodesqlv8')).default as unknown as typeof sql;
+  const driver = pickOdbcDriver(await installedOdbcDrivers(), s.odbcDriver);
+  return new odbc.ConnectionPool({
+    connectionString: odbcConnectionString(s, database, driver),
+    options: { useUTC: true },
+    pool: { max: 4, min: 0, idleTimeoutMillis: 30_000 },
+    requestTimeout: 30_000,
+  } as unknown as sql.config);
+};
+
 /** Создаёт базу, если её ещё нет: приложение разворачивается на пустом сервере. */
 export const ensureDatabase = async (settings: MssqlSettings): Promise<void> => {
-  const master = new sql.ConnectionPool(poolConfig(settings, 'master'));
+  // Имя базы нельзя передать параметром, поэтому оно проверяется и экранируется (и в строке подключения).
+  if (!/^[A-Za-z_][A-Za-z0-9_]{0,120}$/.test(settings.database)) throw new Error(`Недопустимое имя базы данных: ${settings.database}`);
+  const master = await openPool(settings, 'master');
   await master.connect();
   try {
-    // Имя базы нельзя передать параметром, поэтому оно проверяется и экранируется.
-    if (!/^[A-Za-z_][A-Za-z0-9_]{0,120}$/.test(settings.database)) throw new Error(`Недопустимое имя базы данных: ${settings.database}`);
     await master.request().query(`if db_id(N'${settings.database}') is null create database [${settings.database}]`);
   } finally {
     await master.close();
@@ -524,7 +574,7 @@ export const ensureDatabase = async (settings: MssqlSettings): Promise<void> => 
 };
 
 export const createMssqlRepo = (settings: MssqlSettings): Repo => {
-  const pool = new sql.ConnectionPool(poolConfig(settings, settings.database));
+  let pool: sql.ConnectionPool | null = null;
   let ready: Promise<sql.ConnectionPool> | null = null;
   /** Были ли таблицы приложения до первого подключения: от этого зависит, писать ли демоданные. */
   let tablesExisted = true;
@@ -532,6 +582,7 @@ export const createMssqlRepo = (settings: MssqlSettings): Repo => {
   const connect = () =>
     (ready ??= (async () => {
       await ensureDatabase(settings);
+      pool ??= await openPool(settings, settings.database);
       await pool.connect();
       // Таблицы создаются, только если их нет (if object_id ... is null), и ничего не удаляется.
       const found = await rows(pool, "select count(*) as [n] from sys.tables where [name] like N'tc[_]%'");
@@ -548,20 +599,18 @@ export const createMssqlRepo = (settings: MssqlSettings): Repo => {
     },
     ping: async () => {
       // connect() создаёт базу и таблицы, поэтому проверка охватывает всю готовность хранилища.
-      await connect();
-      await pool.request().query('select 1');
+      await (await connect()).request().query('select 1');
     },
     close: async () => {
       if (ready) await ready.catch(() => undefined);
-      await pool.close();
+      await pool?.close();
     },
     async read() {
-      await connect();
-      return readAll(pool);
+      return readAll(await connect());
     },
     async update(fn) {
-      await connect();
-      const tx = new sql.Transaction(pool);
+      // Транзакция берётся у пула: так она работает с любым из двух драйверов.
+      const tx = (await connect()).transaction();
       await tx.begin();
       try {
         // Общая блокировка: одновременные правки выстраиваются в очередь и не теряются.
@@ -569,7 +618,7 @@ export const createMssqlRepo = (settings: MssqlSettings): Repo => {
         const locked = await rows(
           tx,
           `declare @rc int;
-           exec @rc = sp_getapplock @Resource = @p1, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = @p2;
+           exec @rc = sp_getapplock @Resource = @v1, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = @v2;
            select @rc as [rc];`,
           [S(LOCK, 255), I(LOCK_TIMEOUT_MS)],
         );
