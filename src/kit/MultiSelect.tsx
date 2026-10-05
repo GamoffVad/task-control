@@ -81,7 +81,7 @@ export function MultiSelect<T extends string>({ options, value, onChange, label,
         <span className="arrow" aria-hidden>▾</span>
       </button>
       {open && (
-        <ul className="dd-list" role="listbox" aria-multiselectable="true" id={listId} aria-label={label}>
+        <ul className="dd-list" role="listbox" aria-multiselectable="true" id={listId} aria-label={label} onClick={(e) => e.preventDefault()}>
           <li>
             <button type="button" role="option" aria-selected={all} className={`dd-multi-all${focus === 0 ? ' focus' : ''}`} onMouseEnter={() => setFocus(0)} onClick={toggleAll}>
               <i className="dd-check" aria-hidden />

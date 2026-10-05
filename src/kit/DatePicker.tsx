@@ -198,7 +198,7 @@ function DateInput({ mode, value, onChange, id, disabled, readOnly, invalid, pla
         </button>
       )}
       {open && (
-        <div className={`datepop${mode === 'datetime' ? ' with-time' : ''}`} role="dialog" aria-label={mode === 'date' ? 'Выбор даты' : 'Выбор даты и времени'} id={popId} onKeyDown={onPopKey}>
+        <div className={`datepop${mode === 'datetime' ? ' with-time' : ''}`} role="dialog" aria-label={mode === 'date' ? 'Выбор даты' : 'Выбор даты и времени'} id={popId} onKeyDown={onPopKey} onClick={(e) => e.preventDefault()}>
           <div className="datepop-cal">
             <div className="datepop-head">
               <button type="button" className="icon-btn" aria-label="Предыдущий месяц" onClick={() => setMonth((m) => addMonths(m, -1))}>

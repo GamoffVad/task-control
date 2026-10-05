@@ -82,7 +82,9 @@ export function Select<T extends string | number>({ value, options, onChange, va
         <span className="arrow" aria-hidden>▾</span>
       </button>
       {open && (
-        <ul className="dd-list" role="listbox" id={listId} aria-label={label}>
+        // Клик по пункту не передаётся подписи <label> вокруг поля: иначе браузер «нажимает» кнопку списка
+        // ещё раз, и выбранный список сразу открывается снова.
+        <ul className="dd-list" role="listbox" id={listId} aria-label={label} onClick={(e) => e.preventDefault()}>
           {options.map((o, i) => (
             <li key={String(o.value)}>
               <button

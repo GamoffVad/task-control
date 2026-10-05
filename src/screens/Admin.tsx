@@ -152,9 +152,9 @@ const PersonFields = ({ draft, set, units, disabledRole, nameSlot }: { draft: Pe
         <Select<string> variant="light" label="Подразделение сотрудника" value={draft.unitId} options={unitOptions(units)} onChange={(v) => set('unitId', v)} />
       </div>
     </div>
-    <label className="field"><span className="caps">Роль</span>
+    <div className="field"><span className="caps">Роль</span>
       <Select<Role> value={draft.role} options={ROLE_OPTIONS} disabled={disabledRole} label="Роль сотрудника" onChange={(v) => set('role', v)} />
-    </label>
+    </div>
   </>
 );
 

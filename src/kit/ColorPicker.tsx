@@ -174,7 +174,7 @@ export const ColorPicker = ({ value, onChange, label = 'Цвет', disabled, inv
         >
           <SaturationArea hsv={hsv} onChange={pick} />
           <HueSlider hsv={hsv} onChange={pick} />
-          <div className="cp-swatches" role="listbox" aria-label="Цвета приложения">
+          <div className="cp-swatches" role="listbox" aria-label="Цвета приложения" onClick={(e) => e.preventDefault()}>
             {COLOR_SWATCHES.map((c) => (
               <button
                 key={c}

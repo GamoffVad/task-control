@@ -82,7 +82,7 @@ export const DirectoryUserAutocomplete = ({ value, onChange, onSelect, invalid }
       }}
     />
     {loading && <span className="directory-search-state" role="status">Поиск…</span>}
-    {open && <div className="directory-options" id={listId} role="listbox">
+    {open && <div className="directory-options" id={listId} role="listbox" onClick={(event) => event.preventDefault()}>
       {error && <p className="directory-message" role="alert">{error}</p>}
       {!error && !loading && results.length === 0 && <p className="directory-message">Сотрудники не найдены.</p>}
       {results.map((user, index) => <button
