@@ -24,14 +24,14 @@ export type WindowsAuthSettings = {
   header: string | null;
   /** Проверяется ли общий секрет прокси (WINDOWS_AUTH_PROXY_SECRET). */
   secretRequired: boolean;
-  /** Порядок просмотра заголовков. */
+  /** Порядок просмотра заголовков. Если задан WINDOWS_AUTH_HEADER — только он. */
   headers: string[];
 };
 
 const headerName = (value: string | undefined): string | null => {
   const name = (value ?? '').trim().toLowerCase();
   if (!name) return null;
-  if (!/^[a-z0-9-]{1,64}$/.test(name)) throw new Error('WINDOWS_AUTH_HEADER содержит недопустимое имя заголовка.');
+  if (!/^[a-z0-9_-]{1,64}$/.test(name)) throw new Error('WINDOWS_AUTH_HEADER содержит недопустимое имя заголовка.');
   return name;
 };
 
@@ -41,7 +41,8 @@ export const windowsAuthSettings = (env: Record<string, string | undefined>): Wi
     trustProxy: env.WINDOWS_AUTH_TRUST_PROXY === 'true',
     header,
     secretRequired: !!env.WINDOWS_AUTH_PROXY_SECRET,
-    headers: header ? [header, ...DEFAULT_IDENTITY_HEADERS.filter((h) => h !== header)] : DEFAULT_IDENTITY_HEADERS,
+    // Явно заданному заголовку доверяем одному: остальные из списка браузер может прислать сам.
+    headers: header ? [header] : DEFAULT_IDENTITY_HEADERS,
   };
 };
 
@@ -49,6 +50,26 @@ const headerValue = (req: IncomingMessage, name: string): string | null => {
   const raw = req.headers[name];
   const text = Array.isArray(raw) ? raw[0] : raw;
   return typeof text === 'string' && text.trim() ? text.trim() : null;
+};
+
+/**
+ * Последнее вхождение заголовка в том порядке, в каком он пришёл. iisnode не заменяет заголовок
+ * X-iisnode-LOGON_USER, присланный браузером, а дописывает свой в конец запроса; Node.js склеил бы
+ * оба значения через запятую. Поэтому подтверждённому IIS значению соответствует последнее вхождение.
+ */
+const lastHeaderValue = (req: IncomingMessage, name: string): string | null => {
+  const raw = req.rawHeaders;
+  if (!Array.isArray(raw)) return headerValue(req, name);
+  let value: string | null = null;
+  let found = false;
+  for (let i = 0; i + 1 < raw.length; i += 2) {
+    if (raw[i].toLowerCase() === name) {
+      found = true;
+      value = raw[i + 1];
+    }
+  }
+  if (!found) return null;
+  return value && value.trim() ? value.trim() : null;
 };
 
 const secretMatches = (req: IncomingMessage, secret: string): boolean => {
@@ -76,8 +97,9 @@ export type WindowsAuthCheck = {
  */
 export const inspectWindowsRequest = (req: IncomingMessage, env: Record<string, string | undefined>): WindowsAuthCheck => {
   const settings = windowsAuthSettings(env);
+  const read = settings.header ? lastHeaderValue : headerValue;
   const seen = settings.headers
-    .map((header) => ({ header, value: headerValue(req, header) }))
+    .map((header) => ({ header, value: read(req, header) }))
     .filter((x): x is { header: string; value: string } => !!x.value);
   const secretOk = !settings.secretRequired || secretMatches(req, env.WINDOWS_AUTH_PROXY_SECRET!);
   const identity = settings.trustProxy && secretOk ? (seen[0]?.value ?? null) : null;
@@ -86,7 +108,9 @@ export const inspectWindowsRequest = (req: IncomingMessage, env: Record<string, 
     : !secretOk
       ? `Прокси не передал общий секрет в заголовке ${SECRET_HEADER} или секрет не совпал.`
       : seen.length === 0
-        ? `Прокси не передал доменного пользователя. Ожидаются заголовки: ${settings.headers.join(', ')}.`
+        ? settings.header === 'x-iisnode-logon_user'
+          ? 'IIS не передал доменного пользователя. Проверьте, что у сайта включена проверка подлинности Windows, а в web.config у элемента iisnode указано promoteServerVars="LOGON_USER,AUTH_USER". Если браузер запросил логин и пароль — добавьте адрес сайта в зону «Местная интрасеть».'
+          : `Прокси не передал доменного пользователя. Ожидаются заголовки: ${settings.headers.join(', ')}.`
         : null;
   return { enabled: settings.trustProxy, secretRequired: settings.secretRequired, secretOk, seen, identity, problem };
 };

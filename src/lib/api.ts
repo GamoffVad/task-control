@@ -4,13 +4,17 @@ import type { AuthenticationSettings, Data, DirectoryUser, User } from './types'
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** Сеанс недействителен — нужно войти заново. */
+  relogin: boolean;
+  constructor(status: number, message: string, relogin = false) {
     super(message);
     this.status = status;
+    this.relogin = relogin;
   }
 }
 
-const call = async <T>(path: string, init: { method?: string; token?: string; body?: unknown } = {}): Promise<T> => {
+/** Ответ 401 с телом — для проверки Windows-входа это результат, а не ошибка. */
+const call = async <T>(path: string, init: { method?: string; token?: string; body?: unknown; accept401?: boolean } = {}): Promise<T> => {
   let res: Response;
   try {
     res = await fetch(`/api/${path}`, {
@@ -18,7 +22,8 @@ const call = async <T>(path: string, init: { method?: string; token?: string; bo
       credentials: 'same-origin',
       headers: {
         ...(init.body !== undefined ? { 'content-type': 'application/json' } : {}),
-        ...(init.token ? { authorization: `Bearer ${init.token}` } : {}),
+        // Не Authorization: этот заголовок нужен IIS для проверки подлинности Windows.
+        ...(init.token ? { 'x-tc-token': init.token } : {}),
       },
       body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
     });
@@ -26,7 +31,8 @@ const call = async <T>(path: string, init: { method?: string; token?: string; bo
     throw new ApiError(0, 'Нет связи с сервером. Проверьте подключение к сети.');
   }
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, json.error ?? `Сервер ответил ошибкой ${res.status}.`);
+  if (init.accept401 && res.status === 401 && json.error === undefined) return json as T;
+  if (!res.ok) throw new ApiError(res.status, json.error ?? `Сервер ответил ошибкой ${res.status}.`, json.relogin === true || res.status === 401);
   return json as T;
 };
 
@@ -49,7 +55,7 @@ export type WindowsCheck = {
 
 export const api = {
   login: (email: string, password: string) => call<{ token: string; user: User }>('login', { method: 'POST', body: { email, password } }),
-  windowsCheck: (token: string) => call<WindowsCheck>('windows-check', { token }),
+  windowsCheck: (token: string) => call<WindowsCheck>('windows-check', { token, accept401: true }),
   windowsLogin: () => call<{ token: string; user: User }>('windows-login', { method: 'POST' }),
   authentication: () => call<{ authentication: AuthenticationSettings; windowsAvailable: boolean; directoryAvailable: boolean }>('authentication'),
   directoryUsers: (token: string, query: string) => call<{ users: DirectoryUser[] }>(`directory-users?q=${encodeURIComponent(query)}`, { token }),

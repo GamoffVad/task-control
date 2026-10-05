@@ -109,7 +109,7 @@ describe('API уведомлений', () => {
   it('первый опрос даёт отметку времени; дальше — только новые уведомления получателя', async () => {
     const boss = await token('user@example.com');
     const worker = await token('sidorov@example.com');
-    expect((await call('/api/notices')).status).toBe(401);
+    expect((await call('/api/notices')).status).toBe(403);
     const start = await notices(boss);
     expect(start.notices).toEqual([]);
     now = new Date(NOW.getTime() + 60_000);

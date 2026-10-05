@@ -29,6 +29,21 @@ copyFileSync(path.join(root, 'deploy-iis-remote.bat'), path.join(stage, 'deploy-
 mkdirSync(path.join(stage, 'scripts'), { recursive: true });
 for (const file of ['deploy-remote.ps1', 'create-database.sql']) copyFileSync(path.join(root, 'scripts', file), path.join(stage, 'scripts', file));
 copyFileSync(path.join(root, 'docs', 'corporate-offline.md'), path.join(stage, 'corporate-offline.md'));
+// Папка для установщиков: deploy-iis.bat ставит из неё Node.js, URL Rewrite и iisnode, если их нет на сервере.
+// Сами установщики в архив не входят (это чужие программы со своими лицензиями) — их кладут сюда перед переносом.
+mkdirSync(path.join(stage, 'installers'), { recursive: true });
+writeFileSync(
+  path.join(stage, 'installers', 'README.txt'),
+  String.fromCharCode(0xfeff) +
+    [
+      'Положите сюда установщики (скачиваются на компьютере с интернетом):',
+      '  node-vВЕРСИЯ-x64.msi           — Node.js 18 или новее, https://nodejs.org',
+      '  rewrite_amd64_ru-RU.msi        — URL Rewrite, https://www.iis.net/downloads/microsoft/url-rewrite',
+      '  iisnode-full-v0.2.26-x64.msi   — iisnode, https://github.com/Azure/iisnode/releases',
+      '',
+      'deploy-iis.bat установит то, чего нет на сервере. Уже установленное не трогается.',
+    ].join(String.fromCharCode(13, 10)),
+);
 // PDF-инструкция по публикации (docs/build-iis-guide.mjs), если она собрана для этой версии.
 const guide = path.join(root, 'docs', `Контроль-задач-инструкция-IIS-v${version}.pdf`);
 // В архиве имя латиницей: Compress-Archive кладёт кириллические имена в кодировке консоли, и сторонние архиваторы их искажают.
@@ -38,16 +53,16 @@ if (existsSync(guide)) copyFileSync(guide, path.join(stage, `IIS-guide-v${versio
 const steps = [
   `Контроль задач ${version} — готовый комплект для публикации в IIS (интернет на сервере не нужен)`,
   '',
-  'Привезти на сервер заранее, на съёмном носителе (скачиваются на компьютере с интернетом):',
-  '  - Node.js 18 или новее для Windows (установщик .msi) — https://nodejs.org',
-  '  - модуль IIS iisnode (.msi) — https://github.com/Azure/iisnode/releases',
-  '  - модуль IIS URL Rewrite (.msi) — https://www.iis.net/downloads/microsoft/url-rewrite',
-  'Роль «Веб-сервер IIS» ставится из компонентов Windows. Собирать ничего не нужно: dist-iis уже собран.',
+  'Публикация — один файл deploy-iis.bat на сервере. Он сам ставит недостающее, создаёт сайт, базу',
+  'и настраивает вход через Windows. Собирать ничего не нужно: dist-iis уже собран.',
   '',
-  '1. В первых строках deploy-iis.bat проверьте IP, PORT и SQLSERVER (имя вашего SQL Server).',
-  '2. Запустите deploy-iis.bat от имени администратора. Файл сам поймёт, что исходников проекта нет,',
-  '   и возьмёт готовую папку dist-iis; ключ /nobuild указывать не обязательно.',
-  '3. Откройте http://<адрес>:<порт>/api/health — должно быть {"ok":true,"storage":"sqlserver"}.',
+  '1. Если на сервере ещё нет Node.js, URL Rewrite или iisnode — положите их установщики .msi в папку',
+  '   installers (список и ссылки — installers\\README.txt). Роли Windows Server (IIS, проверка',
+  '   подлинности Windows, модуль Active Directory) батник ставит сам из состава системы.',
+  '2. В первых строках deploy-iis.bat проверьте IP, PORT и SQLSERVER (имя вашего SQL Server).',
+  '3. Запустите deploy-iis.bat от имени администратора.',
+  '4. Откройте http://<адрес>:<порт>/api/health — должно быть {"ok":true,"storage":"sqlserver"}.',
+  '5. Способ входа (форма или Windows) переключается в приложении: Администрирование > Аутентификация.',
   '',
   'Публикация с другого компьютера сети (на сервере запускать ничего не нужно):',
   '   deploy-iis-remote.bat -Server ИМЯ_СЕРВЕРА            (проверка сервера: добавьте -Check)',

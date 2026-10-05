@@ -131,13 +131,41 @@ const meta = async (q: Q, key: string): Promise<string | null> => {
   return found.length ? (found[0] as { value: string }).value : null;
 };
 
+/** Таблицы, по которым видно, что в базе уже есть данные приложения. */
+const DATA_TABLES = ['tc_users', 'tc_tasks', 'tc_absences', 'tc_reports', 'tc_messages', 'tc_dictionaries', 'tc_plan_rows', 'tc_units', 'tc_templates', 'tc_roles'] as const;
+/** Отметка готовности раздела и таблица, в которой лежат его строки. */
+const READY_TABLE: Record<string, (typeof DATA_TABLES)[number]> = {
+  'dictionaries-ready': 'tc_dictionaries',
+  'plan-rows-ready': 'tc_plan_rows',
+  'units-ready': 'tc_units',
+  'templates-ready': 'tc_templates',
+  'access-ready': 'tc_users',
+};
+
+const hasRows = async (q: Q, table: (typeof DATA_TABLES)[number]): Promise<boolean> =>
+  (await rows(q, `select top 1 1 as [x] from dbo.${table}`)).length > 0;
+
+/**
+ * Раздел записан: есть отметка в tc_meta или строки в его таблице. Строки важнее отметки: если отметок нет
+ * (база восстановлена из копии, создана скриптом или перенесена), данные не подменяются значениями
+ * по умолчанию и не перезаписываются ими при следующем сохранении.
+ */
+const isReady = async (q: Q, key: string): Promise<boolean> => (await meta(q, key)) != null || hasRows(q, READY_TABLE[key]);
+
+/** Демоданные пишутся только в действительно пустую базу. */
+const isSeeded = async (q: Q): Promise<boolean> => {
+  if ((await meta(q, 'seeded')) != null) return true;
+  for (const table of DATA_TABLES) if (await hasRows(q, table)) return true;
+  return false;
+};
+
 const readAll = async (q: Q): Promise<Data | null> => {
-  if ((await meta(q, 'seeded')) == null) return null;
-  const dictionariesReady = (await meta(q, 'dictionaries-ready')) != null;
-  const planRowsReady = (await meta(q, 'plan-rows-ready')) != null;
-  const unitsReady = (await meta(q, 'units-ready')) != null;
-  const templatesReady = (await meta(q, 'templates-ready')) != null;
-  const accessReady = (await meta(q, 'access-ready')) != null;
+  if (!(await isSeeded(q))) return null;
+  const dictionariesReady = await isReady(q, 'dictionaries-ready');
+  const planRowsReady = await isReady(q, 'plan-rows-ready');
+  const unitsReady = await isReady(q, 'units-ready');
+  const templatesReady = await isReady(q, 'templates-ready');
+  const accessReady = await isReady(q, 'access-ready');
   const accessVersion = await meta(q, 'access-version');
   const authentication = await meta(q, 'authentication-settings');
   const scoring = await meta(q, 'scoring-settings');
@@ -561,15 +589,14 @@ export const createMssqlRepo = (settings: MssqlSettings): Repo => {
         const before = current ?? empty;
         // Пока таблица ни разу не записывалась, чтение подставляет значения по умолчанию.
         // Сравнивать с ними нельзя: иначе они сочтутся уже сохранёнными и не попадут в базу.
-        const isReady = async (key: string) => (await meta(tx, key)) != null;
         const baseline: Data = {
           ...before,
-          dictionaries: (await isReady('dictionaries-ready')) ? before.dictionaries : [],
-          planRows: (await isReady('plan-rows-ready')) ? before.planRows : [],
-          users: (await isReady('access-ready')) ? before.users : [],
-          roles: (await isReady('access-ready')) ? before.roles : [],
-          units: (await isReady('units-ready')) ? before.units : [],
-          templates: (await isReady('templates-ready')) ? before.templates : [],
+          dictionaries: (await isReady(tx, 'dictionaries-ready')) ? before.dictionaries : [],
+          planRows: (await isReady(tx, 'plan-rows-ready')) ? before.planRows : [],
+          users: (await isReady(tx, 'access-ready')) ? before.users : [],
+          roles: (await isReady(tx, 'access-ready')) ? before.roles : [],
+          units: (await isReady(tx, 'units-ready')) ? before.units : [],
+          templates: (await isReady(tx, 'templates-ready')) ? before.templates : [],
         };
 
         await sync(tx, TASKS, before.tasks, next.tasks);

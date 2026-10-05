@@ -37,6 +37,8 @@ writeFileSync(
   <appSettings>
     <!-- Доверие заголовкам IIS обязательно: без него бесшовный Windows-вход не работает. -->
     <add key="WINDOWS_AUTH_TRUST_PROXY" value="true" />
+    <!-- Доменного пользователя передаёт iisnode (promoteServerVars ниже); другим заголовкам приложение не верит. -->
+    <add key="WINDOWS_AUTH_HEADER" value="x-iisnode-logon_user" />
     <!-- Общий секрет прокси. Заполняется, если запросы к Node.js может слать кто-то кроме IIS. -->
     <add key="WINDOWS_AUTH_PROXY_SECRET" value="" />
     <!-- Ключ подписи сеансов. Заменить на длинную случайную строку. -->
@@ -50,7 +52,7 @@ writeFileSync(
     <add key="MSSQL_DOMAIN" value="" />
     <!-- Строка подключения к PostgreSQL. Используется, только если MSSQL_SERVER пуст. -->
     <add key="DATABASE_URL" value="" />
-    <!-- Выпадающий список ФИО из Active Directory. -->
+    <!-- Выпадающий список ФИО из Active Directory (нужен модуль RSAT-AD-PowerShell; deploy-iis.bat ставит его и включает поиск). -->
     <add key="AD_SEARCH_ENABLED" value="false" />
     <add key="AD_SEARCH_BASE" value="" />
   </appSettings>
@@ -76,7 +78,8 @@ writeFileSync(
       </requestFiltering>
     </security>
     <httpErrors existingResponse="PassThrough" />
-    <iisnode nodeProcessCountPerApplication="1" loggingEnabled="true" devErrorsEnabled="false" watchedFiles="web.config;*.cjs" />
+    <!-- promoteServerVars: доменный пользователь, подтверждённый IIS, приходит в заголовках x-iisnode-logon_user и x-iisnode-auth_user. -->
+    <iisnode nodeProcessCountPerApplication="1" loggingEnabled="true" devErrorsEnabled="false" watchedFiles="web.config;*.cjs" promoteServerVars="LOGON_USER,AUTH_USER" />
   </system.webServer>
 </configuration>
 `,
@@ -93,6 +96,7 @@ const readme = [
   'создаёт сайт, пул и Windows-аутентификацию, заводит учётную запись и базу SQL Server.',
   '',
   'Настройки правятся в разделе appSettings файла web.config; после правки IIS перезапускает приложение сам.',
+  'Способ входа (форма или Windows) переключается в приложении: Администрирование > Аутентификация.',
   'Порядок развёртывания и настройка Windows-входа: corporate-offline.md (в архиве релиза) или docs\\corporate-offline.md.',
 ].join(String.fromCharCode(13, 10));
 // BOM нужен, чтобы Блокнот показал кириллицу правильно.

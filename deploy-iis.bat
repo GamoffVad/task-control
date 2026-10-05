@@ -6,6 +6,8 @@ rem ============================================================
 rem  Публикация приложения «Контроль задач» в IIS
 rem  Адрес: http://10.199.127.27:1500  Папка: C:\inetpub\wwwroot\PLAN
 rem  Запускать от имени администратора.
+rem  Недостающее ставит сам: роли Windows Server (IIS, проверка подлинности Windows, модуль AD) —
+rem  из состава системы; Node.js, URL Rewrite и iisnode — установщики .msi из папки installers рядом.
 rem  Ключи: /nobuild — без пересборки, /nosql — не трогать SQL Server,
 rem         /resetsql — задать учётной записи приложения новый пароль.
 rem  С другого компьютера в сети: deploy-iis-remote.bat -Server ИМЯ_СЕРВЕРА (см. docs/corporate-offline.md).
@@ -17,6 +19,7 @@ set "IP=10.199.127.27"
 set "PORT=1500"
 set "TARGET=C:\inetpub\wwwroot\PLAN"
 set "SOURCE=%~dp0dist-iis"
+set "INSTALLERS=%~dp0installers"
 rem SQL Server для хранилища: имя сервера или СЕРВЕР\ЭКЗЕМПЛЯР, база и учётная запись приложения.
 set "SQLSERVER=localhost"
 set "SQLDB=TaskControl"
@@ -49,29 +52,58 @@ if errorlevel 1 (
   goto :fail
 )
 
+rem --- Компоненты сервера ---------------------------------------
+rem Всё недостающее ставится здесь же, интернет не нужен. Роли Windows Server — из состава системы:
+rem IIS, проверка подлинности Windows, консоль IIS и модуль Active Directory для поиска сотрудников.
+rem Node.js, URL Rewrite и iisnode — установщики .msi из папки installers рядом с этим файлом.
+echo [0/7] Компоненты сервера...
+powershell -NoProfile -Command "if (-not (Get-Command Install-WindowsFeature -ErrorAction SilentlyContinue)) { exit 2 }; $m = @('Web-Server','Web-Windows-Auth','Web-Mgmt-Console','RSAT-AD-PowerShell' | Where-Object { -not (Get-WindowsFeature $_).Installed }); if ($m.Count) { Write-Host ('  + ' + ($m -join ', ')); if (-not (Install-WindowsFeature $m).Success) { exit 1 } }; exit 0"
+set "FEATURES=%errorlevel%"
+if "%FEATURES%"=="1" (
+  echo ОШИБКА: не удалось установить роли Windows Server — смотрите сообщение выше.
+  goto :fail
+)
+if "%FEATURES%"=="2" echo   Это не Windows Server: IIS и проверку подлинности Windows включите в «Компонентах Windows».
+
 if not exist "%APPCMD%" (
   echo ОШИБКА: не найден %APPCMD%. Установите роль "Веб-сервер IIS".
   goto :fail
 )
 
 for /f "delims=" %%i in ('where node 2^>nul') do if not defined NODE_EXE set "NODE_EXE=%%i"
+if not defined NODE_EXE if exist "%ProgramFiles%\nodejs\node.exe" set "NODE_EXE=%ProgramFiles%\nodejs\node.exe"
+if not defined NODE_EXE call :install "node-v*-x64.msi" "Node.js"
+rem Установщик дописывает PATH только для новых окон, поэтому ищем node.exe по пути установки.
+if not defined NODE_EXE if exist "%ProgramFiles%\nodejs\node.exe" set "NODE_EXE=%ProgramFiles%\nodejs\node.exe"
 if not defined NODE_EXE (
-  echo ОШИБКА: не найден node.exe. Установите Node.js 18 или новее.
+  echo ОШИБКА: не найден node.exe. Положите установщик node-vВЕРСИЯ-x64.msi ^(Node.js 18 или новее^) в папку
+  echo   %INSTALLERS% и повторите запуск.
   goto :fail
 )
 
 rem Список установленных модулей: appcmd при пустом ответе возвращает 0, поэтому ищем по имени.
-"%APPCMD%" list config /section:system.webServer/globalModules | findstr /i "iisnode" >nul
+"%APPCMD%" list config /section:system.webServer/globalModules | findstr /i "RewriteModule" >nul
+if errorlevel 1 call :install "rewrite*.msi" "URL Rewrite"
+"%APPCMD%" list config /section:system.webServer/globalModules | findstr /i "RewriteModule" >nul
 if errorlevel 1 (
-  echo ОШИБКА: не установлен модуль iisnode. Скачайте и установите iisnode для IIS, затем повторите запуск.
+  echo ОШИБКА: не установлен модуль URL Rewrite. Положите rewrite_amd64_ru-RU.msi или rewrite_amd64_en-US.msi
+  echo   в папку %INSTALLERS% и повторите запуск.
   goto :fail
 )
 
-"%APPCMD%" list config /section:system.webServer/globalModules | findstr /i "RewriteModule" >nul
+"%APPCMD%" list config /section:system.webServer/globalModules | findstr /i "iisnode" >nul
+if errorlevel 1 call :install "iisnode*x64.msi" "iisnode"
+"%APPCMD%" list config /section:system.webServer/globalModules | findstr /i "iisnode" >nul
 if errorlevel 1 (
-  echo ОШИБКА: не установлен модуль URL Rewrite. Установите его и повторите запуск.
+  echo ОШИБКА: не установлен модуль iisnode. Положите iisnode-full-v0.2.26-x64.msi в папку
+  echo   %INSTALLERS% и повторите запуск.
   goto :fail
 )
+
+rem Модуль Active Directory есть — поиск сотрудников в каталоге включается в новом web.config сам.
+set "ADSEARCH=false"
+powershell -NoProfile -Command "if (Get-Module -ListAvailable ActiveDirectory) { exit 0 } else { exit 1 }"
+if not errorlevel 1 set "ADSEARCH=true"
 
 rem --- Ключи запуска ------------------------------------------
 set "SKIPBUILD="
@@ -121,8 +153,11 @@ if not exist "%TARGET%" mkdir "%TARGET%"
 if not exist "%TARGET%\web.config" (
   copy /y "%SOURCE%\web.config" "%TARGET%\web.config" >nul
   rem iisnode по умолчанию ищет node.exe в Program Files; записываем найденный путь.
-  powershell -NoProfile -Command "$p='%TARGET%\web.config'; $t=Get-Content -Raw -Encoding UTF8 $p; $t=$t -replace '<iisnode ', '<iisnode nodeProcessCommandLine=''\"%NODE_EXE%\"'' '; Set-Content -Path $p -Value $t -Encoding UTF8 -NoNewline"
+  rem Поиск сотрудников в Active Directory включается, если на сервере есть модуль ActiveDirectory.
+  powershell -NoProfile -Command "$p='%TARGET%\web.config'; $t=Get-Content -Raw -Encoding UTF8 $p; $t=$t -replace '<iisnode ', '<iisnode nodeProcessCommandLine=''\"%NODE_EXE%\"'' '; $t=$t -replace 'key=\"AD_SEARCH_ENABLED\" value=\"false\"', 'key=\"AD_SEARCH_ENABLED\" value=\"%ADSEARCH%\"'; Set-Content -Path $p -Value $t -Encoding UTF8 -NoNewline"
 )
+rem В web.config прежних версий нет promoteServerVars: без него iisnode не передаёт приложению доменного пользователя.
+findstr /c:"promoteServerVars" "%TARGET%\web.config" >nul || powershell -NoProfile -Command "$p='%TARGET%\web.config'; $t=Get-Content -Raw -Encoding UTF8 $p; $t=$t -replace '<iisnode ', '<iisnode promoteServerVars=''LOGON_USER,AUTH_USER'' '; Set-Content -Path $p -Value $t -Encoding UTF8 -NoNewline"
 rem Настройки и данные сохраняются: web.config и папка data не перезаписываются и не удаляются.
 robocopy "%SOURCE%" "%TARGET%" /MIR /XF web.config /XD data iisnode /NFL /NDL /NJH /NJS /NP >nul
 if errorlevel 8 (
@@ -160,20 +195,21 @@ if errorlevel 1 (
 "%APPCMD%" set app "%SITE%/" /applicationPool:"%POOL%" >nul
 
 rem --- Windows-аутентификация ----------------------------------
+rem Анонимный доступ и проверка подлинности Windows включены вместе, и способ входа переключается
+rem в самом приложении (Администрирование, Аутентификация) без правки IIS и web.config.
+rem В режиме «Windows» приложение отвечает 401, IIS запрашивает учётную запись Windows, а iisnode
+rem передаёт подтверждённый логин заголовком X-iisnode-LOGON_USER (promoteServerVars в web.config).
 echo [6/7] Windows-аутентификация...
-"%APPCMD%" set config "%SITE%" /section:%SECTION%/anonymousAuthentication /enabled:false /commit:apphost >nul
+"%APPCMD%" set config "%SITE%" /section:%SECTION%/anonymousAuthentication /enabled:true /commit:apphost >nul
 "%APPCMD%" set config "%SITE%" /section:%SECTION%/basicAuthentication /enabled:false /commit:apphost >nul
 "%APPCMD%" set config "%SITE%" /section:%SECTION%/windowsAuthentication /enabled:true /commit:apphost >nul
 rem Negotiate должен стоять выше NTLM: удаляем NTLM и добавляем его заново в конец списка.
 "%APPCMD%" set config "%SITE%" /section:%SECTION%/windowsAuthentication /-"providers.[value='NTLM']" /commit:apphost >nul 2>&1
 "%APPCMD%" set config "%SITE%" /section:%SECTION%/windowsAuthentication /+"providers.[value='NTLM']" /commit:apphost >nul 2>&1
 
-rem Правило передаёт приложению подтверждённого доменного пользователя.
-"%APPCMD%" set config -section:system.webServer/rewrite/allowedServerVariables /+"[name='HTTP_X_WINDOWS_USER']" /commit:apphost >nul 2>&1
-"%APPCMD%" set config "%SITE%" -section:system.webServer/rewrite/rules /+"[name='Windows user',patternSyntax='ECMAScript',stopProcessing='False']" /commit:apphost >nul 2>&1
-"%APPCMD%" set config "%SITE%" -section:system.webServer/rewrite/rules /"[name='Windows user'].match.url:.*" /commit:apphost >nul 2>&1
-"%APPCMD%" set config "%SITE%" -section:system.webServer/rewrite/rules /+"[name='Windows user'].serverVariables.[name='HTTP_X_WINDOWS_USER',value='{LOGON_USER}',replace='True']" /commit:apphost >nul 2>&1
-"%APPCMD%" set config "%SITE%" -section:system.webServer/rewrite/rules /"[name='Windows user'].action.type:None" /commit:apphost >nul 2>&1
+rem Правило URL Rewrite прежних версий (X-Windows-User = {LOGON_USER}) не нужно: оно срабатывало
+rem до проверки подлинности, и логин в нём был пустым. Пользователя передаёт iisnode.
+"%APPCMD%" set config "%SITE%" -section:system.webServer/rewrite/rules /-"[name='Windows user']" /commit:apphost >nul 2>&1
 
 rem --- SQL Server: база и учётная запись приложения ------------
 echo [7/7] SQL Server...
@@ -222,7 +258,9 @@ echo  1. Проверить раздел appSettings файла %TARGET%\web.con
 echo     заполняются шагом 7 автоматически. Таблицы создадутся при первом открытии приложения.
 echo  2. Войти администратором, открыть Администрирование ^> Аутентификация
 echo     и нажать «Проверить настройку»: там видно, какой доменный логин получил сервер.
-echo  3. Заполнить Windows-логины сотрудников и включить режим «Windows-аутентификация».
+echo  3. Заполнить Windows-логины сотрудников и выбрать способ входа «Windows» — IIS и web.config
+echo     при этом править не нужно. Сайт должен быть в зоне «Местная интрасеть» браузера, иначе
+echo     браузер будет спрашивать логин и пароль Windows.
 echo  4. Полная инструкция: docs\corporate-offline.md
 echo.
 goto :end
@@ -249,4 +287,13 @@ exit /b 1
 
 :end
 endlocal
+exit /b 0
+
+:install
+rem Тихая установка .msi из папки installers: %1 — маска имени файла, %2 — название для сообщения.
+set "MSI="
+for %%f in ("%INSTALLERS%\%~1") do set "MSI=%%~ff"
+if not defined MSI exit /b 1
+echo   + %~2: %MSI%
+start "" /wait msiexec /i "%MSI%" /qn /norestart
 exit /b 0

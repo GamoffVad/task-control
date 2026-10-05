@@ -529,7 +529,7 @@
 | `GET /api/windows-check` | разбор запроса для проверки Windows-входа + сопоставление | токен, `authentication.manage` |
 | `GET /api/directory-users?q=` | поиск пользователей Active Directory (≥ 2 символов, до 20) | токен, `users.manage` |
 
-Токен передаётся заголовком `Authorization: Bearer …`. Статика и любой неизвестный адрес вне `/api/` отдают `index.html` (одностраничное приложение). Неизвестный адрес API — 404.
+Токен передаётся заголовком `X-TC-Token` (прежний `Authorization: Bearer …` тоже принимается): `Authorization` занят проверкой подлинности Windows в IIS. Код `401` означает только запрос учётной записи Windows; неверный пароль и недействительный сеанс — `403` (сеанс — с признаком `relogin`, клиент выходит). Статика и любой неизвестный адрес вне `/api/` отдают `index.html` (одностраничное приложение). Неизвестный адрес API — 404.
 
 ### 7.2. Выполнение действия
 
@@ -591,14 +591,13 @@
 
 ### 9.3. Windows (бесшовный вход)
 
-Схема: браузер → IIS с Windows Authentication (Negotiate/NTLM) → локальный Node.js. Приложение пароль не запрашивает и `WWW-Authenticate` не отправляет.
+Схема: браузер → IIS (анонимный доступ и Windows Authentication Negotiate/NTLM) → iisnode → Node.js. Приложение пароль не запрашивает и `WWW-Authenticate` не отправляет: на `POST /api/windows-login` и `GET /api/windows-check` без доменного пользователя оно отвечает `401`, IIS добавляет запрос Windows-аутентификации, браузер повторяет запрос с учётной записью. Поэтому способ входа переключается в администрировании без правки IIS и `web.config`.
 
-- Доменного пользователя подтверждает IIS и передаёт заголовком. Просматриваются заголовки в порядке: `WINDOWS_AUTH_HEADER` (если задан), затем `x-windows-user`, `x-iisnode-logon_user`, `x-iisnode-auth_user`, `x-iis-user`, `x-remote-user`, `x-forwarded-user`, `remote-user`, `auth-user`.
+- Доменного пользователя подтверждает IIS, iisnode передаёт его заголовком `X-iisnode-LOGON_USER` (`promoteServerVars`). Если задан `WINDOWS_AUTH_HEADER` (для `server.cjs` по умолчанию `x-iisnode-logon_user`), принимается только он, причём последнее вхождение: iisnode дописывает свой заголовок после одноимённого от браузера. Без `WINDOWS_AUTH_HEADER` просматриваются `x-windows-user`, `x-iisnode-logon_user`, `x-iisnode-auth_user`, `x-iis-user`, `x-remote-user`, `x-forwarded-user`, `remote-user`, `auth-user`.
 - Доверие включается **только** `WINDOWS_AUTH_TRUST_PROXY=true`; иначе заголовок мог бы подделать любой, кто доберётся до порта.
 - Необязательный общий секрет прокси `WINDOWS_AUTH_PROXY_SECRET`: запрос должен нести его в заголовке `x-windows-auth-secret`.
 - Логин нормализуется (`DOMAIN\ivanov`, `ivanov@corp.local`, `ivanov` → сопоставление по всем трём видам); ищется активный пользователь с таким Windows-логином.
-- `deploy-iis.bat` настраивает правило перезаписи, которое кладёт `{LOGON_USER}` в серверную переменную `HTTP_X_WINDOWS_USER`.
-- Поиск в Active Directory (необязательный): `AD_SEARCH_ENABLED=true`, модуль RSAT ActiveDirectory через PowerShell (`AD_POWERSHELL_PATH`, `AD_SEARCH_BASE`); без LDAP-библиотек и интернета; таймаут 8 с; вводимая строка очищается от спецсимволов.
+- Поиск в Active Directory (необязательный): `AD_SEARCH_ENABLED=true`, модуль RSAT ActiveDirectory через PowerShell (`AD_POWERSHELL_PATH`, `AD_SEARCH_BASE`); без LDAP-библиотек и интернета; таймаут 8 с; вводимая строка очищается от спецсимволов. Логин возвращается в виде `ДОМЕН\логин` (краткое имя домена — по части `DC=…` учётной записи), вывод PowerShell — в UTF-8.
 
 ### 9.4. Защита данных и прочее
 
@@ -711,13 +710,13 @@
 
 **Что делает `deploy-iis.bat`** (ключи `/nobuild`, `/nosql`, `/resetsql`):
 
-1. Проверяет права администратора, `appcmd.exe`, `node.exe`, iisnode, URL Rewrite.
+1. Проверяет права администратора и ставит недостающее: роли Windows Server (`Web-Server`, `Web-Windows-Auth`, `Web-Mgmt-Console`, `RSAT-AD-PowerShell`) — `Install-WindowsFeature`; Node.js, URL Rewrite, iisnode — `msiexec /qn` из папки `installers`.
 2. Определяет комплект: рядом `node_modules` → собирает (`npm run build:iis`; `/nobuild` пропускает); иначе берёт готовый `dist-iis`; иначе объясняет, как получить архив.
-3. Показывает версию комплекта и версию на сервере, останавливает пул, копирует файлы (`robocopy /MIR`, без перезаписи `web.config`, `data`, `iisnode`); при первой публикации создаёт `web.config` и записывает путь к `node.exe`.
+3. Показывает версию комплекта и версию на сервере, останавливает пул, копирует файлы (`robocopy /MIR`, без перезаписи `web.config`, `data`, `iisnode`); при первой публикации создаёт `web.config`, записывает путь к `node.exe` и включает поиск в AD, если модуль есть; в `web.config` прежних версий дописывает `promoteServerVars`.
 4. Выдаёт права (`IIS_IUSRS` — чтение, запись в `data` и `iisnode`; то же для учётной записи пула).
 5. Создаёт пул `PLAN` (без управляемого кода, `AlwaysRunning`, без простоя и перезапусков по расписанию).
 6. Создаёт сайт `PLAN` с привязкой `http/<IP>:<PORT>`.
-7. Настраивает Windows-аутентификацию (анонимная и обычная выключены, `Negotiate` выше `NTLM`) и правило, передающее `LOGON_USER`.
+7. Настраивает проверку подлинности: Windows и анонимная включены, обычная выключена, `Negotiate` выше `NTLM`; правило URL Rewrite `Windows user` прежних версий удаляется.
 8. Настраивает SQL Server (`setup-sql.ps1`): учётная запись `tc_app` со случайным паролем, база `TaskControl`, владелец — эта учётная запись; пишет настройки и `AUTH_SECRET` в `web.config`. Нужны права `sysadmin` (или `securityadmin` и `dbcreator`) и смешанный режим проверки подлинности в SQL Server.
 9. Открывает порт в брандмауэре, запускает пул и сайт и проверяет, что на сервере версия комплекта (иначе сообщает, что файлы не обновились).
 

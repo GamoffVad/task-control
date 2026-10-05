@@ -34,10 +34,10 @@ beforeEach(() => {
 const call = async (path: string, init: { method?: string; token?: string; body?: unknown; windowsUser?: string } = {}) => {
   const res = await fetch(base + path, {
     method: init.method ?? 'GET',
-    headers: { 'content-type': 'application/json', ...(init.token ? { authorization: `Bearer ${init.token}` } : {}), ...(init.windowsUser ? { 'x-windows-user': init.windowsUser } : {}) },
+    headers: { 'content-type': 'application/json', ...(init.token ? { 'x-tc-token': init.token } : {}), ...(init.windowsUser ? { 'x-windows-user': init.windowsUser } : {}) },
     body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
   });
-  return { status: res.status, json: (await res.json()) as { data?: Data; error?: string; token?: string; user?: unknown } };
+  return { status: res.status, json: (await res.json()) as { data?: Data; error?: string; token?: string; user?: unknown; relogin?: boolean } };
 };
 
 const login = async (email: string) => (await call('/api/login', { method: 'POST', body: { email, password: '123456' } })).json.token!;
@@ -65,8 +65,10 @@ describe('API', () => {
 
   it('входит по логину и паролю, отказывает при неверном пароле', async () => {
     const bad = await call('/api/login', { method: 'POST', body: { email: 'user@example.com', password: 'nope00' } });
-    expect(bad.status).toBe(401);
+    // 403, а не 401: на 401 IIS добавил бы запрос учётной записи Windows.
+    expect(bad.status).toBe(403);
     expect(bad.json.error).toMatch(/Неверный логин/);
+    expect(bad.json.relogin).toBeUndefined();
     const ok = await call('/api/login', { method: 'POST', body: { email: 'SIDOROV@example.com', password: '123456' } });
     expect(ok.status).toBe(200);
     expect(ok.json.user).toMatchObject({ email: 'sidorov@example.com', employeeId: 3, role: 'executor' });
@@ -120,11 +122,13 @@ describe('API', () => {
   });
 
   it('без токена или с поддельным токеном не отдаёт данные', async () => {
-    expect((await call('/api/state')).status).toBe(401);
+    const none = await call('/api/state');
+    expect(none.status).toBe(403);
+    expect(none.json.relogin).toBe(true);
     const forged = signToken({ email: 'x', employeeId: 1, role: 'manager' }, 'other-secret', NOW);
-    expect((await call('/api/state', { token: forged })).status).toBe(401);
+    expect((await call('/api/state', { token: forged })).status).toBe(403);
     const expired = signToken({ email: 'x', employeeId: 1, role: 'manager' }, SECRET, new Date(2026, 0, 1));
-    expect((await call('/api/state', { token: expired })).status).toBe(401);
+    expect((await call('/api/state', { token: expired })).status).toBe(403);
   });
 
   it('заполняет пустую базу демоданными и хранит изменения', async () => {

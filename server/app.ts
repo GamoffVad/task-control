@@ -5,6 +5,10 @@
 //   GET  /api/health                       → { ok, storage } либо 503, если база не отвечает
 //   GET  /api/notices?since=ISO            → { notices, now } — новые уведомления вошедшего сотрудника
 //   GET  /api/windows-check                → что сервер видит в запросе для входа через Windows (администратору)
+// Токен сеанса передаётся в заголовке X-TC-Token (прежний Authorization: Bearer тоже принимается).
+// Ответ 401 — только запрос учётной записи Windows: IIS добавляет к нему WWW-Authenticate, и браузер
+// входит доменной учётной записью. Истёкший сеанс и неверный пароль — 403 (сеанс — с признаком relogin),
+// иначе за ними тоже последовал бы запрос Windows.
 // Изменения выполняет тот же редьюсер, что и в браузере, с пользователем из подписанного токена,
 // поэтому права проверяются на сервере независимо от интерфейса.
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -27,11 +31,17 @@ import { scopeOf, visibleReports, visibleTasks } from '../src/lib/visibility';
 
 export class HttpError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** Дополнительные поля ответа. */
+  extra: Record<string, unknown>;
+  constructor(status: number, message: string, extra: Record<string, unknown> = {}) {
     super(message);
     this.status = status;
+    this.extra = extra;
   }
 }
+
+/** Сеанс недействителен: клиент выходит и показывает экран входа. */
+const sessionError = (message: string) => new HttpError(403, message, { relogin: true });
 
 type Options = {
   repo: Repo;
@@ -295,6 +305,9 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
 };
 
 const bearer = (req: IncomingMessage) => {
+  // Заголовок Authorization занят проверкой подлинности Windows в IIS, поэтому токен — в X-TC-Token.
+  const own = req.headers['x-tc-token'];
+  if (typeof own === 'string' && own) return own;
   const h = req.headers.authorization;
   return h?.startsWith('Bearer ') ? h.slice(7) : undefined;
 };
@@ -396,7 +409,7 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
 
   const authed = (req: IncomingMessage): User => {
     const user = verifyToken(bearer(req), secret, now());
-    if (!user) throw new HttpError(401, 'Сеанс истёк. Войдите заново.');
+    if (!user) throw sessionError('Сеанс истёк. Войдите заново.');
     return user;
   };
 
@@ -424,7 +437,7 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
           const tokenUser = authed(req);
           const current = await load();
           const user = effectiveUser(tokenUser, current.users, current.roles);
-          if (!user) throw new HttpError(401, 'Учётная запись отключена.');
+          if (!user) throw sessionError('Учётная запись отключена.');
           if (!hasPermission(user, 'authentication.manage')) throw new HttpError(403, 'Недостаточно прав для проверки способа входа.');
           const check = windowsCheck?.(req) ?? {
             enabled: false,
@@ -437,7 +450,9 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
           // Сопоставление с пользователем приложения: без него вход не состоится даже при верном заголовке.
           const keys = check.identity ? identityKeys(check.identity) : [];
           const match = current.users.find((item) => keys.includes(item.windowsLogin.trim().toLowerCase()));
-          return send(res, 200, {
+          // Доменного пользователя нет — отвечаем 401: IIS запросит учётную запись Windows, и браузер
+          // повторит запрос уже с ней. Не вышло — клиент покажет этот же ответ с причиной.
+          return send(res, check.enabled && !check.identity ? 401 : 200, {
             ...check,
             matched: match ? { employeeId: match.employeeId, fullName: match.fullName, windowsLogin: match.windowsLogin, active: match.active } : null,
             problem:
@@ -453,7 +468,7 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
           const tokenUser = authed(req);
           const current = await load();
           const user = effectiveUser(tokenUser, current.users, current.roles);
-          if (!user) throw new HttpError(401, 'Учётная запись отключена.');
+          if (!user) throw sessionError('Учётная запись отключена.');
           if (!hasPermission(user, 'users.manage')) throw new HttpError(403, 'Недостаточно прав для поиска пользователей.');
           if (!directory) throw new HttpError(503, 'Поиск в Active Directory не настроен на сервере.');
           const query = url.searchParams.get('q')?.trim() ?? '';
@@ -471,7 +486,7 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
           const password = isObj(body) && typeof body.password === 'string' ? body.password : '';
           const current = await load();
           const account = authenticate(email, password, current.users, current.roles);
-          if (!account) throw new HttpError(401, 'Неверный логин или пароль. Проверьте данные и повторите вход.');
+          if (!account) throw new HttpError(403, 'Неверный логин или пароль. Проверьте данные и повторите вход.');
           // Форма закрывается, только если прокси действительно передал доменного пользователя
           // в этом же запросе: при неверной настройке IIS иначе никто не смог бы войти.
           const seamless = !!windowsIdentity?.(req);
@@ -499,7 +514,7 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
           const t = now();
           let data = await load();
           const user = effectiveUser(tokenUser, data.users, data.roles);
-          if (!user) throw new HttpError(401, 'Учётная запись отключена.');
+          if (!user) throw sessionError('Учётная запись отключена.');
           const me = user.employeeId;
           // Напоминание о просрочке — раз в день, при первом обращении сотрудника после 9:00. Внешний планировщик не нужен.
           const overdueId = `ntc-overdue-${me}-${dayKey(t)}`;
@@ -527,7 +542,7 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
           const tokenUser = authed(req);
           const data = await load();
           const stateUser = effectiveUser(tokenUser, data.users, data.roles);
-          if (!stateUser) throw new HttpError(401, 'Учётная запись отключена.');
+          if (!stateUser) throw sessionError('Учётная запись отключена.');
           return send(res, 200, { data: forUser(data, stateUser) });
         }
         case 'POST /api/action': {
@@ -544,7 +559,7 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
               throw new HttpError(409, 'Windows-вход ещё не настроен на сервере: оставьте включённым резервный вход администратора по паролю.');
             }
             const user = effectiveUser(tokenUser, current.users, current.roles);
-            if (!user) throw new HttpError(401, 'Учётная запись отключена.');
+            if (!user) throw sessionError('Учётная запись отключена.');
             const before = fromData(current, user);
             const after = reducer(before, action);
             // Редьюсер возвращает прежнее состояние, если у пользователя нет прав на действие.
@@ -561,7 +576,7 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
           throw new HttpError(404, 'Нет такого адреса API.');
       }
     } catch (e) {
-      if (e instanceof HttpError) return send(res, e.status, { error: e.message });
+      if (e instanceof HttpError) return send(res, e.status, { error: e.message, ...e.extra });
       console.error(e);
       return send(res, 500, { error: 'Ошибка сервера. Повторите попытку позже.' });
     }

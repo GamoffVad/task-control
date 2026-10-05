@@ -72,7 +72,7 @@ const RemoteStore = ({ children }: { children: ReactNode }) => {
 
   const fail = useCallback(
     (e: unknown) => {
-      if (e instanceof ApiError && e.status === 401) return signOut();
+      if (e instanceof ApiError && e.relogin) return signOut();
       setSync((s) => ({ ...s, loading: false, error: e instanceof Error ? e.message : 'Неизвестная ошибка.' }));
     },
     [signOut],

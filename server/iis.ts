@@ -7,12 +7,18 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import path from 'node:path';
 import { createApi } from './app';
 import { secretFromEnv } from './auth';
-import { createRepoFromEnv } from './storage';
+import { createRepoFromEnv, withFileImport } from './storage';
 import { inspectWindowsRequest, windowsIdentityFromEnv } from './windowsAuth';
 import { activeDirectoryFromEnv } from './activeDirectory';
 
+// Доменного пользователя передаёт только iisnode (promoteServerVars в web.config). Прочим заголовкам
+// не доверяем: их может прислать сам браузер, ведь анонимный доступ к сайту в IIS включён.
+process.env.WINDOWS_AUTH_HEADER ||= 'x-iisnode-logon_user';
+
 const root = path.resolve(process.env.TC_STATIC_DIR ?? path.join(__dirname, 'public'));
-const repo = createRepoFromEnv(process.env, path.resolve(process.env.TC_DB_FILE ?? path.join(__dirname, 'data', 'db.json')))!;
+const dataFile = path.resolve(process.env.TC_DB_FILE ?? path.join(__dirname, 'data', 'db.json'));
+// Данные, внесённые до настройки SQL Server, переносятся в пустую базу при первом обращении к ней.
+const repo = withFileImport(createRepoFromEnv(process.env, dataFile)!, dataFile);
 
 const api = createApi({
   repo,

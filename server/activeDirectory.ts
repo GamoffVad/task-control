@@ -35,10 +35,16 @@ export const activeDirectoryFromEnv = (env: Record<string, string | undefined>):
       const base = searchBase ? ` -SearchBase '${psLiteral(searchBase)}'` : '';
       const script = [
         "$ErrorActionPreference = 'Stop'",
+        // Без этого PowerShell пишет в кодировке консоли (cp866), и кириллица в ФИО приходит искажённой.
+        '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false',
         'Import-Module ActiveDirectory',
+        // Логин — в виде ДОМЕН\логин, как его передаёт IIS при входе через Windows. Краткое имя домена
+        // (NetBIOS) берётся из части DC=… учётной записи, один раз на домен.
+        '$netbios = @{}',
+        "function Get-NetBios([string]$dn) { $dc = ($dn -split ',' | Where-Object { $_ -like 'DC=*' }) -join ','; if (-not $netbios.ContainsKey($dc)) { try { $netbios[$dc] = (Get-ADDomain -Identity $dc).NetBIOSName } catch { $netbios[$dc] = '' } }; $netbios[$dc] }",
         `Get-ADUser -Filter "Surname -like '${filter}' -or DisplayName -like '${filter}'"${base} -Properties GivenName,Surname,DisplayName,SamAccountName,UserPrincipalName,mail,Title |`,
         '  Sort-Object Surname,GivenName |',
-        '  Select-Object -First 20 @{n=\'fullName\';e={$_.DisplayName}},@{n=\'surname\';e={$_.Surname}},@{n=\'givenName\';e={$_.GivenName}},@{n=\'patronymic\';e={if ($_.DisplayName -and $_.Surname -and $_.GivenName) { ($_.DisplayName -replace (\'^\' + [regex]::Escape($_.Surname) + \'\\s+\' + [regex]::Escape($_.GivenName) + \'\\s*\'), \'\') } else { \'\' } }},@{n=\'login\';e={$_.SamAccountName}},@{n=\'email\';e={if ($_.mail) {$_.mail} else {$_.UserPrincipalName}}},@{n=\'position\';e={$_.Title}} |',
+        '  Select-Object -First 20 @{n=\'fullName\';e={$_.DisplayName}},@{n=\'surname\';e={$_.Surname}},@{n=\'givenName\';e={$_.GivenName}},@{n=\'patronymic\';e={if ($_.DisplayName -and $_.Surname -and $_.GivenName) { ($_.DisplayName -replace (\'^\' + [regex]::Escape($_.Surname) + \'\\s+\' + [regex]::Escape($_.GivenName) + \'\\s*\'), \'\') } else { \'\' } }},@{n=\'login\';e={$nb = Get-NetBios $_.DistinguishedName; if ($nb) { $nb + \'\\\' + $_.SamAccountName } else { $_.SamAccountName } }},@{n=\'email\';e={if ($_.mail) {$_.mail} else {$_.UserPrincipalName}}},@{n=\'position\';e={$_.Title}} |',
         '  ConvertTo-Json -Compress',
       ].join('\n');
       const { stdout } = await run(executable, ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', encode(script)], {
@@ -46,8 +52,9 @@ export const activeDirectoryFromEnv = (env: Record<string, string | undefined>):
         timeout: 8_000,
         maxBuffer: 512 * 1024,
       });
-      if (!stdout.trim()) return [];
-      const parsed = JSON.parse(stdout) as Record<string, unknown> | Record<string, unknown>[];
+      const text = stdout.replace(/^﻿/, '').trim();
+      if (!text) return [];
+      const parsed = JSON.parse(text) as Record<string, unknown> | Record<string, unknown>[];
       const rows = Array.isArray(parsed) ? parsed : [parsed];
       return rows.map((row): DirectoryUser => ({
         fullName: String(row.fullName ?? '').trim(),

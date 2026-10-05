@@ -138,22 +138,27 @@ try {
   Say "  Node.js:                 $(if ($info.Node) { $info.Node } else { 'НЕТ' })"
   Say "  Версия на сервере:       $(if ($info.Installed) { $info.Installed } else { 'не установлено' })"
   if (-not $Check) { Say "  Версия комплекта:        $newVersion" }
+  # Роли Windows Server deploy-iis.bat ставит сам, а Node.js, URL Rewrite и iisnode — из папки installers.
+  $installers = Join-Path $root 'installers'
+  $hasMsi = { param($mask) [bool](Get-ChildItem -Path $installers -Filter $mask -ErrorAction SilentlyContinue) }
   $missing = @()
   if (-not $info.Admin) { $missing += 'права администратора на сервере' }
-  if (-not $info.Iis) { $missing += 'роль «Веб-сервер IIS»' }
-  if (-not $info.IisNode) { $missing += 'модуль iisnode' }
-  if (-not $info.Rewrite) { $missing += 'модуль URL Rewrite' }
-  if (-not $info.Node) { $missing += 'Node.js 18 или новее' }
+  if (-not $info.IisNode -and -not (& $hasMsi 'iisnode*x64.msi')) { $missing += 'модуль iisnode (или iisnode-full-v0.2.26-x64.msi в папке installers)' }
+  if (-not $info.Rewrite -and -not (& $hasMsi 'rewrite*.msi')) { $missing += 'модуль URL Rewrite (или rewrite_amd64_*.msi в папке installers)' }
+  if (-not $info.Node -and -not (& $hasMsi 'node-v*-x64.msi')) { $missing += 'Node.js 18 или новее (или node-v*-x64.msi в папке installers)' }
   if ($missing.Count) {
-    Stop-With ('на сервере не хватает: ' + ($missing -join ', ') + '. Установите недостающее (установщики .msi привозят на носителе) и повторите.') 5
+    Stop-With ('на сервере не хватает: ' + ($missing -join ', ') + '. Положите установщики .msi в папку installers рядом с deploy-iis.bat и повторите.') 5
   }
+  if (-not ($info.Iis -and $info.IisNode -and $info.Rewrite -and $info.Node)) { Say '  Недостающее установит deploy-iis.bat.' }
   if ($Check) { Say ''; Say 'Сервер готов к публикации.'; exit 0 }
 
   # --- Передача комплекта -----------------------------------------------------
   Say ''
   Say 'Подготовка комплекта к передаче...'
   $zip = Join-Path ([IO.Path]::GetTempPath()) ("task-control-iis-" + [guid]::NewGuid().ToString('N') + '.zip')
-  Compress-Archive -Path $dist, $bat -DestinationPath $zip -Force
+  $parts = @($dist, $bat)
+  if (Test-Path $installers) { $parts += $installers }
+  Compress-Archive -Path $parts -DestinationPath $zip -Force
   $sizeMb = [math]::Round((Get-Item $zip).Length / 1MB, 1)
 
   $remoteDir = Invoke-Command -Session $session -ScriptBlock {

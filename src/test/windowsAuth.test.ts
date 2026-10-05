@@ -29,11 +29,24 @@ describe('разбор запроса Windows-входа', () => {
     expect(inspectWindowsRequest(req({}), env).problem).toMatch(/Ожидаются заголовки/);
   });
 
-  it('свой заголовок из WINDOWS_AUTH_HEADER проверяется первым', () => {
+  it('при заданном WINDOWS_AUTH_HEADER доверяет только ему', () => {
     const env = { WINDOWS_AUTH_TRUST_PROXY: 'true', WINDOWS_AUTH_HEADER: 'X-Corp-User' };
-    expect(windowsAuthSettings(env).headers[0]).toBe('x-corp-user');
+    expect(windowsAuthSettings(env).headers).toEqual(['x-corp-user']);
     expect(windowsIdentityFromEnv(env)!(req({ 'x-corp-user': 'CORP\\ivanov', 'x-windows-user': 'CORP\\petrov' }))).toBe('CORP\\ivanov');
+    // Остальные заголовки браузер может прислать сам — им не верим.
+    expect(windowsIdentityFromEnv(env)!(req({ 'x-windows-user': 'CORP\\petrov' }))).toBeNull();
     expect(() => windowsAuthSettings({ WINDOWS_AUTH_HEADER: 'плохое имя' })).toThrow(/недопустимое имя/);
+  });
+
+  it('берёт последнее вхождение заголовка: значение от браузера iisnode не заменяет, а дописывает своё', () => {
+    const env = { WINDOWS_AUTH_TRUST_PROXY: 'true', WINDOWS_AUTH_HEADER: 'x-iisnode-logon_user' };
+    const raw = (...pairs: string[]) => ({ headers: {}, rawHeaders: pairs }) as unknown as Parameters<typeof inspectWindowsRequest>[0];
+    const provider = windowsIdentityFromEnv(env)!;
+    // Подделка от браузера, затем пустое значение iisnode для анонимного запроса.
+    expect(provider(raw('X-iisnode-LOGON_USER', 'CORP\\admin', 'X-iisnode-LOGON_USER', ''))).toBeNull();
+    expect(provider(raw('X-iisnode-LOGON_USER', 'CORP\\admin', 'X-iisnode-LOGON_USER', 'CORP\\ivanov'))).toBe('CORP\\ivanov');
+    expect(provider(raw('X-iisnode-LOGON_USER', 'CORP\\ivanov'))).toBe('CORP\\ivanov');
+    expect(provider(raw('Host', 'plan'))).toBeNull();
   });
 
   it('общий секрет прокси необязателен, но при заданном — обязателен', () => {
@@ -75,7 +88,7 @@ describe('API входа через Windows', () => {
   const call = async (path: string, init: { method?: string; token?: string; body?: unknown; headers?: Record<string, string> } = {}) => {
     const res = await fetch(base + path, {
       method: init.method ?? 'GET',
-      headers: { 'content-type': 'application/json', ...(init.token ? { authorization: `Bearer ${init.token}` } : {}), ...(init.headers ?? {}) },
+      headers: { 'content-type': 'application/json', ...(init.token ? { 'x-tc-token': init.token } : {}), ...(init.headers ?? {}) },
       body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
     });
     return { status: res.status, json: (await res.json()) as Record<string, unknown> };
@@ -114,6 +127,12 @@ describe('API входа через Windows', () => {
 
     const nobody = await call('/api/windows-check', { token, headers: { 'x-windows-user': 'CORP\\nobody' } });
     expect(String(nobody.json.problem)).toMatch(/не сопоставлен/);
+
+    // Доменного пользователя нет — 401 с результатом проверки: на него IIS запросит учётную запись Windows.
+    const anonymous = await call('/api/windows-check', { token });
+    expect(anonymous.status).toBe(401);
+    expect(anonymous.json).toMatchObject({ enabled: true, identity: null });
+    expect(anonymous.json.error).toBeUndefined();
 
     env = {};
     const off = await call('/api/windows-check', { token });
