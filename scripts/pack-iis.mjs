@@ -27,7 +27,7 @@ copyFileSync(path.join(root, 'deploy-iis.bat'), path.join(stage, 'deploy-iis.bat
 // Публикация с другого компьютера сети и скрипт базы данных — в тех же папках, что и в репозитории.
 copyFileSync(path.join(root, 'deploy-iis-remote.bat'), path.join(stage, 'deploy-iis-remote.bat'));
 mkdirSync(path.join(stage, 'scripts'), { recursive: true });
-for (const file of ['deploy-remote.ps1', 'create-database.sql']) copyFileSync(path.join(root, 'scripts', file), path.join(stage, 'scripts', file));
+for (const file of ['deploy-remote.ps1', 'create-database.sql', 'clear-test-data.sql']) copyFileSync(path.join(root, 'scripts', file), path.join(stage, 'scripts', file));
 copyFileSync(path.join(root, 'docs', 'corporate-offline.md'), path.join(stage, 'corporate-offline.md'));
 // Папка для установщиков: deploy-iis.bat ставит из неё Node.js, URL Rewrite и iisnode, если их нет на сервере.
 // Сами установщики в архив не входят (это чужие программы со своими лицензиями) — их кладут сюда перед переносом.
@@ -70,6 +70,9 @@ const steps = [
   '',
   'База данных вручную: scripts\\create-database.sql — выполните в SQL Server Management Studio',
   '(перед этим замените пароль в разделе 2), затем публикуйте с ключом /nosql.',
+  '',
+  'Удаление тестовых данных, оставшихся от версий до 6.0.0: scripts\\clear-test-data.sql — сначала',
+  'резервная копия базы; скрипт по умолчанию только показывает, что удалит; удаление — @apply = 1.',
   '',
   'Подробная инструкция — corporate-offline.md в этом архиве.',
 ];

@@ -7,7 +7,7 @@
 **Планирование задач отдела и контроль исполнения:** календарь, недельная матрица плана, доска сроков,
 график событий сотрудников, недельные отчёты, показатели эффективности и уведомления — без обращений в интернет.
 
-[![версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-6.0.0-1F3A5F)](CHANGELOG.md)
+[![версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-6.1.0-1F3A5F)](CHANGELOG.md)
 [![тесты](https://img.shields.io/badge/%D1%82%D0%B5%D1%81%D1%82%D1%8B-304-2C6B45)](#проверки)
 [![стек](https://img.shields.io/badge/Vite%208%20%C2%B7%20React%2019%20%C2%B7%20TypeScript-1F2B3A)](#устройство-проекта)
 [![лицензия](https://img.shields.io/badge/%D0%BB%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F-MIT-5D6575)](LICENSE)
@@ -193,6 +193,7 @@ npm run dev
 | `npm run build` | проверка типов и сборка интерфейса в `dist/` |
 | `npm run build:iis` | комплект для публикации в IIS в `dist-iis/` |
 | `npm run build:sql` | скрипт создания базы SQL Server `scripts/create-database.sql` из схемы приложения |
+| `scripts/clear-test-data.sql` | удаление тестовых данных, оставшихся от версий до 6.0.0 (SSMS; по умолчанию только показывает, что удалит) |
 | `deploy-iis-remote.bat -Server ИМЯ` | публикация в IIS с другого компьютера сети по WinRM (`-Check` — только проверить сервер) |
 | `npm run pack:iis` | архив `release/task-control-iis-<версия>.zip` для переноса на сервер без интернета (комплект + `deploy-iis.bat` + инструкция) |
 | `deploy-iis.bat` | публикация в IIS одним файлом: недостающие компоненты, копирование в `C:\inetpub\wwwroot\PLAN`, сайт, пул под учётной записью публикующего, вход через Windows, база SQL Server и сверка её схемы (от имени администратора) |
