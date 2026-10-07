@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { defineConfig, loadEnv, type Plugin, type ViteDevServer } from 'vite'
 import pkg from './package.json' with { type: 'json' }
 
-/** API (server/app.ts) внутри сервера разработки: хранилище — файл .data/dev-db.json или DATABASE_URL. */
+/** API (server/app.ts) внутри сервера разработки: хранилище — SQL Server (server/dev.ts). */
 const api = (): Plugin => ({
   name: 'task-control-api',
   configureServer(server: ViteDevServer) {
@@ -18,10 +18,10 @@ const api = (): Plugin => ({
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  // Переменные из .env (например, DATABASE_URL после `vercel env pull`) — для API в режиме разработки.
+  // Переменные из .env (MSSQL_*, TC_*) — для API в режиме разработки.
   const env = loadEnv(mode, process.cwd(), '')
-  // process.env превращает undefined в строку "undefined" — присваиваем только заданное значение.
-  if (!process.env.DATABASE_URL && env.DATABASE_URL) process.env.DATABASE_URL = env.DATABASE_URL
+  // process.env превращает undefined в строку "undefined" — присваиваем только заданные значения.
+  for (const [key, value] of Object.entries(env)) if (/^(MSSQL_|TC_)/.test(key) && !process.env[key] && value) process.env[key] = value
   return {
     plugins: [react(), api()],
     // Приложение должно открываться в последнем Chrome для Windows 7 (109) и в Edge 109.

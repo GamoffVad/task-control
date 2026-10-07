@@ -50,6 +50,20 @@ export const Shell = () => {
 
   const notices = useNotices();
   const unread = useMemo(() => unreadMessages(state.messages, state.chatReads, user.employeeId).length, [state.messages, state.chatReads, user.employeeId]);
+  // Заявки на отсутствие ждут решения у тех, кто их согласует (свои заявки не считаются).
+  const requests = useMemo(
+    () => (hasPermission(user, 'absences.manage') ? state.absences.filter((a) => a.status === 'request' && a.employeeId !== user.employeeId).length : 0),
+    [state.absences, user],
+  );
+  // Колокольчик — общее число событий, о которых приходят уведомления и которые ждут внимания.
+  const events = overdue + unread + requests;
+  const eventParts = [
+    overdue > 0 && `просроченных задач: ${overdue}`,
+    unread > 0 && `непрочитанных сообщений: ${unread}`,
+    requests > 0 && `заявок на отсутствие: ${requests}`,
+  ].filter(Boolean);
+  const eventsTip = events > 0 ? `События: ${events} — ${eventParts.join(', ')}` : 'Новых событий нет';
+  const eventsTo = overdue > 0 ? '/control' : unread > 0 ? '/chat' : requests > 0 ? '/tetris' : '/control';
   // Непрочитанные видны и на вкладке браузера: «(3) Контроль задач».
   useEffect(() => {
     const base = document.title.replace(/^\(\d+\+?\) /, '');
@@ -122,14 +136,9 @@ export const Shell = () => {
               ))}
             </nav>
             <div className="top-actions">
-              <Link
-                to="/control"
-                className="icon-btn"
-                aria-label={overdue ? `Просроченных задач: ${overdue}` : 'Просроченных задач нет'}
-                data-tip={overdue ? `Просроченных задач: ${overdue}` : 'Просроченных задач нет'}
-              >
+              <Link to={eventsTo} className="icon-btn" aria-label={eventsTip} data-tip={eventsTip}>
                 <Icon.Bell size={16} />
-                {overdue > 0 && <span className="badge">{overdue}</span>}
+                {events > 0 && <span className="badge">{countLabel(events)}</span>}
               </Link>
               <ThemeToggle />
               {canAdmin && (
@@ -137,7 +146,8 @@ export const Shell = () => {
                   <Icon.Gear size={16} />
                 </Link>
               )}
-              {hasPermission(user, 'data.reset') && (
+              {/* Демонстрационные данные — только в локальном режиме без сервера; в опубликованном приложении их нет. */}
+              {sync.mode === 'local' && hasPermission(user, 'data.reset') && (
                 <button
                   type="button"
                   className="icon-btn"

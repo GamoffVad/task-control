@@ -12,7 +12,7 @@ const out = path.join(root, 'dist-iis');
 execSync('npm run build', { cwd: root, stdio: 'inherit' });
 
 rmSync(out, { recursive: true, force: true });
-mkdirSync(path.join(out, 'data'), { recursive: true });
+mkdirSync(out, { recursive: true });
 cpSync(path.join(root, 'dist'), path.join(out, 'public'), { recursive: true });
 
 // Скрипт подготовки SQL Server кладётся рядом с сервером: на сервере может не быть папки проекта.
@@ -28,7 +28,7 @@ await build({
   target: 'node18',
   format: 'cjs',
   // Драйвер ODBC для входа в SQL Server учётной записью Windows — двоичный модуль, в server.cjs не собирается.
-  external: ['pg-native', 'msnodesqlv8'],
+  external: ['msnodesqlv8'],
   logLevel: 'warning',
 });
 
@@ -53,6 +53,8 @@ writeFileSync(
     <add key="WINDOWS_AUTH_HEADER" value="x-iisnode-logon_user" />
     <!-- Общий секрет прокси. Заполняется, если запросы к Node.js может слать кто-то кроме IIS. -->
     <add key="WINDOWS_AUTH_PROXY_SECRET" value="" />
+    <!-- Учётная запись Windows, которая станет администратором, если в базе нет ни одного. deploy-iis.bat записывает сюда публикующего. -->
+    <add key="TC_ADMIN_LOGIN" value="" />
     <!-- Ключ подписи сеансов. Заменить на длинную случайную строку. -->
     <add key="AUTH_SECRET" value="" />
     <!-- SQL Server: имя сервера или СЕРВЕР\\ЭКЗЕМПЛЯР. База и таблицы создаются при первом запуске. -->
@@ -63,8 +65,6 @@ writeFileSync(
     <add key="MSSQL_USER" value="" />
     <add key="MSSQL_PASSWORD" value="" />
     <add key="MSSQL_DOMAIN" value="" />
-    <!-- Строка подключения к PostgreSQL. Используется, только если MSSQL_SERVER пуст. -->
-    <add key="DATABASE_URL" value="" />
     <!-- Выпадающий список ФИО из Active Directory (нужен модуль RSAT-AD-PowerShell; deploy-iis.bat ставит его и включает поиск). -->
     <add key="AD_SEARCH_ENABLED" value="false" />
     <add key="AD_SEARCH_BASE" value="" />

@@ -5,6 +5,8 @@ import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApi } from '../../server/app';
 import { createMemoryRepo, type Repo } from '../../server/repo';
+import { toData } from '../lib/reducer';
+import { createSeed } from '../lib/seed';
 import { inspectWindowsRequest, windowsIdentityFromEnv, windowsAuthSettings } from '../../server/windowsAuth';
 
 const NOW = new Date(2026, 8, 17, 12, 0);
@@ -81,7 +83,8 @@ describe('API входа через Windows', () => {
   });
   afterAll(() => new Promise<void>((r) => server.close(() => r())));
   beforeEach(() => {
-    repo = createMemoryRepo();
+    // Сервер тестовых данных не создаёт: демонстрационный отдел кладётся в хранилище самим тестом.
+    repo = createMemoryRepo(undefined, toData(createSeed(NOW)));
     env = { WINDOWS_AUTH_TRUST_PROXY: 'true' };
   });
 
@@ -93,20 +96,16 @@ describe('API входа через Windows', () => {
     });
     return { status: res.status, json: (await res.json()) as Record<string, unknown> };
   };
-  const login = async () => (await call('/api/login', { method: 'POST', body: { email: 'user@example.com', password: '123456' } })).json.token as string;
-  const setWindowsMode = (token: string, allowEmergencyForm = true) =>
-    call('/api/action', { method: 'POST', token, body: { action: { type: 'saveAuthentication', mode: 'windows', allowEmergencyForm } } });
+  const loginAs = async (login: string) => (await call('/api/windows-login', { method: 'POST', headers: { 'x-windows-user': `CORP\\${login}` } })).json.token as string;
 
-  it('режим «Windows» сохраняется и не переписывается сервером', async () => {
-    const token = await login();
-    expect((await setWindowsMode(token)).status).toBe(200);
+  it('способ входа — всегда Windows; переключить его нельзя', async () => {
+    const token = await loginAs('user');
     const { json } = await call('/api/authentication');
-    expect(json.authentication).toMatchObject({ mode: 'windows', allowEmergencyForm: true });
+    expect(json.authentication).toMatchObject({ mode: 'windows', allowEmergencyForm: false });
+    expect((await call('/api/action', { method: 'POST', token, body: { action: { type: 'saveAuthentication', mode: 'form', allowEmergencyForm: true } } })).status).toBe(400);
   });
 
   it('вход по доменному логину и сопоставление с пользователем приложения', async () => {
-    const token = await login();
-    await setWindowsMode(token);
     const ok = await call('/api/windows-login', { method: 'POST', headers: { 'x-windows-user': 'CORP\\user' } });
     expect(ok.status).toBe(200);
     expect(ok.json.user).toMatchObject({ email: 'user@example.com', role: 'administrator' });
@@ -119,7 +118,7 @@ describe('API входа через Windows', () => {
   });
 
   it('проверка настройки показывает заголовки, логин и сопоставленного сотрудника', async () => {
-    const token = await login();
+    const token = await loginAs('user');
     const ok = await call('/api/windows-check', { token, headers: { 'x-iisnode-logon_user': 'CORP\\user' } });
     expect(ok.json).toMatchObject({ enabled: true, identity: 'CORP\\user', problem: null });
     expect(ok.json.seen).toEqual([{ header: 'x-iisnode-logon_user', value: 'CORP\\user' }]);
@@ -134,34 +133,19 @@ describe('API входа через Windows', () => {
     expect(anonymous.json).toMatchObject({ enabled: true, identity: null });
     expect(anonymous.json.error).toBeUndefined();
 
+    // Проверка доступна только тем, кто настраивает вход.
+    const worker = await loginAs('sidorov');
+    expect((await call('/api/windows-check', { token: worker })).status).toBe(403);
+
     env = {};
     const off = await call('/api/windows-check', { token });
     expect(off.json).toMatchObject({ enabled: false });
     expect(String(off.json.problem)).toMatch(/WINDOWS_AUTH_TRUST_PROXY/);
-    // Проверка доступна только тем, кто настраивает вход.
-    const worker = (await call('/api/login', { method: 'POST', body: { email: 'sidorov@example.com', password: '123456' } })).json.token as string;
-    expect((await call('/api/windows-check', { token: worker })).status).toBe(403);
   });
 
-  it('если сервер не выполняет Windows-вход, форма продолжает работать', async () => {
-    const token = await login();
-    await setWindowsMode(token);
+  it('если сервер не доверяет заголовку, войти нельзя — формы входа нет', async () => {
     env = {};
-    // Режим сохранён, но провайдер выключен: вход по паролю доступен всем, а не только администратору.
-    const worker = await call('/api/login', { method: 'POST', body: { email: 'sidorov@example.com', password: '123456' } });
-    expect(worker.status).toBe(200);
-    // Бесшовный вход не состоится: сервер не доверяет заголовку.
     expect((await call('/api/windows-login', { method: 'POST', headers: { 'x-windows-user': 'CORP\\user' } })).status).toBe(401);
-  });
-
-  it('при работающем Windows-входе форма закрыта для всех, кроме администратора', async () => {
-    const token = await login();
-    await setWindowsMode(token);
-    // Прокси передаёт доменного пользователя — значит бесшовный вход работает, форма не нужна.
-    const worker = await call('/api/login', { method: 'POST', body: { email: 'sidorov@example.com', password: '123456' }, headers: { 'x-windows-user': 'CORP\\sidorov' } });
-    expect(worker.status).toBe(403);
-    expect((await call('/api/login', { method: 'POST', body: { email: 'user@example.com', password: '123456' }, headers: { 'x-windows-user': 'CORP\\user' } })).status).toBe(200);
-    // Прокси молчит (сломалась настройка) — сотрудник всё равно войдёт по паролю.
-    expect((await call('/api/login', { method: 'POST', body: { email: 'sidorov@example.com', password: '123456' } })).status).toBe(200);
+    expect((await call('/api/login', { method: 'POST', body: { email: 'user@example.com', password: '123456' } })).status).toBe(404);
   });
 });

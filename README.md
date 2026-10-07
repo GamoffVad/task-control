@@ -7,12 +7,11 @@
 **Планирование задач отдела и контроль исполнения:** календарь, недельная матрица плана, доска сроков,
 график событий сотрудников, недельные отчёты, показатели эффективности и уведомления — без обращений в интернет.
 
-[![версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-5.27.3-1F3A5F)](CHANGELOG.md)
-[![тесты](https://img.shields.io/badge/%D1%82%D0%B5%D1%81%D1%82%D1%8B-285-2C6B45)](#проверки)
+[![версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-6.0.0-1F3A5F)](CHANGELOG.md)
+[![тесты](https://img.shields.io/badge/%D1%82%D0%B5%D1%81%D1%82%D1%8B-304-2C6B45)](#проверки)
 [![стек](https://img.shields.io/badge/Vite%208%20%C2%B7%20React%2019%20%C2%B7%20TypeScript-1F2B3A)](#устройство-проекта)
 [![лицензия](https://img.shields.io/badge/%D0%BB%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F-MIT-5D6575)](LICENSE)
 
-[Демонстрационный стенд](https://task-control-rho.vercel.app) ·
 [Руководство пользователя (PDF)](docs/) ·
 [История версий](CHANGELOG.md)
 
@@ -180,17 +179,11 @@ npm install
 npm run dev
 ```
 
-Откройте http://localhost:5173. Без настроек базы (`MSSQL_SERVER` или `DATABASE_URL`) данные хранятся
-в файле `.data/dev-db.json`, пустая база заполняется демонстрационными данными.
-
-Демонстрационные учётные записи (пароль `123456`):
-
-| Учётная запись | Сотрудник | Роль |
-|---|---|---|
-| `user@example.com` | Иванов А.Б., начальник отдела | администратор |
-| `petrov@example.com` | Петров В.С., заместитель | руководитель |
-| `sidorov@example.com` | Сидоров Д.Е., ведущий специалист | исполнитель |
-| `smirnova@example.com` | Смирнова О.Л., документовед | исполнитель |
+Откройте http://localhost:5173. Данные хранятся только в **SQL Server**: по умолчанию — локальный (`localhost`),
+база `TaskControlDev` создаётся сама, вход в SQL Server — учётной записью Windows. Другие настройки — переменные
+`MSSQL_*` (например, в `.env.development.local`). Вход в приложение — **только через Windows**: на сервере
+разработки это учётная запись, под которой он запущен (`TC_DEV_WINDOWS_USER` — другая); она же становится
+администратором пустой базы. Тестовых данных приложение не создаёт.
 
 ## Команды
 
@@ -198,16 +191,14 @@ npm run dev
 |---|---|
 | `npm run dev` | режим разработки вместе с API |
 | `npm run build` | проверка типов и сборка интерфейса в `dist/` |
-| `npm run build:vercel` | интерфейс и функции API в `.vercel/output` |
-| `npm run deploy` | публикация собранного каталога `.vercel/output` на Vercel |
 | `npm run build:iis` | комплект для публикации в IIS в `dist-iis/` |
 | `npm run build:sql` | скрипт создания базы SQL Server `scripts/create-database.sql` из схемы приложения |
 | `deploy-iis-remote.bat -Server ИМЯ` | публикация в IIS с другого компьютера сети по WinRM (`-Check` — только проверить сервер) |
 | `npm run pack:iis` | архив `release/task-control-iis-<версия>.zip` для переноса на сервер без интернета (комплект + `deploy-iis.bat` + инструкция) |
-| `deploy-iis.bat` | публикация в IIS: копирование в `C:\inetpub\wwwroot\PLAN`, сайт, пул, Windows-аутентификация, учётная запись и база SQL Server (от имени администратора) |
+| `deploy-iis.bat` | публикация в IIS одним файлом: недостающие компоненты, копирование в `C:\inetpub\wwwroot\PLAN`, сайт, пул под учётной записью публикующего, вход через Windows, база SQL Server и сверка её схемы (от имени администратора) |
 | `npm run preview` | просмотр собранного интерфейса |
 | `npm test` | модульные, интерфейсные и серверные тесты (Vitest) |
-| `npm run test:mssql` | тесты хранилища SQL Server (нужны `MSSQL_TEST_SERVER`, `MSSQL_TEST_USER`, `MSSQL_TEST_PASSWORD`) |
+| `npm run test:mssql` | тесты хранилища на настоящем SQL Server (`MSSQL_TEST_SERVER`; без `MSSQL_TEST_USER` — вход Windows) |
 | `npm run lint` | статический анализ (oxlint) |
 | `npm run docs` | тесты, сборка, дымовая проверка в Chrome на 4 ширинах, скриншоты в двух темах и PDF-руководство |
 
@@ -222,8 +213,8 @@ src/
   components/ шапка, карточка задачи, окна и общие элементы приложения
   screens/    экраны разделов
   test/       тесты (Vitest + Testing Library)
-server/       HTTP API: маршруты, авторизация, SQL Server и PostgreSQL, вход через Windows
-scripts/      сборка для Vercel (Build Output API) и комплекта для IIS
+server/       HTTP API: маршруты, авторизация, SQL Server, вход через Windows
+scripts/      сборка комплекта для IIS, подготовка SQL Server и пула IIS
 docs/         исходник руководства, скрипты съёмки и сборки PDF, скриншоты
 public/       значки, Service Worker уведомлений, PDF-руководство для скачивания
 ```
@@ -233,17 +224,15 @@ public/       значки, Service Worker уведомлений, PDF-руко�
 
 ## Данные и сервер
 
-- Хранилище — **Microsoft SQL Server** 2016 и новее (проверено на 2025): переменные `MSSQL_SERVER`,
-  `MSSQL_DATABASE`, `MSSQL_USER`, `MSSQL_PASSWORD`. **Учётную запись и базу создаёт публикация**
-  (`deploy-iis.bat`, шаг 7), **таблицы — само приложение** при первом обращении; пустая база
-  заполняется демонстрационными данными. Настройка — [docs/corporate-offline.md](docs/corporate-offline.md).
-- Публикация на Vercel работает с PostgreSQL (Neon): строка подключения — `DATABASE_URL`.
-  Без настроек базы данные хранятся в файле рядом с сервером.
-- API: `POST /api/login`, `POST /api/windows-login`, `GET /api/state`, `POST /api/action`,
-  `GET /api/notices`, `GET /api/authentication`, `GET /api/directory-users`, `GET /api/health`.
-- Сеанс — подписанный токен (HMAC-SHA256) на 7 дней; секрет — `AUTH_SECRET`, иначе выводится из настроек базы.
-- Вход: форма или бесшовный вход через Windows за IIS либо доверенным прокси (Kerberos/NTLM),
-  с резервным входом администратора. Поиск сотрудников — в Active Directory.
+- Хранилище — **только Microsoft SQL Server** 2016 и новее (проверено на 2025): переменные `MSSQL_SERVER`,
+  `MSSQL_DATABASE`; пустые `MSSQL_USER` и `MSSQL_PASSWORD` — вход Windows учётной записью пула IIS (ODBC).
+  **Базу создаёт публикация** (`deploy-iis.bat`), **схему сверяет само приложение** при каждом запуске: недостающие
+  таблицы, столбцы и индексы создаются, данные не меняются. **Тестовых данных нет**: в пустой базе — справочники,
+  роли, шаблоны и разделы плана, администратор — из `TC_ADMIN_LOGIN`. Настройка — [docs/corporate-offline.md](docs/corporate-offline.md).
+- API: `POST /api/windows-login`, `GET /api/state`, `POST /api/action`, `GET /api/notices`,
+  `GET /api/authentication`, `GET /api/windows-check`, `GET /api/directory-users`, `GET /api/health`.
+- Сеанс — подписанный токен (HMAC-SHA256) на 7 дней в заголовке `X-TC-Token`; секрет — `AUTH_SECRET`, иначе выводится из настроек базы.
+- Вход — **только через Windows** за IIS (Kerberos/NTLM): формы входа и паролей нет. Поиск сотрудников — в Active Directory.
 - Записываются только изменившиеся строки, всё — в транзакции под общей блокировкой.
 
 ## Уведомления
@@ -255,18 +244,9 @@ public/       значки, Service Worker уведомлений, PDF-руко�
 
 ## Публикация
 
-```bash
-npm run build:vercel
-npm run deploy
-```
-
-`npm run deploy` выкладывает сборку из временной копии без каталога `.git`. Это нужно из-за того, что
-Vercel на тарифе Hobby отклоняет развёртывание, если автор последнего коммита не связан с учётной записью
-Vercel (ответ «Not authorized»); без метаданных Git проверка не выполняется. Другой способ — связать
-учётную запись GitHub с Vercel в настройках аутентификации.
-
-Для корпоративной сети без интернета — [docs/corporate-offline.md](docs/corporate-offline.md):
-публикация в IIS файлом `deploy-iis.bat`, вход через Windows, Active Directory и установка без обращений наружу.
+Только в IIS корпоративной сети, одним файлом `deploy-iis.bat` на сервере (архив — `npm run pack:iis`):
+[docs/corporate-offline.md](docs/corporate-offline.md) — вход через Windows, SQL Server, Active Directory
+и установка без обращений наружу.
 Стили рассчитаны на Google Chrome 109 — последнюю версию для Windows 7 — и на все более новые браузеры.
 
 ## Документация
@@ -282,7 +262,7 @@ Vercel (ответ «Not authorized»); без метаданных Git пров
 
 | Проверка | Значение |
 |---|---|
-| Тесты (Vitest) | 268 — логика, права, интерфейс, API, SQL Server, PostgreSQL (PGlite), уведомления, логотип, вход через Windows, выгрузка в Excel |
+| Тесты (Vitest) | 285 и 19 на настоящем SQL Server — логика, права, интерфейс, API, SQL Server (схема и её сверка), уведомления, логотип, вход через Windows, выгрузка в Excel |
 | Типы | `tsc` без ошибок, строгий режим |
 | Линтер | oxlint без замечаний |
 | Браузер | `npm run docs` проходит разделы на ширинах 375, 768, 1024 и 1440 и сообщает об ошибках консоли, горизонтальной прокрутке и мелких кнопках |

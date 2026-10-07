@@ -17,7 +17,10 @@ const FEATURES = [
 ];
 
 export const Login = () => {
-  const { state, signIn, signInWindows, windowsAuthAvailable, authenticationReady } = useStore();
+  const { state, signIn, signInWindows, windowsAuthAvailable, authenticationReady, sync } = useStore();
+  // Опубликованное приложение (работа через сервер) — только вход Windows. Форма с паролем осталась
+  // лишь в локальном режиме без сервера, на котором работают проверки интерфейса.
+  const remote = sync.mode === 'remote';
   const navigate = useNavigate();
   const location = useLocation();
   const [login, setLogin] = useState('');
@@ -65,9 +68,10 @@ export const Login = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authenticationReady, state.authentication.mode, state.user, windowsAuthAvailable]);
 
-  // Режим Windows выбран, но сервер его не выполняет: пускаем по форме, иначе войти было бы нельзя.
-  const windowsFallback = state.authentication.mode === 'windows' && authenticationReady && !windowsAuthAvailable;
-  const showForm = state.authentication.mode === 'form' || emergency || windowsFallback;
+  // Локальный режим: если выбран Windows, а выполнить его некому, пускаем по форме.
+  const windowsFallback = !remote && state.authentication.mode === 'windows' && authenticationReady && !windowsAuthAvailable;
+  const showForm = !remote && (state.authentication.mode === 'form' || emergency || windowsFallback);
+  const windowsPanel = remote || (state.authentication.mode === 'windows' && !emergency);
 
   if (state.user) return <Navigate to={from} replace />;
   if (!authenticationReady) return <div className="login-page"><div className="login-side"><p className="loading-screen" role="status">Проверка способа входа…</p></div></div>;
@@ -82,11 +86,16 @@ export const Login = () => {
           </div>
           <h1 style={{ fontSize: 24 }}>Вход в систему</h1>
           <p className="subtitle">{showForm ? 'Введите рабочую почту и пароль.' : 'Используйте доменную учётную запись Windows.'}</p>
-          {state.authentication.mode === 'windows' && !emergency && <div className="windows-login-panel">
+          {windowsPanel && <div className="windows-login-panel">
             <p className="windows-auto-status" role="status"><Icon.Lock size={16} /> {pending ? 'Выполняется вход через Windows…' : 'Ожидание корпоративной учётной записи…'}</p>
             {!windowsAuthAvailable && <p className="field-error" role="alert">Windows-аутентификация не настроена на этом сервере.</p>}
             {error && <p className="field-error" role="alert">{error}</p>}
-            {state.authentication.allowEmergencyForm && <button type="button" className="text-action" onClick={() => { setEmergency(true); setError(''); }}>Резервный вход администратора</button>}
+            {remote && windowsAuthAvailable && !pending && error && (
+              <button type="button" className="btn btn--primary" style={{ minHeight: 46 }} onClick={() => void submitWindows()}>
+                <Icon.Enter size={15} /> Войти через Windows
+              </button>
+            )}
+            {!remote && state.authentication.allowEmergencyForm && <button type="button" className="text-action" onClick={() => { setEmergency(true); setError(''); }}>Резервный вход администратора</button>}
           </div>}
           {windowsFallback && <p className="help-note amber" style={{ marginTop: 16 }}>
             Администратор выбрал вход через Windows, но сервер пока не получает доменного пользователя, поэтому вход выполняется по логину и паролю.

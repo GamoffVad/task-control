@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApi } from '../../server/app';
 import { createMemoryRepo, type Repo } from '../../server/repo';
+import { DEFAULT_USERS } from '../lib/access';
 import { detectEvents, overdueNotice } from '../lib/notify';
 import { reducer, toData } from '../lib/reducer';
 import { createSeed } from '../lib/seed';
@@ -83,26 +84,29 @@ describe('API уведомлений', () => {
   let now = NOW;
 
   beforeAll(async () => {
-    server = createServer((req, res) => createApi({ repo, secret: 's', now: () => now })(req, res));
+    // Вход — только учётной записью Windows: доменный логин приходит заголовком, как от IIS.
+    server = createServer((req, res) => createApi({ repo, secret: 's', now: () => now, windowsIdentity: (r) => (typeof r.headers['x-windows-user'] === 'string' ? r.headers['x-windows-user'] : null) })(req, res));
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   });
   afterAll(() => new Promise<void>((r) => server.close(() => r())));
   beforeEach(() => {
-    repo = createMemoryRepo();
+    // Сервер тестовых данных не создаёт: демонстрационный отдел кладётся в хранилище самим тестом.
+    repo = createMemoryRepo(undefined, toData(createSeed(NOW)));
     now = NOW;
   });
 
   type Notice = { id: string; at: string; title: string; body: string; url: string };
-  const call = async (path: string, init: { method?: string; token?: string; body?: unknown } = {}) => {
+  const call = async (path: string, init: { method?: string; token?: string; body?: unknown; windowsUser?: string } = {}) => {
     const res = await fetch(base + path, {
       method: init.method ?? 'GET',
-      headers: { 'content-type': 'application/json', ...(init.token ? { authorization: `Bearer ${init.token}` } : {}) },
+      headers: { 'content-type': 'application/json', ...(init.token ? { authorization: `Bearer ${init.token}` } : {}), ...(init.windowsUser ? { 'x-windows-user': init.windowsUser } : {}) },
       body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
     });
     return { status: res.status, json: (await res.json()) as { data?: Data; notices?: Notice[]; now?: string } };
   };
-  const login = async (email: string) => (await call('/api/login', { method: 'POST', body: { email, password: '123456' } })).json as unknown as { token: string };
+  const login = async (email: string) =>
+    (await call('/api/windows-login', { method: 'POST', windowsUser: `CORP\\${DEFAULT_USERS.find((u) => u.email === email)!.windowsLogin}` })).json as unknown as { token: string };
   const token = async (email: string) => (await login(email)).token;
   const notices = async (t: string, since?: string) => (await call(`/api/notices${since ? `?since=${encodeURIComponent(since)}` : ''}`, { token: t })).json;
 
@@ -133,9 +137,9 @@ describe('API уведомлений', () => {
     expect((await repo.read())!.notices!.map((n) => n.body)).toEqual(['два']);
   });
 
-  it('восстановление демоданных уведомлений не создаёт', async () => {
+  it('восстановление демоданных отклоняется и уведомлений не создаёт', async () => {
     const boss = await token('user@example.com');
-    await call('/api/action', { method: 'POST', token: boss, body: { action: { type: 'reset' } } });
+    expect((await call('/api/action', { method: 'POST', token: boss, body: { action: { type: 'reset' } } })).status).toBe(400);
     expect((await repo.read())!.notices ?? []).toEqual([]);
   });
 

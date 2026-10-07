@@ -138,7 +138,7 @@ export const Absences = () => {
 
   return (
     <>
-      {/* Компактная шапка: заголовок, месяц, группа и кнопка в одной строке — больше места графику. */}
+      {/* Компактная шапка: заголовок, месяц, группа, виды и кнопки в одной строке — больше места графику. */}
       <div className="tt-head">
         <div className="tt-title">
           <h1>Тетрис</h1>
@@ -157,6 +157,17 @@ export const Absences = () => {
             <span className="caps">Группа</span>
             <GroupFilter value={group} onChange={setGroup} />
           </div>
+          {/* Виды событий — после группы, перед выгрузкой: выгрузка учитывает и этот фильтр. */}
+          <div className="tt-group tt-filter">
+            <span className="caps">Виды</span>
+            <MultiSelect<AbsenceType>
+              label="Виды событий"
+              allLabel="все виды"
+              options={ABSENCE_TYPES.map((t) => ({ value: t.key, label: t.label, style: absColor(t.key) }))}
+              value={ABSENCE_TYPES.map((t) => t.key).filter((k) => !hidden.has(k))}
+              onChange={(shown) => setHidden(new Set(ABSENCE_TYPES.map((t) => t.key).filter((k) => !shown.includes(k))))}
+            />
+          </div>
           <button type="button" className="btn" onClick={exportExcel}>
             <Icon.Download size={15} /> Выгрузить в Excel
           </button>
@@ -167,16 +178,6 @@ export const Absences = () => {
       </div>
 
       <section className="tt-stats" aria-label="Сводка">
-        <div className="tt-stat tt-filter">
-          <span className="caps">Виды</span>
-          <MultiSelect<AbsenceType>
-            label="Виды событий"
-            allLabel="все виды"
-            options={ABSENCE_TYPES.map((t) => ({ value: t.key, label: t.label, style: absColor(t.key) }))}
-            value={ABSENCE_TYPES.map((t) => t.key).filter((k) => !hidden.has(k))}
-            onChange={(shown) => setHidden(new Set(ABSENCE_TYPES.map((t) => t.key).filter((k) => !shown.includes(k))))}
-          />
-        </div>
         <div className="tt-stat">
           <span className="caps">Сегодня отсутствуют</span>
           <b className="num">{absentToday.length}</b>

@@ -9,7 +9,7 @@ const b64 = (s: string | Buffer) => Buffer.from(s).toString('base64url');
 /** Секрет: AUTH_SECRET, иначе производный от настроек базы — отдельная настройка не нужна. */
 export const secretFromEnv = (env: Record<string, string | undefined>): string => {
   if (env.AUTH_SECRET) return env.AUTH_SECRET;
-  const source = env.DATABASE_URL || (env.MSSQL_SERVER ? `mssql://${env.MSSQL_SERVER}/${env.MSSQL_DATABASE ?? 'TaskControl'}` : null);
+  const source = env.MSSQL_SERVER ? `mssql://${env.MSSQL_SERVER}/${env.MSSQL_DATABASE ?? 'TaskControl'}` : null;
   return source ? createHash('sha256').update(`task-control|${source}`).digest('hex') : 'task-control-dev-secret';
 };
 

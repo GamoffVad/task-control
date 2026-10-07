@@ -54,7 +54,6 @@ export type WindowsCheck = {
 };
 
 export const api = {
-  login: (email: string, password: string) => call<{ token: string; user: User }>('login', { method: 'POST', body: { email, password } }),
   windowsCheck: (token: string) => call<WindowsCheck>('windows-check', { token, accept401: true }),
   windowsLogin: () => call<{ token: string; user: User }>('windows-login', { method: 'POST' }),
   authentication: () => call<{ authentication: AuthenticationSettings; windowsAvailable: boolean; directoryAvailable: boolean }>('authentication'),

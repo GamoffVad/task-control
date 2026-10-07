@@ -318,7 +318,7 @@ export type Data = Omit<AppState, 'version' | 'user' | 'planRows' | 'units' | 't
   scoring?: ScoringSettings;
   /**
    * Версия набора прав в этих данных. Отличается от текущей — администратору дописываются
-   * права, добавленные после выпуска базы. PostgreSQL и SQL Server держат ту же отметку в tc_meta.
+   * права, добавленные после выпуска базы. SQL Server держит ту же отметку в tc_meta.
    */
   accessVersion?: string;
   /** Журнал уведомлений — только на сервере. */

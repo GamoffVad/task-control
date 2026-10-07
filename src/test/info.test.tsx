@@ -20,14 +20,14 @@ describe('информация', () => {
     expect(all).not.toMatch(/\{\{(VERSION|TESTS)\}\}/);
     expect(all).toContain('{{отдел}}');
     expect(all).toContain('<span class="num">Рис. 1</span>');
-    expect(all).toContain('src="/x/01-login.png"');
+    expect(all).toContain('src="/x/12-filter-dropdown.png"');
     expect(all).not.toContain('src="shots/');
   });
 
   it('светлый вариант скриншота лежит рядом с тёмным', () => {
     expect(lightShot('07-control.png')).toBe('07-control.light.png');
     const light = parseManual(raw, { version: '1', tests: 1, shotUrl: (f) => `/x/${lightShot(f)}` }).map((c) => c.html).join('');
-    expect(light).toContain('src="/x/01-login.light.png"');
+    expect(light).toContain('src="/x/12-filter-dropdown.light.png"');
   });
 
   it('раздел «Информация» — последний в меню, с оглавлением и главами', () => {

@@ -1041,7 +1041,8 @@ a.label:hover { color: var(--accent); }
 .app-card:has(.chat-page) { height: 100%; display: flex; flex-direction: column; }
 .app-card:has(.chat-page) > main { display: flex; flex: 1 1 auto; min-height: 0; }
 .chat-page { width: 100%; min-width: 0; min-height: 0; display: flex; flex: 1 1 auto; flex-direction: column; }
-.chat-page .page-header { flex: none; padding-top: 0; padding-bottom: 0; }
+/* Отступ от строки разделов, как у заголовков остальных страниц. */
+.chat-page .page-header { flex: none; padding-top: 16px; padding-bottom: 6px; }
 .chat { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
 .chat-feed { position: relative; flex: 1 1 auto; overflow-y: auto; min-height: 0; padding: 0; }
 .day-sep { text-align: center; margin: 16px 0 8px; }
@@ -1067,6 +1068,8 @@ a.label:hover { color: var(--accent); }
   .chat-period-fields .datefield { width: 100%; }
 }
 .chat-earlier { margin: 4px 0 8px; font-size: 12.5px; }
+.chat-search .search, .chat-search > div:last-child { width: 260px; max-width: 100%; }
+@media (max-width: 559px) { .page-toolbar .chat-search { flex-wrap: nowrap; width: 100%; } .chat-search .search, .chat-search > div:last-child { flex: 1 1 auto; width: auto; } }
 .chat-delete-text { white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow: auto; }
 .composer { display: flex; gap: 10px; padding-top: 14px; border-top: 1px dashed var(--dash); align-items: flex-end; }
 .composer textarea { flex: 1 1 auto; min-height: 44px; max-height: 160px; }

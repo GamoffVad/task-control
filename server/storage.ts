@@ -1,55 +1,22 @@
-// Выбор хранилища по переменным окружения: SQL Server в корпоративной сети,
-// PostgreSQL в публикации на Vercel, файл — при разработке без базы.
-import { existsSync, renameSync } from 'node:fs';
+// Хранилище — только Microsoft SQL Server: настройки MSSQL_* в web.config (их записывает deploy-iis.bat).
 import { createMssqlRepo, mssqlSettingsFromEnv } from './mssqlRepo';
-import { createPgRepo } from './pgRepo';
-import { createMemoryRepo } from './repo';
 import type { Repo } from './repo';
 
 export type StorageEnv = Record<string, string | undefined>;
 
-/** Какое хранилище выбрано по настройкам — для диагностики и сообщений об ошибке. */
-export const storageKindFromEnv = (env: StorageEnv): 'sqlserver' | 'postgres' | 'file' =>
-  mssqlSettingsFromEnv(env) ? 'sqlserver' : env.DATABASE_URL || env.POSTGRES_URL ? 'postgres' : 'file';
+/** Настроен ли SQL Server — для диагностики. */
+export const storageKindFromEnv = (env: StorageEnv): 'sqlserver' | 'none' => (mssqlSettingsFromEnv(env) ? 'sqlserver' : 'none');
+
+/** Причина, по которой приложение не работает без SQL Server, — в ответе /api/health и в журнале. */
+export const NO_SQL_SERVER = 'SQL Server не настроен: заполните MSSQL_SERVER и MSSQL_DATABASE в web.config (deploy-iis.bat делает это сам).';
 
 /**
- * Хранилище по настройкам. MSSQL_SERVER имеет приоритет над DATABASE_URL:
- * на корпоративном сервере обе переменные могут остаться от прежней настройки.
- * Без file и без настроек базы возвращается null — вызывающий решает, что делать.
+ * Хранилище по настройкам. Других хранилищ нет: без SQL Server каждое обращение к данным
+ * завершается понятной ошибкой, а /api/health отвечает 503.
  */
-export const createRepoFromEnv = (env: StorageEnv, file?: string): Repo | null => {
-  const mssql = mssqlSettingsFromEnv(env);
-  if (mssql) return createMssqlRepo(mssql);
-  const url = env.DATABASE_URL || env.POSTGRES_URL;
-  if (url) return createPgRepo(url);
-  return file ? createMemoryRepo(file) : null;
-};
-
-/**
- * Пустая база SQL Server или PostgreSQL заполняется данными файла, с которым приложение работало,
- * пока база не была настроена (например, комплект скопировали вручную, а MSSQL_* заполнили позже).
- * Без этого пользователи и задачи, внесённые за это время, остались бы в файле. Файл после проверки
- * переименовывается в db.imported-<время>.json и остаётся резервной копией.
- */
-export const withFileImport = (repo: Repo, file: string): Repo => {
-  if (repo.kind === 'file' || repo.kind === 'memory' || !existsSync(file)) return repo;
-  let imported: Promise<void> | null = null;
-  const importOnce = () =>
-    (imported ??= (async () => {
-      if (!existsSync(file)) return;
-      const saved = await createMemoryRepo(file).read();
-      if (saved) await repo.update((current) => current ?? saved);
-      renameSync(file, file.replace(/\.json$/, `.imported-${Date.now()}.json`));
-    })().catch((e) => ((imported = null), Promise.reject(e))));
-  return {
-    ...repo,
-    async read() {
-      await importOnce();
-      return repo.read();
-    },
-    async update(fn) {
-      await importOnce();
-      return repo.update(fn);
-    },
-  };
+export const createRepoFromEnv = (env: StorageEnv): Repo => {
+  const settings = mssqlSettingsFromEnv(env);
+  if (settings) return createMssqlRepo(settings);
+  const fail = () => Promise.reject(new Error(NO_SQL_SERVER));
+  return { kind: 'none', read: fail, update: fail, ping: fail };
 };

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { Button, DateField, Dialog, IconButton, PageHeader, TextArea, TextButton } from '../kit';
+import { Button, DateField, Dialog, IconButton, PageHeader, SearchField, TextArea, TextButton } from '../kit';
 import { Icon } from '../components/Icons';
 import { hasPermission } from '../lib/access';
 import { initials, shortName } from '../lib/data';
@@ -28,12 +28,16 @@ export const Chat = () => {
   const [from, setFrom] = useState(defaultFrom);
   const [to, setTo] = useState('');
   const [deleting, setDeleting] = useState<Message | null>(null);
+  // Поиск по содержанию переписки — по тексту сообщения и имени автора, без учёта регистра.
+  const [query, setQuery] = useState('');
+  const needle = query.trim().toLocaleLowerCase('ru');
+  const matches = (m: Message) => !needle || m.text.toLocaleLowerCase('ru').includes(needle) || shortName(m.authorId).toLocaleLowerCase('ru').includes(needle);
   const canModerate = hasPermission(state.user, 'chat.moderate');
   const inPeriod = (m: Message) => {
     const day = toDateKey(new Date(m.sentAt));
     return (!from || day >= from) && (!to || day <= to);
   };
-  const shown = state.messages.filter(inPeriod);
+  const shown = state.messages.filter((m) => inPeriod(m) && matches(m));
   const earlier = from ? state.messages.filter((m) => toDateKey(new Date(m.sentAt)) < from).length : 0;
   const isDefaultPeriod = from === defaultFrom() && !to;
   const feed = useRef<HTMLDivElement>(null);
@@ -88,6 +92,7 @@ export const Chat = () => {
       <PageHeader
         title="Переписка"
         toolbar={
+          <>
           <div className="tool chat-period">
             <span className="caps">Период</span>
             <span className="chat-period-fields">
@@ -107,6 +112,11 @@ export const Chat = () => {
               </TextButton>
             )}
           </div>
+          <div className="tool chat-search">
+            <span className="caps">Поиск</span>
+            <SearchField value={query} onChange={setQuery} placeholder="Текст сообщения, автор…" label="Поиск по содержанию переписки" />
+          </div>
+          </>
         }
       />
       <div className="chat">
@@ -118,7 +128,7 @@ export const Chat = () => {
             </p>
           )}
           {state.messages.length === 0 && <p className="empty">Сообщений пока нет. Напишите первое.</p>}
-          {state.messages.length > 0 && shown.length === 0 && <p className="empty">За выбранный период сообщений нет.</p>}
+          {state.messages.length > 0 && shown.length === 0 && <p className="empty">{needle ? 'Ничего не найдено за выбранный период.' : 'За выбранный период сообщений нет.'}</p>}
           {shown.map((m, i) => {
             const d = new Date(m.sentAt);
             const prev = shown[i - 1];

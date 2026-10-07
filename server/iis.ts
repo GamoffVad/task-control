@@ -1,5 +1,5 @@
 // Точка входа для публикации в IIS через iisnode: один процесс Node.js отдаёт и статику, и /api.
-// Хранилище — SQL Server (MSSQL_SERVER); без него PostgreSQL или файл рядом с сервером.
+// Хранилище — только SQL Server (MSSQL_* в web.config). Вход — только доменной учётной записью Windows:
 // IIS проверяет доменного пользователя и передаёт его заголовком, приложение пароль не спрашивает.
 // PORT задаёт iisnode (именованный канал); при запуске вручную — обычный номер порта.
 import { createReadStream, existsSync, statSync } from 'node:fs';
@@ -7,7 +7,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import path from 'node:path';
 import { createApi } from './app';
 import { secretFromEnv } from './auth';
-import { createRepoFromEnv, withFileImport } from './storage';
+import { createRepoFromEnv } from './storage';
 import { inspectWindowsRequest, windowsIdentityFromEnv } from './windowsAuth';
 import { activeDirectoryFromEnv } from './activeDirectory';
 
@@ -16,9 +16,7 @@ import { activeDirectoryFromEnv } from './activeDirectory';
 process.env.WINDOWS_AUTH_HEADER ||= 'x-iisnode-logon_user';
 
 const root = path.resolve(process.env.TC_STATIC_DIR ?? path.join(__dirname, 'public'));
-const dataFile = path.resolve(process.env.TC_DB_FILE ?? path.join(__dirname, 'data', 'db.json'));
-// Данные, внесённые до настройки SQL Server, переносятся в пустую базу при первом обращении к ней.
-const repo = withFileImport(createRepoFromEnv(process.env, dataFile)!, dataFile);
+const repo = createRepoFromEnv(process.env);
 
 const api = createApi({
   repo,
@@ -26,6 +24,8 @@ const api = createApi({
   windowsIdentity: windowsIdentityFromEnv(process.env),
   windowsCheck: (req) => inspectWindowsRequest(req, process.env),
   directory: activeDirectoryFromEnv(process.env),
+  // Пустая строка, а не undefined: без TC_ADMIN_LOGIN администратор не подставляется (см. bootstrapAdministrator).
+  administratorLogin: process.env.TC_ADMIN_LOGIN ?? '',
 });
 
 const TYPES: Record<string, string> = {

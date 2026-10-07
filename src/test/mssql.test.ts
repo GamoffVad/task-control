@@ -18,8 +18,9 @@ const NOW = new Date(2026, 8, 17, 12, 0);
 describe('SQL Server: настройки подключения', () => {
   it('без MSSQL_SERVER хранилище не выбирается', () => {
     expect(mssqlSettingsFromEnv({})).toBeNull();
-    expect(storageKindFromEnv({})).toBe('file');
-    expect(storageKindFromEnv({ DATABASE_URL: 'postgres://x' })).toBe('postgres');
+    // Других хранилищ нет: без SQL Server приложение не работает.
+    expect(storageKindFromEnv({})).toBe('none');
+    expect(storageKindFromEnv({ MSSQL_SERVER: 'localhost' })).toBe('sqlserver');
   });
 
   it('имя базы по умолчанию — TaskControl, экземпляр разбирается из имени сервера', () => {
@@ -41,9 +42,8 @@ describe('SQL Server: настройки подключения', () => {
     expect(s).toMatchObject({ server: '10.199.127.30', database: 'Plan', port: 1444, user: 'tc_app', password: 'secret', encrypt: false });
   });
 
-  it('SQL Server имеет приоритет над PostgreSQL и даёт свой ключ подписи сеансов', () => {
-    const env = { MSSQL_SERVER: 'SQLSRV', DATABASE_URL: 'postgres://x' };
-    expect(storageKindFromEnv(env)).toBe('sqlserver');
+  it('SQL Server даёт свой ключ подписи сеансов', () => {
+    expect(storageKindFromEnv({ MSSQL_SERVER: 'SQLSRV' })).toBe('sqlserver');
     expect(mssqlSettingsFromEnv({ MSSQL_DOMAIN: 'CORP', MSSQL_SERVER: 'SQLSRV' })!.domain).toBe('CORP');
     // Без AUTH_SECRET ключ выводится из настроек базы, а не остаётся отладочным.
     expect(secretFromEnv({ MSSQL_SERVER: 'SQLSRV' })).not.toBe('task-control-dev-secret');
@@ -135,18 +135,6 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
     expect((tables.recordset[0] as { n: number }).n).toBeGreaterThan(10);
   });
 
-  it('демоданные разрешены, только если таблиц до подключения не было', async () => {
-    // Первое хранилище создало таблицы само — ему можно заполнить базу демоданными.
-    expect(await repo.seedDemo!()).toBe(true);
-    // Следующий запуск видит уже существующие (пусть и пустые) таблицы — демоданных не будет.
-    const again = createMssqlRepo({ server: server!, database, ...(user ? { user } : {}), ...(password ? { password } : {}), encrypt: false, trustServerCertificate: true });
-    try {
-      expect(await again.seedDemo!()).toBe(false);
-    } finally {
-      await again.close?.();
-    }
-  });
-
   it('после заполнения данные читаются без искажений', async () => {
     const seed = toData(createSeed(NOW));
     await repo.update(() => seed);
@@ -166,6 +154,26 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
     expect([...back.templates!].sort((a, b) => a.id.localeCompare(b.id))).toEqual([...seed.templates!].sort((a, b) => a.id.localeCompare(b.id)));
     expect(back.planRows).toEqual(seed.planRows);
   });
+
+  it('недостающие столбцы дописываются при подключении, данные остаются', async () => {
+    const before = (await repo.read())!;
+    // Как в базе старой версии или правленной вручную: столбцов нет.
+    await raw(`alter table dbo.tc_users drop constraint df_tc_users_position; alter table dbo.tc_users drop column [position];
+      declare @c sysname = (select name from sys.default_constraints where parent_object_id = object_id('dbo.tc_tasks') and col_name(parent_object_id, parent_column_id) = 'result');
+      exec('alter table dbo.tc_tasks drop constraint ' + @c); alter table dbo.tc_tasks drop column [result];`);
+    const again = createMssqlRepo({ server: server!, database, ...(user ? { user } : {}), ...(password ? { password } : {}), encrypt: false, trustServerCertificate: true });
+    try {
+      const after = (await again.read())!;
+      const columns = await raw("select col_length('dbo.tc_users', 'position') as p, col_length('dbo.tc_tasks', 'result') as r");
+      expect(columns.recordset[0]).toMatchObject({ p: expect.any(Number), r: expect.any(Number) });
+      // Строки на месте; у дописанных столбцов — значения по умолчанию.
+      expect(after.users.map((u) => u.email)).toEqual(before.users.map((u) => u.email));
+      expect(after.tasks.map((t) => t.id)).toEqual(before.tasks.map((t) => t.id));
+      expect(after.users.every((u) => u.position === '')).toBe(true);
+    } finally {
+      await again.close?.();
+    }
+  }, 60_000);
 
   it('повторное создание схемы ничего не ломает', async () => {
     for (const statement of SCHEMA) await raw(statement);
@@ -254,19 +262,19 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
     await repo.update((d) => ({ ...d!, authentication: { mode: 'form', allowEmergencyForm: true } }));
   });
 
-  it('база старой версии: при первой записи сохраняются пользователи, роли, словари и позиции плана по умолчанию', async () => {
+  it('база без отметок: роли, словари и позиции плана — по умолчанию, а пустая tc_users не заменяется демонстрационными', async () => {
     await raw(`delete from dbo.tc_users; delete from dbo.tc_roles; delete from dbo.tc_plan_rows; delete from dbo.tc_dictionaries; delete from dbo.tc_units; delete from dbo.tc_templates;
       delete from dbo.tc_meta where [key] in ('access-ready', 'access-version', 'plan-rows-ready', 'dictionaries-ready', 'units-ready', 'templates-ready');`);
     const defaults = (await repo.read())!;
-    expect(defaults.users!.length).toBeGreaterThan(1);
+    // Сотрудники — только из таблицы: очищенная tc_users остаётся пустой.
+    expect(defaults.users).toEqual([]);
     await repo.update((d) => ({ ...d!, messages: [...d!.messages, { id: 'm-migr', authorId: 1, text: 'после переноса', sentAt: NOW.toISOString() }] }) as Data);
     const after = (await repo.read())!;
-    expect(after.users!.map((u) => u.email).sort()).toEqual(defaults.users!.map((u) => u.email).sort());
+    expect(after.users).toEqual([]);
     expect(after.roles!.length).toBe(defaults.roles!.length);
     expect(after.planRows!.length).toBe(defaults.planRows!.length);
     expect(after.dictionaries!.length).toBe(defaults.dictionaries!.length);
     expect(after.units!.length).toBe(defaults.units!.length);
     expect(after.templates!.map((t) => t.name)).toEqual(defaults.templates!.map((t) => t.name));
-    expect(after.users!.find((u) => u.employeeId === 101)?.unitId).toBe('s-dev');
   });
 });

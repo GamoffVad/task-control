@@ -12,7 +12,7 @@ import { applyTheme, useTheme, type Theme } from '../lib/theme';
 import { DEFAULT_DICTIONARIES } from '../lib/seed';
 import { useStore } from '../lib/store';
 import type { WindowsCheck } from '../lib/api';
-import type { AppearanceSettings, AuthenticationMode, DictionaryEntry, DictionaryKind, DirectoryUser, DocumentTemplate, ManagedUser, ScoringSettings, TemplateScope, Permission, PlanRow, Role, Unit, UnitKind } from '../lib/types';
+import type { AppearanceSettings, DictionaryEntry, DictionaryKind, DirectoryUser, DocumentTemplate, ManagedUser, ScoringSettings, TemplateScope, Permission, PlanRow, Role, Unit, UnitKind } from '../lib/types';
 import { PARENT_KIND, UNIT_KINDS, unitKindLabel, unitPath, unitTree, unitWithDescendants } from '../lib/units';
 import { unitOf } from '../lib/data';
 
@@ -54,7 +54,7 @@ export const Admin = () => {
         title="Администрирование"
         subtitle={
           tabs.length > 1
-            ? 'Пользователи и подразделения, доступ, способ входа, правила оценки, разделы планирования, справочники и шаблоны документов.'
+            ? 'Пользователи и подразделения, доступ, вход через Windows, правила оценки, разделы планирования, справочники и шаблоны документов.'
             : 'Оформление интерфейса: цвета, шрифты и размеры текста. Настройки личные — действуют только у вас.'
         }
       />
@@ -248,15 +248,10 @@ const AddUserDialog = ({ users, units, directoryAvailable, onClose, onSave }: { 
 };
 
 const AuthenticationTab = () => {
-  const { state, dispatch, windowsAuthAvailable, directoryAvailable, checkWindows, sync } = useStore();
+  const { windowsAuthAvailable, directoryAvailable, checkWindows, sync } = useStore();
   const [check, setCheck] = useState<WindowsCheck | null>(null);
   const [checking, setChecking] = useState(false);
   const [checkError, setCheckError] = useState('');
-  const windows = state.authentication.mode === 'windows';
-  const choose = (mode: AuthenticationMode) => {
-    // Режим переключается всегда: пока сервер не настроен, вход идёт по форме, а проверка ниже покажет, чего не хватает.
-    dispatch({ type: 'saveAuthentication', mode, allowEmergencyForm: mode === 'windows' && !windowsAuthAvailable ? true : state.authentication.allowEmergencyForm });
-  };
   const runCheck = async () => {
     if (!checkWindows) return;
     setChecking(true);
@@ -271,34 +266,16 @@ const AuthenticationTab = () => {
   };
   return <div className="admin-section auth-settings">
     <div className="card-head admin-content-head">
-      <div><h2>Способ входа</h2><p className="subtitle">Один режим действует для всех пользователей приложения.</p></div>
+      <div><h2>Вход через Windows</h2><p className="subtitle">Единственный способ входа: сотрудник входит доменной учётной записью Windows, без формы и пароля.</p></div>
       <span className={`auth-readiness ${windowsAuthAvailable ? 'ready' : ''}`}>{windowsAuthAvailable ? 'Windows готов' : 'Windows не настроен'}</span>
     </div>
-    <div className="auth-choice-grid" role="radiogroup" aria-label="Способ входа">
-      <button type="button" role="radio" aria-checked={!windows} onClick={() => choose('form')}>
-        <strong>Форма входа</strong><span>Рабочая почта и пароль приложения.</span>
-      </button>
-      <button type="button" role="radio" aria-checked={windows} onClick={() => choose('windows')}>
-        <strong>Windows</strong><span>Бесшовный вход при открытии приложения, без формы и пароля.</span>
-      </button>
-    </div>
-    <div className="auth-emergency">
-      <Checkbox
-        checked={state.authentication.allowEmergencyForm}
-        disabled={!windows || !windowsAuthAvailable}
-        onChange={(allowEmergencyForm) => dispatch({ type: 'saveAuthentication', mode: state.authentication.mode, allowEmergencyForm })}
-      >
-        Разрешить резервный вход администратора по паролю
-      </Checkbox>
-      <p>Рекомендуется оставить включённым на случай недоступности домена или reverse proxy. Пока Windows-вход не работает на сервере, резервный вход выключить нельзя.</p>
-    </div>
-    {windows && !windowsAuthAvailable && (
+    <p className="help-note">При открытии приложения сервер сопоставляет подтверждённый доменный логин со столбцом «Windows-логин» в «Пользователях». Кого там нет или кто отключён, войти не сможет.</p>
+    {!windowsAuthAvailable && (
       <p className="help-note amber">
-        Режим выбран, но сервер пока не получает доменного пользователя, поэтому вход идёт по форме. Задайте на сервере приложения
+        Сервер пока не принимает доменного пользователя. Задайте на сервере приложения
         <span className="num"> WINDOWS_AUTH_TRUST_PROXY=true</span>, настройте IIS и нажмите «Проверить настройку» — проверка покажет, чего не хватает.
       </p>
     )}
-    {windowsAuthAvailable && <p className="help-note">При открытии приложения сервер сопоставляет подтверждённый доменный логин со столбцом «Windows-логин». Отдельный экран входа пользователю не показывается.</p>}
 
     <div className="auth-check">
       <div className="card-head admin-content-head">

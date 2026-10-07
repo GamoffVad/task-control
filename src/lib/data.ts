@@ -161,17 +161,23 @@ export const planRowById = new Map(planRows.map((r) => [r.id, r]));
 export const shortName = (id: number | null | undefined): string => {
   if (id == null) return '—';
   const e = employeeById.get(id);
-  return e ? `${e.lastname} ${e.name[0]}.${e.patronymic[0]}.` : 'Неизвестен';
+  if (!e) return 'Неизвестен';
+  // ФИО может быть одним словом (например, доменный логин администратора, добавленного при публикации).
+  const marks = [e.name, e.patronymic].filter(Boolean).map((part) => `${part[0]}.`).join('');
+  return marks ? `${e.lastname} ${marks}` : e.lastname;
 };
 
 export const fullName = (id: number): string => {
   const e = employeeById.get(id);
-  return e ? `${e.lastname} ${e.name} ${e.patronymic}` : 'Неизвестен';
+  return e ? [e.lastname, e.name, e.patronymic].filter(Boolean).join(' ') : 'Неизвестен';
 };
 
 export const initials = (id: number): string => {
   const e = employeeById.get(id);
-  return e ? `${e.lastname[0]}${e.name[0]}` : '??';
+  if (!e) return '??';
+  // Для доменного логина вида «ДОМЕН\логин» — первые буквы логина.
+  const last = e.lastname.split('\\').pop() ?? e.lastname;
+  return e.name ? `${last[0] ?? ''}${e.name[0]}` : last.slice(0, 2).toUpperCase();
 };
 
 /** Виды отсутствий. Цвет — CSS-переменная --abs-<key>. Отгул считается в рабочих днях, остальное — в календарных. */

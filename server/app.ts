@@ -1,5 +1,5 @@
-// HTTP API приложения. Работает и как функция Vercel, и внутри сервера разработки Vite.
-//   POST /api/login   { email, password }  → { token, user }
+// HTTP API приложения. Работает в IIS (server/iis.ts) и внутри сервера разработки Vite (server/dev.ts).
+//   POST /api/windows-login                → { token, user } — вход только доменной учётной записью Windows
 //   GET  /api/state                        → { data }
 //   POST /api/action  { action }           → { data }
 //   GET  /api/health                       → { ok, storage } либо 503, если база не отвечает
@@ -13,10 +13,9 @@
 // поэтому права проверяются на сервере независимо от интерфейса.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { validateAbsence, type AbsenceDraft } from '../src/lib/absences';
-import { authenticate } from '../src/lib/auth';
-import { ACCESS_VERSION, DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_USERS, effectiveUser, hasPermission, PERMISSIONS, sessionUser, withAddedPermissions } from '../src/lib/access';
+import { ACCESS_VERSION, DEFAULT_ROLES, DEFAULT_USERS, effectiveUser, hasPermission, PERMISSIONS, sessionUser, withAddedPermissions } from '../src/lib/access';
 import { CATEGORIES, employeeById, planRows, syncCategories, syncStaff } from '../src/lib/data';
-import { DEFAULT_UNITS } from '../src/lib/units';
+import { DEFAULT_UNITS, MAIN_DEPARTMENT_ID } from '../src/lib/units';
 import { validateTask, type TaskDraft } from '../src/lib/logic';
 import { fromData, PERSISTED, reducer, toData, type Action } from '../src/lib/reducer';
 import { createSeed, DEFAULT_DICTIONARIES } from '../src/lib/seed';
@@ -52,6 +51,8 @@ type Options = {
   /** Разбор запроса для страницы проверки Windows-входа в администрировании. */
   windowsCheck?: (req: IncomingMessage) => WindowsAuthCheck;
   directory?: ActiveDirectory;
+  /** Учётная запись Windows публикующего (TC_ADMIN_LOGIN): администратор, если войти больше некому. */
+  administratorLogin?: string;
 };
 
 const MAX_BODY = 256 * 1024;
@@ -278,9 +279,6 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
       if (!permissions.every((permission) => typeof permission === 'string' && allowed.includes(permission as Permission))) bad('разрешения');
       return { type: 'saveRolePermissions', role: a.role as Role, permissions: a.permissions as Permission[] };
     }
-    case 'saveAuthentication':
-      if (!['form', 'windows'].includes(a.mode as string) || typeof a.allowEmergencyForm !== 'boolean') bad('способ входа');
-      return { type: 'saveAuthentication', mode: a.mode as 'form' | 'windows', allowEmergencyForm: a.allowEmergencyForm as boolean };
     case 'saveScoring': {
       const raw = a.scoring;
       if (!isObj(raw)) bad('правила подсчёта баллов');
@@ -301,8 +299,6 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
         },
       };
     }
-    case 'reset':
-      return { type: 'reset', now };
   }
   return bad('действие');
 };
@@ -336,8 +332,30 @@ const normalizeUsers = (users: ManagedUser[]): ManagedUser[] => users.map((user)
 
 const REQUIRED_ADMIN_PERMISSIONS: Permission[] = ['admin.access', 'users.manage', 'roles.manage'];
 
-/** Не оставляет приложение без входа администратора после неполной миграции или повреждения таблицы доступа. */
-const recoverAdministrativeAccess = (users: ManagedUser[], roles: Data['roles'], ensureFormAdministrator: boolean): { users: ManagedUser[]; roles: Data['roles'] } => {
+/**
+ * Администратор, которого сервер добавляет, если войти администратором некому. С TC_ADMIN_LOGIN
+ * (deploy-iis.bat записывает туда учётную запись Windows публикующего) — это он сам, иначе —
+ * демонстрационный администратор. Номер 1: у него есть пароль для формы входа, пока не включён вход Windows.
+ */
+export const bootstrapAdministrator = (login?: string): ManagedUser | null => {
+  const base = { ...DEFAULT_USERS[0], unitId: MAIN_DEPARTMENT_ID };
+  // Не задано вовсе (проверки, разработка) — демонстрационный администратор. Задано пустым (IIS без
+  // TC_ADMIN_LOGIN) — никого: иначе администратором стал бы любой доменный пользователь с логином «user».
+  if (login === undefined) return base;
+  const windowsLogin = login.trim();
+  if (!windowsLogin) return null;
+  const slash = windowsLogin.lastIndexOf('\\');
+  const short = (slash >= 0 ? windowsLogin.slice(slash + 1) : windowsLogin).split('@')[0].toLowerCase();
+  const domain = (slash >= 0 ? windowsLogin.slice(0, slash) : 'local').toLowerCase().replace(/[^a-z0-9.-]/g, '') || 'local';
+  return { ...base, email: `${short}@${domain}.local`, windowsLogin, fullName: windowsLogin, position: 'Администратор' };
+};
+
+/**
+ * Не оставляет приложение без входа администратора: пустая или повреждённая таблица пользователей,
+ * неполная миграция. Своих сотрудников не подменяет — добавляет администратора, только если
+ * активного администратора нет.
+ */
+const recoverAdministrativeAccess = (users: ManagedUser[], roles: Data['roles'], fallback: ManagedUser | null): { users: ManagedUser[]; roles: Data['roles'] } => {
   const defaultAdminRole = DEFAULT_ROLES.find((item) => item.role === 'administrator')!;
   const roleCanAdminister = (role: Role, definitions = roles) => {
     const permissions = definitions.find((item) => item.role === role)?.permissions ?? [];
@@ -346,16 +364,7 @@ const recoverAdministrativeAccess = (users: ManagedUser[], roles: Data['roles'],
   const safeRoles = roles.some((role) => roleCanAdminister(role.role))
     ? roles
     : [...roles.filter((role) => role.role !== 'administrator'), { ...defaultAdminRole, permissions: [...defaultAdminRole.permissions] }];
-  const fallback = { ...DEFAULT_USERS[0] };
-  const fallbackReady = users.some((user) =>
-    user.employeeId === fallback.employeeId
-    && user.email.toLowerCase() === fallback.email.toLowerCase()
-    && user.windowsLogin.toLowerCase() === fallback.windowsLogin.toLowerCase()
-    && user.active
-    && roleCanAdminister(user.role, safeRoles),
-  );
-  if (ensureFormAdministrator && fallbackReady) return { users, roles: safeRoles };
-  if (!ensureFormAdministrator && users.some((user) => user.active && roleCanAdminister(user.role, safeRoles))) return { users, roles: safeRoles };
+  if (!fallback || users.some((user) => user.active && roleCanAdminister(user.role, safeRoles))) return { users, roles: safeRoles };
   const safeUsers = [fallback, ...users.filter((user) =>
     user.employeeId !== fallback.employeeId
     && user.email.toLowerCase() !== fallback.email.toLowerCase()
@@ -388,36 +397,38 @@ const forUser = (data: Data, user: User): Data => {
   };
 };
 
-export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentity, windowsCheck, directory }: Options) => {
+export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentity, windowsCheck, directory, administratorLogin }: Options) => {
+  const fallbackAdministrator = bootstrapAdministrator(administratorLogin);
+  // Сеансы подписываются отдельным ключом: токены, выданные прежним входом по паролю, недействительны.
+  const tokenSecret = `${secret}|windows`;
   const normalizeData = (data: Data): Data => {
-    const authentication = data.authentication ?? { ...DEFAULT_AUTHENTICATION };
-    // Выбранный режим сохраняется как есть. Если сервер не умеет Windows-вход, приложение
-    // не переписывает настройку, а пускает по форме (см. POST /api/login) — иначе переключатель
-    // в администрировании «не держится», а причина остаётся неизвестной.
+    // Вход в приложение — только доменной учётной записью Windows; формы входа нет.
+    const authentication = { mode: 'windows', allowEmergencyForm: false } as const;
     // Права, добавленные после выпуска базы (например, «Видеть задачи всего отдела»), дописываются при чтении,
     // а не только при первой записи: иначе до неё администратор видел бы лишь своё подразделение.
     const storedRoles = data.roles ?? DEFAULT_ROLES;
     const roles = data.accessVersion === ACCESS_VERSION ? storedRoles : withAddedPermissions(storedRoles);
-    const access = recoverAdministrativeAccess(normalizeUsers(data.users ?? DEFAULT_USERS), roles, authentication.mode === 'form' || !windowsIdentity);
+    const access = recoverAdministrativeAccess(normalizeUsers(data.users ?? []), roles, fallbackAdministrator);
     return { ...data, ...access, authentication };
   };
   /**
-   * Начальные данные пустой базы: демонстрационные, если хранилище это разрешает (для SQL Server — только
-   * когда таблиц до запуска не было). Иначе — только справочники, роли и подразделения по умолчанию,
-   * без задач, сообщений и демонстрационных сотрудников; войти можно администратором по умолчанию.
+   * Начальные данные пустой базы — без тестовых данных: справочники, роли, шаблоны и разделы плана
+   * по умолчанию, из подразделений — только ведомство, управление и отдел. Сотрудников нет: администратором
+   * становится учётная запись из TC_ADMIN_LOGIN (тот, кто публиковал), остальных заводят в администрировании.
    */
-  const initialData = (t: Date, demo: boolean): Data => {
+  const initialData = (t: Date): Data => {
     const seed = toData(createSeed(t));
-    if (demo) return seed;
-    return { ...seed, tasks: [], absences: [], entitlements: [], reports: [], messages: [], chatReads: [], notices: [], users: [] };
+    const structure = new Set(['u-org', 'u-dir-it', MAIN_DEPARTMENT_ID]);
+    return {
+      ...seed,
+      tasks: [], absences: [], entitlements: [], reports: [], messages: [], chatReads: [], notices: [], users: [],
+      units: (seed.units ?? DEFAULT_UNITS).filter((unit) => structure.has(unit.id)),
+      authentication: { mode: 'windows', allowEmergencyForm: false },
+    };
   };
-  const allowDemo = async () => (await repo.seedDemo?.()) ?? true;
-  /** Данные; пустая база заполняется демонстрационными данными. */
+  /** Данные; пустая база получает справочники по умолчанию, без тестовых данных. */
   const load = async (): Promise<Data> => {
-    const data = (await repo.read()) ?? await (async () => {
-      const demo = await allowDemo();
-      return repo.update((cur) => cur ?? initialData(now(), demo));
-    })();
+    const data = (await repo.read()) ?? await repo.update((cur) => cur ?? initialData(now()));
     // Проверки сотрудников (исполнители, отсутствия, нормы) — по актуальному составу из базы.
     syncStaff(data.users ?? DEFAULT_USERS, data.units ?? DEFAULT_UNITS);
     syncCategories(data.dictionaries ?? DEFAULT_DICTIONARIES);
@@ -425,7 +436,7 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
   };
 
   const authed = (req: IncomingMessage): User => {
-    const user = verifyToken(bearer(req), secret, now());
+    const user = verifyToken(bearer(req), tokenSecret, now());
     if (!user) throw sessionError('Сеанс истёк. Войдите заново.');
     return user;
   };
@@ -497,33 +508,16 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
             throw new HttpError(503, 'Active Directory недоступен. Проверьте подключение к домену и модуль ActiveDirectory.');
           }
         }
-        case 'POST /api/login': {
-          const body = await readBody(req);
-          const email = isObj(body) && typeof body.email === 'string' ? body.email : '';
-          const password = isObj(body) && typeof body.password === 'string' ? body.password : '';
-          const current = await load();
-          const account = authenticate(email, password, current.users, current.roles);
-          if (!account) throw new HttpError(403, 'Неверный логин или пароль. Проверьте данные и повторите вход.');
-          // Форма закрывается, только если прокси действительно передал доменного пользователя
-          // в этом же запросе: при неверной настройке IIS иначе никто не смог бы войти.
-          const seamless = !!windowsIdentity?.(req);
-          if (current.authentication.mode === 'windows' && seamless && (!current.authentication.allowEmergencyForm || !hasPermission(account, 'admin.access'))) {
-            throw new HttpError(403, 'Включён вход через Windows. Используйте доменную учётную запись.');
-          }
-          const user: User = account;
-          return send(res, 200, { token: signToken(user, secret, now()), user });
-        }
         case 'POST /api/windows-login': {
           const current = await load();
-          if (current.authentication.mode !== 'windows') throw new HttpError(409, 'Вход через Windows не включён администратором.');
           if (!windowsIdentity) throw new HttpError(503, 'Windows-аутентификация не настроена на сервере.');
           const identity = windowsIdentity(req);
           if (!identity) throw new HttpError(401, 'Сервер не получил подтверждённую учётную запись Windows.');
           const keys = identityKeys(identity);
           const account = current.users.find((item) => item.active && keys.includes(item.windowsLogin.trim().toLowerCase()));
-          if (!account) throw new HttpError(403, 'Учётная запись Windows не сопоставлена с активным пользователем приложения.');
+          if (!account) throw new HttpError(403, `Учётная запись Windows ${identity} не сопоставлена с активным пользователем приложения. Обратитесь к администратору.`);
           const user = sessionUser(account, current.roles);
-          return send(res, 200, { token: signToken(user, secret, now()), user });
+          return send(res, 200, { token: signToken(user, tokenSecret, now()), user });
         }
         case 'GET /api/notices': {
           // Вкладка приложения периодически забирает новые уведомления сотрудника и показывает их средствами Chrome.
@@ -566,16 +560,10 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
           const tokenUser = authed(req);
           const body = await readBody(req);
           const t = now();
-          const demo = await allowDemo();
           const data = await repo.update((cur) => {
-            const raw = cur ?? initialData(t, demo);
+            const raw = cur ?? initialData(t);
             const current = normalizeData(raw);
             const action = parseAction(isObj(body) ? body.action : undefined, current, t);
-            // Режим «Windows» разрешено включать заранее: пока сервер не настроен, вход идёт по форме,
-            // а в администрировании показывается, чего не хватает (GET /api/windows-check).
-            if (action.type === 'saveAuthentication' && action.mode === 'windows' && !action.allowEmergencyForm && !windowsIdentity) {
-              throw new HttpError(409, 'Windows-вход ещё не настроен на сервере: оставьте включённым резервный вход администратора по паролю.');
-            }
             const user = effectiveUser(tokenUser, current.users, current.roles);
             if (!user) throw sessionError('Учётная запись отключена.');
             const before = fromData(current, user);

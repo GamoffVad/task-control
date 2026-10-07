@@ -143,24 +143,8 @@ const RemoteStore = ({ children }: { children: ReactNode }) => {
     [fail, load, signOut],
   );
 
-  const signIn = useCallback(
-    async (email: string, password: string) => {
-      try {
-        // Вход по паролю при включённом режиме «Windows» — резервный вход администратора: его не подменяем.
-        const via = state.authentication.mode === 'windows' ? ('emergency' as const) : ('form' as const);
-        const s = { ...(await api.login(email, password)), via };
-        session.current = s;
-        writeSession(s);
-        setState(emptyState(s.user));
-        setSync((x) => ({ ...x, loading: true, error: null }));
-        await load();
-        return null;
-      } catch (e) {
-        return e instanceof Error ? e.message : BAD_LOGIN;
-      }
-    },
-    [load, state.authentication.mode],
-  );
+  // Опубликованное приложение — только вход Windows: формы входа через сервер нет.
+  const signIn = useCallback(async (_email: string, _password: string) => 'Вход по паролю отключён: используйте учётную запись Windows.', []);
 
   /** Сеанс, полученный входом через Windows, становится текущим. */
   const adoptWindowsSession = useCallback(async (next: { token: string; user: User }) => {
@@ -182,23 +166,6 @@ const RemoteStore = ({ children }: { children: ReactNode }) => {
     }
   }, [adoptWindowsSession]);
 
-  // В режиме «Windows» сотрудник — тот, под чьей учётной записью Windows открыт браузер. Сеанс, открытый
-  // по паролю (до переключения режима или резервный вход администратора), заменяется входом через Windows,
-  // как только тот удаётся; не удался — остаётся прежний сеанс. Пробуем после сохранения режима на сервере
-  // и один раз для каждого сеанса.
-  const windowsAttempt = useRef<string | null>(null);
-  useEffect(() => {
-    if (!authenticationReady || !windowsAuthAvailable || state.authentication.mode !== 'windows' || sync.saving) return;
-    const current = session.current;
-    if (!current || current.via === 'windows' || current.via === 'emergency' || windowsAttempt.current === current.token) return;
-    windowsAttempt.current = current.token;
-    api.windowsLogin().then(
-      (next) => {
-        if (session.current?.token === current.token) void adoptWindowsSession(next);
-      },
-      () => undefined,
-    );
-  }, [authenticationReady, windowsAuthAvailable, state.authentication.mode, state.user, sync.saving, adoptWindowsSession]);
 
   const searchDirectory = useCallback(async (query: string): Promise<DirectoryUser[]> => {
     const token = session.current?.token;

@@ -5,6 +5,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApi } from '../../server/app';
 import { signToken } from '../../server/auth';
 import { createMemoryRepo, type Repo } from '../../server/repo';
+import { DEFAULT_USERS } from '../lib/access';
+import { toData } from '../lib/reducer';
+import { createSeed } from '../lib/seed';
 import type { Data } from '../lib/types';
 
 // Четверг, 17 сентября 2026.
@@ -27,8 +30,9 @@ beforeAll(async () => {
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
 afterAll(() => new Promise<void>((r) => server.close(() => r())));
+// Сервер тестовых данных не создаёт: демонстрационный отдел кладётся в хранилище самим тестом.
 beforeEach(() => {
-  repo = createMemoryRepo();
+  repo = createMemoryRepo(undefined, toData(createSeed(NOW)));
 });
 
 const call = async (path: string, init: { method?: string; token?: string; body?: unknown; windowsUser?: string } = {}) => {
@@ -40,7 +44,21 @@ const call = async (path: string, init: { method?: string; token?: string; body?
   return { status: res.status, json: (await res.json()) as { data?: Data; error?: string; token?: string; user?: unknown; relogin?: boolean } };
 };
 
-const login = async (email: string) => (await call('/api/login', { method: 'POST', body: { email, password: '123456' } })).json.token!;
+/** Вход — только учётной записью Windows: доменный логин сотрудника приходит заголовком от «IIS». */
+const windowsLoginOf = (who: string) => DEFAULT_USERS.find((u) => u.email.toLowerCase() === who.toLowerCase() || u.windowsLogin.toLowerCase() === who.toLowerCase())!.windowsLogin;
+const login = async (who: string) => (await call('/api/windows-login', { method: 'POST', windowsUser: `CORP\\${windowsLoginOf(who)}` })).json.token!;
+
+/** Отдельный экземпляр API со своими настройками. */
+const withApi = async (options: Partial<Parameters<typeof createApi>[0]> & { repo: Repo }, run: (url: string) => Promise<void>) => {
+  const handle = createApi({ secret: SECRET, now: () => NOW, windowsIdentity: (request) => (typeof request.headers['x-windows-user'] === 'string' ? request.headers['x-windows-user'] : null), ...options });
+  const own = createServer((req, res) => void handle(req, res));
+  await new Promise<void>((done) => own.listen(0, '127.0.0.1', done));
+  try {
+    await run(`http://127.0.0.1:${(own.address() as AddressInfo).port}`);
+  } finally {
+    own.close();
+  }
+};
 
 describe('API', () => {
   it('сообщает о состоянии', async () => {
@@ -63,48 +81,58 @@ describe('API', () => {
     }
   });
 
-  it('входит по логину и паролю, отказывает при неверном пароле', async () => {
-    const bad = await call('/api/login', { method: 'POST', body: { email: 'user@example.com', password: 'nope00' } });
-    // 403, а не 401: на 401 IIS добавил бы запрос учётной записи Windows.
-    expect(bad.status).toBe(403);
-    expect(bad.json.error).toMatch(/Неверный логин/);
-    expect(bad.json.relogin).toBeUndefined();
-    const ok = await call('/api/login', { method: 'POST', body: { email: 'SIDOROV@example.com', password: '123456' } });
+  it('входит только учётной записью Windows: формы входа нет', async () => {
+    // Входа по паролю больше нет.
+    expect((await call('/api/login', { method: 'POST', body: { email: 'user@example.com', password: '123456' } })).status).toBe(404);
+    const ok = await call('/api/windows-login', { method: 'POST', windowsUser: 'CORP\\sidorov' });
     expect(ok.status).toBe(200);
     expect(ok.json.user).toMatchObject({ email: 'sidorov@example.com', employeeId: 3, role: 'executor' });
+    // Доменного пользователя нет в «Пользователях» — отказ с понятной причиной.
+    const unknown = await call('/api/windows-login', { method: 'POST', windowsUser: 'CORP\\nobody' });
+    expect(unknown.status).toBe(403);
+    expect(unknown.json.error).toMatch(/CORP\\nobody.*не сопоставлена/);
+    // Без доменного пользователя — 401: на него IIS запросит учётную запись Windows.
+    expect((await call('/api/windows-login', { method: 'POST' })).status).toBe(401);
   });
 
-  it('восстанавливает вход базового администратора формы после рассинхронизации базы', async () => {
+  it('способ входа не переключается и демонстрационные данные не восстанавливаются', async () => {
+    const admin = await login('user');
+    expect((await call('/api/action', { method: 'POST', token: admin, body: { action: { type: 'saveAuthentication', mode: 'form', allowEmergencyForm: true } } })).status).toBe(400);
+    expect((await call('/api/action', { method: 'POST', token: admin, body: { action: { type: 'reset' } } })).status).toBe(400);
+    expect((await call('/api/authentication')).json).toMatchObject({ authentication: { mode: 'windows', allowEmergencyForm: false } });
+  });
+
+  it('без TC_ADMIN_LOGIN демонстрационный администратор «user» не подставляется', async () => {
+    // Иначе администратором пустой базы стал бы любой доменный пользователь с логином «user».
+    const empty = createMemoryRepo(undefined, { ...toData(createSeed(NOW)), users: [] });
+    await withApi({ repo: empty, administratorLogin: '' }, async (url) => {
+      const res = await fetch(`${url}/api/windows-login`, { method: 'POST', headers: { 'x-windows-user': 'CORP\\user' } });
+      expect(res.status).toBe(403);
+    });
+  });
+
+  it('без активного администратора администратором становится публикующий (TC_ADMIN_LOGIN)', async () => {
+    const empty = createMemoryRepo(undefined, { ...toData(createSeed(NOW)), users: [] });
+    await withApi({ repo: empty, administratorLogin: 'PRIBOY-S\\gamov' }, async (url) => {
+      const res = await fetch(`${url}/api/windows-login`, { method: 'POST', headers: { 'x-windows-user': 'PRIBOY-S\\gamov' } });
+      expect(res.status).toBe(200);
+      const { token, user } = (await res.json()) as { token: string; user: unknown };
+      expect(user).toMatchObject({ employeeId: 1, role: 'administrator' });
+      const state = (await (await fetch(`${url}/api/state`, { headers: { 'x-tc-token': token } })).json()) as { data: Data };
+      // Ни одного демонстрационного сотрудника: только сам публикующий.
+      expect(state.data.users).toEqual([expect.objectContaining({ windowsLogin: 'PRIBOY-S\\gamov', fullName: 'PRIBOY-S\\gamov', role: 'administrator', active: true })]);
+    });
+  });
+
+  it('не подставляет демонстрационного администратора, если свой администратор может войти', async () => {
     await login('user');
     await repo.update((current) => ({
       ...current!,
       users: current!.users.filter((user) => user.employeeId !== 1).map((user) => user.employeeId === 2 ? { ...user, role: 'administrator' as const } : user),
     }));
-    const recovered = await call('/api/login', { method: 'POST', body: { email: 'user', password: '123456' } });
-    expect(recovered.status).toBe(200);
-    expect(recovered.json.user).toMatchObject({ email: 'user@example.com', employeeId: 1, role: 'administrator' });
-    const state = await call('/api/state', { token: recovered.json.token });
-    expect(state.status).toBe(200);
-    expect(state.json.data!.users).toContainEqual(expect.objectContaining({ employeeId: 1, windowsLogin: 'user', active: true }));
-  });
-
-  it('переключает способ входа и сопоставляет доверенную учётную запись Windows', async () => {
-    const admin = await login('user@example.com');
-    const changed = await call('/api/action', { method: 'POST', token: admin, body: { action: { type: 'saveAuthentication', mode: 'windows', allowEmergencyForm: true } } });
-    expect(changed.status).toBe(200);
-    expect(changed.json.data!.authentication.mode).toBe('windows');
-
-    const windows = await call('/api/windows-login', { method: 'POST', windowsUser: 'DOMAIN\\sidorov' });
-    expect(windows.status).toBe(200);
-    expect(windows.json.user).toMatchObject({ employeeId: 3, role: 'executor' });
-
-    // Прокси передал доменного пользователя — бесшовный вход работает, значит форма закрыта для исполнителя.
-    const formExecutor = await call('/api/login', { method: 'POST', body: { email: 'sidorov@example.com', password: '123456' }, windowsUser: 'DOMAIN\\sidorov' });
-    expect(formExecutor.status).toBe(403);
-    const emergencyAdmin = await call('/api/login', { method: 'POST', body: { email: 'user@example.com', password: '123456' }, windowsUser: 'DOMAIN\\user' });
-    expect(emergencyAdmin.status).toBe(200);
-    // Прокси молчит — вход по паролю остаётся доступным всем, чтобы неверная настройка не заперла отдел.
-    expect((await call('/api/login', { method: 'POST', body: { email: 'sidorov@example.com', password: '123456' } })).status).toBe(200);
+    const admin = await login('petrov@example.com');
+    const users = (await call('/api/state', { token: admin })).json.data!.users;
+    expect(users.some((user) => user.employeeId === 1)).toBe(false);
   });
 
   it('ищет сотрудника в каталоге и добавляет пользователя с доменным логином', async () => {
@@ -127,11 +155,14 @@ describe('API', () => {
     expect(none.json.relogin).toBe(true);
     const forged = signToken({ email: 'x', employeeId: 1, role: 'manager' }, 'other-secret', NOW);
     expect((await call('/api/state', { token: forged })).status).toBe(403);
-    const expired = signToken({ email: 'x', employeeId: 1, role: 'manager' }, SECRET, new Date(2026, 0, 1));
+    const expired = signToken({ email: 'x', employeeId: 1, role: 'manager' }, `${SECRET}|windows`, new Date(2026, 0, 1));
     expect((await call('/api/state', { token: expired })).status).toBe(403);
+    // Сеанс прежнего входа по паролю (подписан основным ключом) больше не действует.
+    const formSession = signToken({ email: 'user@example.com', employeeId: 1, role: 'administrator' }, SECRET, NOW);
+    expect((await call('/api/state', { token: formSession })).status).toBe(403);
   });
 
-  it('заполняет пустую базу демоданными и хранит изменения', async () => {
+  it('хранит изменения', async () => {
     const token = await login('user@example.com');
     const first = await call('/api/state', { token });
     expect(first.json.data!.absences.length).toBeGreaterThan(0);
@@ -268,9 +299,8 @@ describe('API', () => {
     expect((await call('/api/state', { token: worker })).json.data!.chatReads!.map((r) => r.employeeId)).toEqual([3]);
   });
 
-  it('в уже существующие пустые таблицы демоданные не пишутся, но администратор по умолчанию входит', async () => {
-    // Так ведёт себя SQL Server, если таблицы были до запуска (например, созданы скриптом create-database.sql).
-    repo = { ...createMemoryRepo(), seedDemo: async () => false };
+  it('пустая база получает справочники без тестовых данных; войти можно администратором по умолчанию', async () => {
+    repo = createMemoryRepo();
     const admin = await login('user@example.com');
     const { json } = await call('/api/state', { token: admin });
     expect(json.data!.tasks).toEqual([]);
@@ -285,12 +315,8 @@ describe('API', () => {
     const after = (await call('/api/state', { token: admin })).json.data!;
     expect(after.messages.map((m) => m.text)).toEqual(['Первое сообщение']);
     expect(after.tasks).toEqual([]);
-  });
-
-  it('пустая база без таблиц заполняется демоданными', async () => {
-    repo = { ...createMemoryRepo(), seedDemo: async () => true };
-    const admin = await login('user@example.com');
-    expect((await call('/api/state', { token: admin })).json.data!.tasks.length).toBeGreaterThan(0);
+    // Из подразделений — только ведомство, управление и отдел, без демонстрационных групп.
+    expect(after.units!.map((u) => u.kind).sort()).toEqual(['department', 'directorate', 'organization']);
   });
 
   it('удаляет сообщение переписки только с правом «Переписка: удалять сообщения»', async () => {

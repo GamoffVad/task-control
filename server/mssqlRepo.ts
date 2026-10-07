@@ -1,6 +1,6 @@
 // Хранилище в Microsoft SQL Server (2016 и новее, проверено на 2025). База и таблицы создаются
 // при первом обращении, поэтому на сервере достаточно учётной записи с правом создавать базы.
-// Изменения пишутся в транзакции под общей блокировкой sp_getapplock — как в PostgreSQL-хранилище.
+// Изменения пишутся в транзакции под общей блокировкой sp_getapplock.
 // Вход: MSSQL_USER задан — учётная запись SQL Server (драйвер tedious); не задан — учётная запись Windows,
 // под которой работает приложение (пул IIS), через ODBC (драйвер msnodesqlv8), без пароля в настройках.
 import { execFile } from 'node:child_process';
@@ -19,80 +19,244 @@ const LOCK = 'task-control';
 const LOCK_TIMEOUT_MS = 15_000;
 
 /**
- * Схема — отдельными операторами: SQL Server компилирует пакет целиком,
- * и созданную в том же пакете таблицу изменить нельзя.
+ * Описание таблиц: по нему схема и создаётся, и сверяется. При каждом подключении (а значит, при каждой
+ * публикации) недостающие таблицы создаются, а в существующих дописываются недостающие столбцы;
+ * существующие строки, столбцы и данные не изменяются и не удаляются.
  */
-export const SCHEMA: string[] = [
-  `if object_id(N'dbo.tc_meta', N'U') is null create table dbo.tc_meta ([key] nvarchar(64) not null primary key, [value] nvarchar(max) not null)`,
-  `if object_id(N'dbo.tc_tasks', N'U') is null create table dbo.tc_tasks (
-    [id] nvarchar(64) not null primary key,
-    [seq] bigint identity(1,1) not null,
-    [title] nvarchar(max) not null,
-    [row_id] nvarchar(64) null,
-    [category] nvarchar(64) null,
-    [assignee_ids] nvarchar(max) not null,
-    [start_at] datetimeoffset(3) not null,
-    [end_at] datetimeoffset(3) not null,
-    [doc_name] nvarchar(max) not null constraint df_tc_tasks_doc_name default '',
-    [doc_number] nvarchar(max) not null constraint df_tc_tasks_doc_number default '',
-    [result] nvarchar(max) not null constraint df_tc_tasks_result default '',
-    [done] bit not null constraint df_tc_tasks_done default 0,
-    [score] decimal(10,2) null,
-    [done_at] datetimeoffset(3) null)`,
-  `if object_id(N'dbo.tc_absences', N'U') is null create table dbo.tc_absences (
-    [id] nvarchar(64) not null primary key,
-    [employee_id] int not null,
-    [type] nvarchar(16) not null constraint ck_tc_absences_type check ([type] in ('vacation','trip','dayoff','sick','study')),
-    [date_from] char(10) not null,
-    [date_to] char(10) null,
-    [status] nvarchar(16) not null constraint ck_tc_absences_status check ([status] in ('request','approved','rejected')),
-    [note] nvarchar(max) not null constraint df_tc_absences_note default '',
-    [decided_by] int null,
-    [created_at] datetimeoffset(3) not null)`,
-  `if not exists (select 1 from sys.indexes where name = 'tc_absences_employee' and object_id = object_id(N'dbo.tc_absences'))
-     create index tc_absences_employee on dbo.tc_absences ([employee_id], [date_from])`,
-  `if object_id(N'dbo.tc_entitlements', N'U') is null create table dbo.tc_entitlements (
-    [employee_id] int not null,
-    [year] int not null,
-    [vacation_days] int not null,
-    [carried_over] int not null constraint df_tc_entitlements_carried default 0,
-    [dayoff_accrued] int not null constraint df_tc_entitlements_dayoff default 0,
-    constraint pk_tc_entitlements primary key ([employee_id], [year]))`,
-  `if object_id(N'dbo.tc_reports', N'U') is null create table dbo.tc_reports ([week_start] char(10) not null primary key, [submitted_at] datetimeoffset(3) not null, [entries] nvarchar(max) not null)`,
-  `if object_id(N'dbo.tc_messages', N'U') is null create table dbo.tc_messages ([id] nvarchar(64) not null primary key, [author_id] int not null, [text] nvarchar(max) not null, [sent_at] datetimeoffset(3) not null)`,
-  `if object_id(N'dbo.tc_dictionaries', N'U') is null create table dbo.tc_dictionaries ([id] nvarchar(64) not null primary key, [dictionary] nvarchar(64) not null, [code] nvarchar(64) not null, [title] nvarchar(256) not null, [color] nvarchar(32) null)`,
-  // Сравнение без учёта регистра обеспечивает параметр сортировки базы, поэтому lower() не нужен.
-  `if not exists (select 1 from sys.indexes where name = 'tc_dictionaries_kind_code' and object_id = object_id(N'dbo.tc_dictionaries'))
-     create unique index tc_dictionaries_kind_code on dbo.tc_dictionaries ([dictionary], [code])`,
-  `if col_length('dbo.tc_dictionaries', 'color') is null alter table dbo.tc_dictionaries add [color] nvarchar(32) null`,
-  `if object_id(N'dbo.tc_plan_rows', N'U') is null create table dbo.tc_plan_rows ([id] nvarchar(64) not null primary key, [title] nvarchar(max) not null, [is_header] bit not null constraint df_tc_plan_rows_header default 0, [base_score] decimal(10,2) not null constraint df_tc_plan_rows_score default 0)`,
-  `if object_id(N'dbo.tc_users', N'U') is null create table dbo.tc_users (
-    [employee_id] int not null primary key,
-    [email] nvarchar(256) not null constraint uq_tc_users_email unique,
-    [role] nvarchar(32) not null,
-    [active] bit not null constraint df_tc_users_active default 1,
-    [windows_login] nvarchar(128) not null constraint df_tc_users_login default '',
-    [full_name] nvarchar(256) not null constraint df_tc_users_full_name default '',
-    [position] nvarchar(256) not null constraint df_tc_users_position default '',
-    [unit_id] nvarchar(64) null)`,
-  `if col_length('dbo.tc_users', 'windows_login') is null alter table dbo.tc_users add [windows_login] nvarchar(128) not null constraint df_tc_users_login default ''`,
-  `if col_length('dbo.tc_users', 'full_name') is null alter table dbo.tc_users add [full_name] nvarchar(256) not null constraint df_tc_users_full_name default ''`,
-  `if col_length('dbo.tc_users', 'position') is null alter table dbo.tc_users add [position] nvarchar(256) not null constraint df_tc_users_position default ''`,
-  `if col_length('dbo.tc_users', 'unit_id') is null alter table dbo.tc_users add [unit_id] nvarchar(64) null`,
-  // Фильтрованному индексу нужен QUOTED_IDENTIFIER ON: через драйвер он включён,
-  // но схему должно быть можно применить и вручную через sqlcmd или SSMS.
-  `set quoted_identifier on;
-   if not exists (select 1 from sys.indexes where name = 'tc_users_windows_login' and object_id = object_id(N'dbo.tc_users'))
-     create unique index tc_users_windows_login on dbo.tc_users ([windows_login]) where [windows_login] <> ''`,
-  `if object_id(N'dbo.tc_units', N'U') is null create table dbo.tc_units ([id] nvarchar(64) not null primary key, [parent_id] nvarchar(64) null, [kind] nvarchar(32) not null, [name] nvarchar(256) not null)`,
-  `if object_id(N'dbo.tc_templates', N'U') is null create table dbo.tc_templates ([id] nvarchar(64) not null primary key, [name] nvarchar(256) not null, [body] nvarchar(max) not null, [scope] nvarchar(32) null)`,
-  `if col_length('dbo.tc_templates', 'scope') is null alter table dbo.tc_templates add [scope] nvarchar(32) null`,
-  `if object_id(N'dbo.tc_chat_reads', N'U') is null create table dbo.tc_chat_reads ([employee_id] int not null primary key, [read_at] datetimeoffset(3) not null)`,
-  `if object_id(N'dbo.tc_notices', N'U') is null create table dbo.tc_notices ([id] nvarchar(64) not null primary key, [at] datetimeoffset(3) not null, [recipients] nvarchar(max) not null, [title] nvarchar(256) not null, [body] nvarchar(max) not null, [url] nvarchar(256) not null)`,
-  `if not exists (select 1 from sys.indexes where name = 'tc_notices_at' and object_id = object_id(N'dbo.tc_notices'))
-     create index tc_notices_at on dbo.tc_notices ([at])`,
-  `if object_id(N'dbo.tc_roles', N'U') is null create table dbo.tc_roles ([role] nvarchar(32) not null primary key, [name] nvarchar(128) not null, [permissions] nvarchar(max) not null)`,
+type Column = {
+  name: string;
+  /** Тип SQL Server: «nvarchar(64)», «datetimeoffset(3)», «bigint identity(1,1)»… */
+  type: string;
+  nullable?: boolean;
+  /** Значение по умолчанию (выражение SQL) — и для новых строк, и для строк, которые уже есть, когда столбец дописывается. */
+  default?: string;
+  /** Проверка значения: условие для check-ограничения. */
+  check?: string;
+};
+type SchemaTable = {
+  name: string;
+  columns: Column[];
+  /** Первичный ключ: имена столбцов; с именем ограничения — для составного ключа. */
+  primaryKey: string[];
+  primaryKeyName?: string;
+  /** Уникальные столбцы: имя ограничения → столбец. */
+  unique?: Record<string, string>;
+  /** Индексы: создаются, если индекса с таким именем ещё нет. */
+  indexes?: { name: string; columns: string; unique?: boolean; where?: string }[];
+};
+
+const NOW_SQL = 'sysdatetimeoffset()';
+
+export const TABLES: SchemaTable[] = [
+  { name: 'tc_meta', primaryKey: ['key'], columns: [{ name: 'key', type: 'nvarchar(64)' }, { name: 'value', type: 'nvarchar(max)', default: "''" }] },
+  {
+    name: 'tc_tasks',
+    primaryKey: ['id'],
+    columns: [
+      { name: 'id', type: 'nvarchar(64)' },
+      { name: 'seq', type: 'bigint identity(1,1)' },
+      { name: 'title', type: 'nvarchar(max)', default: "''" },
+      { name: 'row_id', type: 'nvarchar(64)', nullable: true },
+      { name: 'category', type: 'nvarchar(64)', nullable: true },
+      { name: 'assignee_ids', type: 'nvarchar(max)', default: "'[]'" },
+      { name: 'start_at', type: 'datetimeoffset(3)', default: NOW_SQL },
+      { name: 'end_at', type: 'datetimeoffset(3)', default: NOW_SQL },
+      { name: 'doc_name', type: 'nvarchar(max)', default: "''" },
+      { name: 'doc_number', type: 'nvarchar(max)', default: "''" },
+      { name: 'result', type: 'nvarchar(max)', default: "''" },
+      { name: 'done', type: 'bit', default: '0' },
+      { name: 'score', type: 'decimal(10,2)', nullable: true },
+      { name: 'done_at', type: 'datetimeoffset(3)', nullable: true },
+    ],
+  },
+  {
+    name: 'tc_absences',
+    primaryKey: ['id'],
+    columns: [
+      { name: 'id', type: 'nvarchar(64)' },
+      { name: 'employee_id', type: 'int', default: '0' },
+      { name: 'type', type: 'nvarchar(16)', default: "'vacation'", check: "[type] in ('vacation','trip','dayoff','sick','study')" },
+      { name: 'date_from', type: 'char(10)', default: "'1970-01-01'" },
+      { name: 'date_to', type: 'char(10)', nullable: true },
+      { name: 'status', type: 'nvarchar(16)', default: "'request'", check: "[status] in ('request','approved','rejected')" },
+      { name: 'note', type: 'nvarchar(max)', default: "''" },
+      { name: 'decided_by', type: 'int', nullable: true },
+      { name: 'created_at', type: 'datetimeoffset(3)', default: NOW_SQL },
+    ],
+    indexes: [{ name: 'tc_absences_employee', columns: '[employee_id], [date_from]' }],
+  },
+  {
+    name: 'tc_entitlements',
+    primaryKey: ['employee_id', 'year'],
+    primaryKeyName: 'pk_tc_entitlements',
+    columns: [
+      { name: 'employee_id', type: 'int' },
+      { name: 'year', type: 'int' },
+      { name: 'vacation_days', type: 'int', default: '0' },
+      { name: 'carried_over', type: 'int', default: '0' },
+      { name: 'dayoff_accrued', type: 'int', default: '0' },
+    ],
+  },
+  {
+    name: 'tc_reports',
+    primaryKey: ['week_start'],
+    columns: [
+      { name: 'week_start', type: 'char(10)' },
+      { name: 'submitted_at', type: 'datetimeoffset(3)', default: NOW_SQL },
+      { name: 'entries', type: 'nvarchar(max)', default: "'[]'" },
+    ],
+  },
+  {
+    name: 'tc_messages',
+    primaryKey: ['id'],
+    columns: [
+      { name: 'id', type: 'nvarchar(64)' },
+      { name: 'author_id', type: 'int', default: '0' },
+      { name: 'text', type: 'nvarchar(max)', default: "''" },
+      { name: 'sent_at', type: 'datetimeoffset(3)', default: NOW_SQL },
+    ],
+  },
+  {
+    name: 'tc_dictionaries',
+    primaryKey: ['id'],
+    columns: [
+      { name: 'id', type: 'nvarchar(64)' },
+      { name: 'dictionary', type: 'nvarchar(64)', default: "''" },
+      { name: 'code', type: 'nvarchar(64)', default: "''" },
+      { name: 'title', type: 'nvarchar(256)', default: "''" },
+      { name: 'color', type: 'nvarchar(32)', nullable: true },
+    ],
+    // Сравнение без учёта регистра обеспечивает параметр сортировки базы, поэтому lower() не нужен.
+    indexes: [{ name: 'tc_dictionaries_kind_code', columns: '[dictionary], [code]', unique: true }],
+  },
+  {
+    name: 'tc_plan_rows',
+    primaryKey: ['id'],
+    columns: [
+      { name: 'id', type: 'nvarchar(64)' },
+      { name: 'title', type: 'nvarchar(max)', default: "''" },
+      { name: 'is_header', type: 'bit', default: '0' },
+      { name: 'base_score', type: 'decimal(10,2)', default: '0' },
+    ],
+  },
+  {
+    name: 'tc_users',
+    primaryKey: ['employee_id'],
+    unique: { uq_tc_users_email: 'email' },
+    columns: [
+      { name: 'employee_id', type: 'int' },
+      { name: 'email', type: 'nvarchar(256)', default: "''" },
+      { name: 'role', type: 'nvarchar(32)', default: "'executor'" },
+      { name: 'active', type: 'bit', default: '1' },
+      { name: 'windows_login', type: 'nvarchar(128)', default: "''" },
+      { name: 'full_name', type: 'nvarchar(256)', default: "''" },
+      { name: 'position', type: 'nvarchar(256)', default: "''" },
+      { name: 'unit_id', type: 'nvarchar(64)', nullable: true },
+    ],
+    // Фильтрованному индексу нужен QUOTED_IDENTIFIER ON: через драйвер он включён,
+    // но схему должно быть можно применить и вручную через sqlcmd или SSMS.
+    indexes: [{ name: 'tc_users_windows_login', columns: '[windows_login]', unique: true, where: "[windows_login] <> ''" }],
+  },
+  {
+    name: 'tc_units',
+    primaryKey: ['id'],
+    columns: [
+      { name: 'id', type: 'nvarchar(64)' },
+      { name: 'parent_id', type: 'nvarchar(64)', nullable: true },
+      { name: 'kind', type: 'nvarchar(32)', default: "'section'" },
+      { name: 'name', type: 'nvarchar(256)', default: "''" },
+    ],
+  },
+  {
+    name: 'tc_templates',
+    primaryKey: ['id'],
+    columns: [
+      { name: 'id', type: 'nvarchar(64)' },
+      { name: 'name', type: 'nvarchar(256)', default: "''" },
+      { name: 'body', type: 'nvarchar(max)', default: "''" },
+      { name: 'scope', type: 'nvarchar(32)', nullable: true },
+    ],
+  },
+  {
+    name: 'tc_chat_reads',
+    primaryKey: ['employee_id'],
+    columns: [
+      { name: 'employee_id', type: 'int' },
+      { name: 'read_at', type: 'datetimeoffset(3)', default: NOW_SQL },
+    ],
+  },
+  {
+    name: 'tc_notices',
+    primaryKey: ['id'],
+    columns: [
+      { name: 'id', type: 'nvarchar(64)' },
+      { name: 'at', type: 'datetimeoffset(3)', default: NOW_SQL },
+      { name: 'recipients', type: 'nvarchar(max)', default: "'[]'" },
+      { name: 'title', type: 'nvarchar(256)', default: "''" },
+      { name: 'body', type: 'nvarchar(max)', default: "''" },
+      { name: 'url', type: 'nvarchar(256)', default: "''" },
+    ],
+    indexes: [{ name: 'tc_notices_at', columns: '[at]' }],
+  },
+  {
+    name: 'tc_roles',
+    primaryKey: ['role'],
+    columns: [
+      { name: 'role', type: 'nvarchar(32)' },
+      { name: 'name', type: 'nvarchar(128)', default: "''" },
+      { name: 'permissions', type: 'nvarchar(max)', default: "'[]'" },
+    ],
+  },
 ];
+
+/** Имена ограничений — как в прежних версиях схемы, чтобы базы, созданные ими, совпадали. */
+const LEGACY_DEFAULT_NAMES: Record<string, string> = {
+  'tc_entitlements.carried_over': 'df_tc_entitlements_carried',
+  'tc_entitlements.dayoff_accrued': 'df_tc_entitlements_dayoff',
+  'tc_plan_rows.is_header': 'df_tc_plan_rows_header',
+  'tc_plan_rows.base_score': 'df_tc_plan_rows_score',
+  'tc_users.windows_login': 'df_tc_users_login',
+};
+const defaultName = (table: string, column: string) => LEGACY_DEFAULT_NAMES[`${table}.${column}`] ?? `df_${table}_${column}`;
+
+/** Определение столбца; addDefault — значение по умолчанию и для уже существующих строк при дописывании столбца. */
+const columnSql = (table: SchemaTable, c: Column): string => {
+  const parts = [`[${c.name}]`, c.type];
+  if (!c.type.includes('identity')) parts.push(c.nullable ? 'null' : 'not null');
+  else parts.push('not null');
+  if (c.default !== undefined) parts.push(`constraint ${defaultName(table.name, c.name)} default ${c.default}`);
+  if (c.check) parts.push(`constraint ck_${table.name}_${c.name} check (${c.check})`);
+  return parts.join(' ');
+};
+
+const createTableSql = (t: SchemaTable): string => {
+  const lines = t.columns.map((c) => {
+    const unique = Object.entries(t.unique ?? {}).find(([, column]) => column === c.name)?.[0];
+    const pk = t.primaryKey.length === 1 && t.primaryKey[0] === c.name ? ' primary key' : '';
+    return `    ${columnSql(t, c)}${pk}${unique ? ` constraint ${unique} unique` : ''}`;
+  });
+  if (t.primaryKey.length > 1) lines.push(`    constraint ${t.primaryKeyName ?? `pk_${t.name}`} primary key (${t.primaryKey.map((k) => `[${k}]`).join(', ')})`);
+  return `if object_id(N'dbo.${t.name}', N'U') is null create table dbo.${t.name} (\n${lines.join(',\n')})`;
+};
+
+/** Столбец, которого нет в существующей таблице, дописывается; у NOT NULL — со значением по умолчанию для старых строк. */
+const addColumnSql = (t: SchemaTable, c: Column): string =>
+  `if col_length('dbo.${t.name}', '${c.name}') is null alter table dbo.${t.name} add ${columnSql(t, c)}`;
+
+const indexSql = (t: SchemaTable, i: NonNullable<SchemaTable['indexes']>[number]): string =>
+  `${i.where ? 'set quoted_identifier on;\n   ' : ''}if not exists (select 1 from sys.indexes where name = '${i.name}' and object_id = object_id(N'dbo.${t.name}'))
+     create ${i.unique ? 'unique ' : ''}index ${i.name} on dbo.${t.name} (${i.columns})${i.where ? ` where ${i.where}` : ''}`;
+
+/**
+ * Схема — отдельными операторами: SQL Server компилирует пакет целиком,
+ * и созданную в том же пакете таблицу изменить нельзя. Каждый оператор защищён проверкой существования.
+ */
+export const SCHEMA: string[] = TABLES.flatMap((t) => [
+  createTableSql(t),
+  // Ключевые столбцы есть всегда, остальные сверяются по одному.
+  ...t.columns.filter((c) => !t.primaryKey.includes(c.name)).map((c) => addColumnSql(t, c)),
+  ...(t.indexes ?? []).map((i) => indexSql(t, i)),
+]);
 
 // ——— Параметры запросов ———
 
@@ -256,12 +420,12 @@ const readAll = async (q: Q): Promise<Data | null> => {
           }),
         )
       : DEFAULT_PLAN_ROWS.map((row) => ({ ...row })),
-    users: accessReady
-      ? users.map((x) => {
-          const u = x as unknown as { employee_id: number; email: string; full_name: string; position: string; windows_login: string; role: ManagedUser['role']; active: boolean; unit_id: string | null };
-          return { employeeId: u.employee_id, email: u.email, fullName: u.full_name, position: u.position, windowsLogin: u.windows_login || u.email.split('@')[0], role: u.role, active: u.active, ...(u.unit_id ? { unitId: u.unit_id } : {}) } as ManagedUser;
-        })
-      : DEFAULT_USERS,
+    // Сотрудники — ровно то, что в tc_users: пустая таблица — пустой список, демонстрационные не подставляются.
+    // Без единого администратора сервер сам добавит того, кто публиковал приложение (server/app.ts).
+    users: users.map((x) => {
+      const u = x as unknown as { employee_id: number; email: string; full_name: string; position: string; windows_login: string; role: ManagedUser['role']; active: boolean; unit_id: string | null };
+      return { employeeId: u.employee_id, email: u.email, fullName: u.full_name, position: u.position, windowsLogin: u.windows_login || u.email.split('@')[0], role: u.role, active: u.active, ...(u.unit_id ? { unitId: u.unit_id } : {}) } as ManagedUser;
+    }),
     templates: templatesReady
       ? templates.map((x) => {
           const t = x as unknown as { id: string; name: string; body: string; scope: string | null };
@@ -576,27 +740,20 @@ export const ensureDatabase = async (settings: MssqlSettings): Promise<void> => 
 export const createMssqlRepo = (settings: MssqlSettings): Repo => {
   let pool: sql.ConnectionPool | null = null;
   let ready: Promise<sql.ConnectionPool> | null = null;
-  /** Были ли таблицы приложения до первого подключения: от этого зависит, писать ли демоданные. */
-  let tablesExisted = true;
 
   const connect = () =>
     (ready ??= (async () => {
       await ensureDatabase(settings);
       pool ??= await openPool(settings, settings.database);
       await pool.connect();
-      // Таблицы создаются, только если их нет (if object_id ... is null), и ничего не удаляется.
-      const found = await rows(pool, "select count(*) as [n] from sys.tables where [name] like N'tc[_]%'");
-      tablesExisted = Number((found[0] as { n?: number } | undefined)?.n ?? 0) > 0;
+      // Сверка схемы при каждом запуске (то есть при каждой публикации): недостающие таблицы, столбцы
+      // и индексы создаются, существующие строки и данные не меняются и не удаляются.
       for (const statement of SCHEMA) await pool.request().query(statement);
       return pool;
     })().catch((e) => ((ready = null), Promise.reject(e))));
 
   return {
     kind: 'sqlserver',
-    seedDemo: async () => {
-      await connect();
-      return !tablesExisted;
-    },
     ping: async () => {
       // connect() создаёт базу и таблицы, поэтому проверка охватывает всю готовность хранилища.
       await (await connect()).request().query('select 1');

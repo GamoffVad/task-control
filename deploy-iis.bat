@@ -10,6 +10,8 @@ rem  Недостающее ставит сам: роли Windows Server (IIS, �
 rem  из состава системы; Node.js, URL Rewrite и iisnode — установщики .msi из папки installers рядом.
 rem  Пул приложений работает под учётной записью Windows того, кто публикует (пароль спрашивается один раз),
 rem  и под ней же приложение входит в SQL Server — без отдельной учётной записи SQL Server и пароля в web.config.
+rem  Вход в приложение — только через Windows; публикующий становится администратором пустой базы (TC_ADMIN_LOGIN).
+rem  Хранилище — только SQL Server: при каждом запуске приложение сверяет схему базы, данные не трогает.
 rem  Ключи: /nobuild — без пересборки, /nosql — не трогать SQL Server,
 rem         /password — спросить пароль Windows заново (после его смены),
 rem         /sqllogin — прежний способ: учётная запись SQL Server tc_app с паролем (/resetsql — новый пароль).
@@ -166,20 +168,22 @@ if not exist "%TARGET%\web.config" (
 )
 rem В web.config прежних версий нет promoteServerVars: без него iisnode не передаёт приложению доменного пользователя.
 findstr /c:"promoteServerVars" "%TARGET%\web.config" >nul || powershell -NoProfile -Command "$p='%TARGET%\web.config'; $t=Get-Content -Raw -Encoding UTF8 $p; $t=$t -replace '<iisnode ', '<iisnode promoteServerVars=''LOGON_USER,AUTH_USER'' '; Set-Content -Path $p -Value $t -Encoding UTF8 -NoNewline"
-rem Настройки и данные сохраняются: web.config и папка data не перезаписываются и не удаляются.
-robocopy "%SOURCE%" "%TARGET%" /MIR /XF web.config /XD data iisnode /NFL /NDL /NJH /NJS /NP >nul
+rem Администратор на случай, если в базе нет ни одного, — тот, кто публикует. Записывается, только если ещё не задан
+rem (и в web.config прежних версий, где строки TC_ADMIN_LOGIN нет), и не зависит от шага SQL Server.
+powershell -NoProfile -Command "$p='%TARGET%\web.config'; $t=Get-Content -Raw -Encoding UTF8 $p; if ($t -notmatch 'key=\"TC_ADMIN_LOGIN\"') { $t=$t -replace '</appSettings>', '  <add key=\"TC_ADMIN_LOGIN\" value=\"\" /></appSettings>' }; $t=$t -replace 'key=\"TC_ADMIN_LOGIN\" value=\"\"', 'key=\"TC_ADMIN_LOGIN\" value=\"%ME%\"'; Set-Content -Path $p -Value $t -Encoding UTF8 -NoNewline"
+rem Настройки и журналы сохраняются: web.config, папки iisnode и data (прежних версий) не перезаписываются и не удаляются.
+rem /R и /W: заблокированный файл (не успевший завершиться node.exe) повторяется 5 раз с паузой 2 с, а не миллион раз по 30 с.
+robocopy "%SOURCE%" "%TARGET%" /MIR /XF web.config /XD data iisnode /R:5 /W:2 /NFL /NDL /NJH /NJS /NP >nul
 if errorlevel 8 (
   echo ОШИБКА: копирование не выполнено.
   "%APPCMD%" start apppool "%POOL%" >nul 2>&1
   goto :fail
 )
-if not exist "%TARGET%\data" mkdir "%TARGET%\data"
 rem Журналы iisnode пишутся в папку рядом с приложением.
 if not exist "%TARGET%\iisnode" mkdir "%TARGET%\iisnode"
 
 echo [3/7] Права доступа...
 icacls "%TARGET%" /grant "IIS_IUSRS:(OI)(CI)(RX)" /T /C >nul
-icacls "%TARGET%\data" /grant "IIS_IUSRS:(OI)(CI)(M)" /T /C >nul
 icacls "%TARGET%\iisnode" /grant "IIS_IUSRS:(OI)(CI)(M)" /T /C >nul
 
 rem --- Пул приложений -----------------------------------------
@@ -188,7 +192,6 @@ echo [4/7] Пул приложений...
 if errorlevel 1 "%APPCMD%" add apppool /name:"%POOL%" >nul
 rem Без управляемого кода, без простоя и перезапусков по расписанию: сервер Node.js держится постоянно.
 "%APPCMD%" set apppool "%POOL%" /managedRuntimeVersion:"" /startMode:"AlwaysRunning" /processModel.idleTimeout:"00:00:00" /recycling.periodicRestart.time:"00:00:00" >nul
-icacls "%TARGET%\data" /grant "IIS AppPool\%POOL%:(OI)(CI)(M)" /T /C >nul
 icacls "%TARGET%\iisnode" /grant "IIS AppPool\%POOL%:(OI)(CI)(M)" /T /C >nul
 rem Пул — под учётной записью публикующего: под ней приложение входит в SQL Server (вход Windows).
 set "POOLSETUP=%~dp0scripts\set-pool-identity.ps1"
@@ -198,7 +201,6 @@ if errorlevel 1 (
   echo ОШИБКА: не удалось запустить пул %POOL% под учётной записью %ME% — смотрите сообщение выше.
   goto :fail
 )
-icacls "%TARGET%\data" /grant "%ME%:(OI)(CI)(M)" /T /C >nul
 icacls "%TARGET%\iisnode" /grant "%ME%:(OI)(CI)(M)" /T /C >nul
 
 rem --- Сайт ----------------------------------------------------
@@ -213,10 +215,9 @@ if errorlevel 1 (
 "%APPCMD%" set app "%SITE%/" /applicationPool:"%POOL%" >nul
 
 rem --- Windows-аутентификация ----------------------------------
-rem Анонимный доступ и проверка подлинности Windows включены вместе, и способ входа переключается
-rem в самом приложении (Администрирование, Аутентификация) без правки IIS и web.config.
-rem В режиме «Windows» приложение отвечает 401, IIS запрашивает учётную запись Windows, а iisnode
-rem передаёт подтверждённый логин заголовком X-iisnode-LOGON_USER (promoteServerVars в web.config).
+rem Вход в приложение — только через Windows. Анонимный доступ включён вместе с проверкой подлинности Windows:
+rem страницы и /api/health отдаются без запроса, а при входе приложение отвечает 401, IIS запрашивает учётную
+rem запись Windows, и iisnode передаёт подтверждённый логин заголовком X-iisnode-LOGON_USER (promoteServerVars).
 echo [6/7] Windows-аутентификация...
 "%APPCMD%" set config "%SITE%" /section:%SECTION%/anonymousAuthentication /enabled:true /commit:apphost >nul
 "%APPCMD%" set config "%SITE%" /section:%SECTION%/basicAuthentication /enabled:false /commit:apphost >nul
@@ -258,15 +259,16 @@ if errorlevel 1 netsh advfirewall firewall add rule name="TaskControl %PORT%" di
 "%APPCMD%" start apppool "%POOL%" >nul 2>&1
 "%APPCMD%" start site "%SITE%" >nul 2>&1
 
-rem Первое обращение к приложению: оно подключается к SQL Server, создаёт недостающие таблицы и, если
-rem таблиц до этого не было, заполняет их тестовыми данными. Так база готова сразу после публикации.
+rem Первое обращение к приложению: оно подключается к SQL Server и сверяет схему — создаёт недостающие
+rem таблицы, столбцы и индексы, не трогая данные. Тестовых данных нет: в пустой базе — только справочники,
+rem роли и администратор (публикующий). Так база готова сразу после публикации.
 echo   Проверка приложения и базы данных...
 set "HEALTH=1"
-powershell -NoProfile -Command "try { $u='http://%IP%:%PORT%/api'; $h = Invoke-RestMethod -Uri ($u + '/health') -TimeoutSec 90; [void](Invoke-RestMethod -Uri ($u + '/authentication') -TimeoutSec 90); if ($h.storage -eq 'sqlserver') { exit 0 } else { exit 3 } } catch { exit 1 }"
+powershell -NoProfile -Command "try { $u='http://%IP%:%PORT%/api'; $h = Invoke-RestMethod -Uri ($u + '/health') -TimeoutSec 90; [void](Invoke-RestMethod -Uri ($u + '/authentication') -TimeoutSec 90); if ($h.storage -eq 'sqlserver') { exit 0 } else { exit 1 } } catch { exit 1 }"
 set "HEALTH=%errorlevel%"
-if "%HEALTH%"=="0" echo   База %SQLDB% на %SQLSERVER% готова: таблицы созданы, приложение работает с ней.
-if "%HEALTH%"=="3" echo   ВНИМАНИЕ: приложение работает не с SQL Server, а с файлом data\db.json: в web.config не заполнены MSSQL_ ^(смотрите шаг 7^).
-if "%HEALTH%"=="1" echo   ВНИМАНИЕ: приложение не ответило или база недоступна. Откройте http://%IP%:%PORT%/api/health, причина — в журнале %TARGET%\iisnode.
+if "%HEALTH%"=="0" echo   База %SQLDB% на %SQLSERVER% готова: схема сверена, приложение работает с ней.
+if not "%HEALTH%"=="0" echo   ВНИМАНИЕ: приложение не ответило, SQL Server не настроен или недоступен. Откройте http://%IP%:%PORT%/api/health
+if not "%HEALTH%"=="0" echo     ^(storage: none — в web.config не заполнены MSSQL_, смотрите шаг 7^); причина — в журнале %TARGET%\iisnode.
 
 set "CURVER=нет"
 if exist "%TARGET%\version.txt" set /p CURVER=<"%TARGET%\version.txt"
@@ -282,14 +284,13 @@ echo Готово. Установлена версия %CURVER%. Приложе�
 echo Если в браузере прежняя версия — обновите страницу через Ctrl+F5.
 echo.
 echo Дальше:
-echo  1. Проверить раздел appSettings файла %TARGET%\web.config: строки MSSQL_ и AUTH_SECRET
-echo     заполняются шагом 7 автоматически, таблицы созданы при проверке выше.
-echo  2. Войти администратором, открыть Администрирование ^> Аутентификация
-echo     и нажать «Проверить настройку»: там видно, какой доменный логин получил сервер.
-echo  3. Заполнить Windows-логины сотрудников и выбрать способ входа «Windows» — IIS и web.config
-echo     при этом править не нужно. Сайт должен быть в зоне «Местная интрасеть» браузера, иначе
+echo  1. Открыть http://%IP%:%PORT%/ — вход выполнится сам, через Windows. Учётная запись %ME%
+echo     становится администратором, если в базе его ещё нет ^(TC_ADMIN_LOGIN в web.config^).
+echo  2. Завести сотрудников в Администрирование ^> Пользователи с их Windows-логинами ^(ДОМЕН\логин^)
+echo     и нажать «Проверить настройку» в Администрирование ^> Аутентификация.
+echo  3. Добавить адрес сайта в зону «Местная интрасеть» браузера ^(обычно групповой политикой^), иначе
 echo     браузер будет спрашивать логин и пароль Windows.
-echo  4. Полная инструкция: docs\corporate-offline.md
+echo  4. Полная инструкция: corporate-offline.md
 echo.
 goto :end
 

@@ -497,7 +497,7 @@ export const toData = (s: AppState): Data => ({
 export const fromData = (d: Data, user: User | null): AppState => {
   const users = d.users ?? DEFAULT_USERS;
   // Отметка версии прав: если она отстала, администратору дописываются права, добавленные позже.
-  // В PostgreSQL и SQL Server ту же роль играет access-version в tc_meta.
+  // В SQL Server ту же роль играет access-version в tc_meta.
   const roles = d.accessVersion === ACCESS_VERSION ? (d.roles ?? DEFAULT_ROLES) : withAddedPermissions(d.roles ?? DEFAULT_ROLES);
   const normalizedUsers = users.map((account) => {
     const employee = employeeById.get(account.employeeId);

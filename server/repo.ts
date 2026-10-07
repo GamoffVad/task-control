@@ -1,4 +1,4 @@
-// Хранилище данных сервера. В продакшене — PostgreSQL (pgRepo.ts), при разработке — память с записью в файл.
+// Хранилище данных сервера: SQL Server (mssqlRepo.ts); хранилище в памяти — для тестов.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { Data } from '../src/lib/types';
@@ -15,12 +15,6 @@ export interface Repo {
   update(fn: (current: Data | null) => Data): Promise<Data>;
   /** Проверка доступности хранилища для /api/health; бросает исключение, если база не отвечает. */
   ping?(): Promise<void>;
-  /**
-   * Можно ли заполнить пустую базу демонстрационными данными. SQL Server — только если таблиц приложения
-   * до запуска не было; уже созданные таблицы (например, скриптом create-database.sql) заполняются
-   * лишь справочниками и ролями. Без метода — можно.
-   */
-  seedDemo?(): Promise<boolean>;
   /** Закрыть соединения (тесты). */
   close?(): Promise<void>;
 }

@@ -727,9 +727,10 @@ describe('администрирование', () => {
     expect(screen.queryByText('Кудрявцев Олег Игоревич')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Аутентификация' }));
-    expect(screen.getByRole('heading', { name: 'Способ входа' })).toBeInTheDocument();
-    // Режим Windows выбирается всегда; когда сервер не настроен, об этом пишет подсказка и проверка настройки.
-    expect(screen.getByRole('radio', { name: /Windows/ })).toBeEnabled();
+    expect(screen.getByRole('heading', { name: 'Вход через Windows' })).toBeInTheDocument();
+    // Вход — только через Windows: переключателя способа входа и резервного входа по паролю нет.
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Резервный вход|резервный вход/)).not.toBeInTheDocument();
     expect(screen.getByText('Windows не настроен')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Проверить настройку' })).toBeDisabled();
     await user.click(screen.getByRole('button', { name: 'Словари' }));

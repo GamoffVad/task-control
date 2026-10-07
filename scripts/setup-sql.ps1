@@ -136,6 +136,12 @@ if ($SqlLogin) {
 Set-Setting 'MSSQL_SERVER' $Server
 Set-Setting 'MSSQL_DATABASE' $Database
 
+# Администратор на случай пустой таблицы пользователей — тот, кто публикует (а не демонстрационный).
+$adminNode = Get-Setting 'TC_ADMIN_LOGIN'
+if ([string]::IsNullOrWhiteSpace($(if ($adminNode) { $adminNode.value } else { '' }))) {
+  Set-Setting 'TC_ADMIN_LOGIN' $(if ($WindowsAccount) { $WindowsAccount } else { $who })
+}
+
 # Ключ подписи сеансов: если не задан, создаём случайный, иначе оставляем прежний.
 $secretNode = Get-Setting 'AUTH_SECRET'
 if ([string]::IsNullOrWhiteSpace($(if ($secretNode) { $secretNode.value } else { '' }))) {
