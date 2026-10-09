@@ -1,7 +1,7 @@
 {
   "name": "task-control",
   "private": true,
-  "version": "6.2.0",
+  "version": "6.2.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,6 +13,8 @@
     "test:mssql": "vitest run src/test/mssql.test.ts",
     "typecheck": "tsc -b",
     "docs": "node docs/build-docs.mjs",
+    "build:vercel": "node scripts/build-vercel.mjs",
+    "deploy": "node scripts/deploy-vercel.mjs",
     "build:iis": "node scripts/build-iis.mjs",
     "build:sql": "node scripts/build-sql.mjs",
     "pack:iis": "node scripts/pack-iis.mjs"

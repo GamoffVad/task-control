@@ -7,7 +7,7 @@
 **Планирование задач отдела и контроль исполнения:** календарь, недельная матрица плана, доска сроков,
 график событий сотрудников, недельные отчёты, показатели эффективности и уведомления — без обращений в интернет.
 
-[![версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-6.2.0-1F3A5F)](CHANGELOG.md)
+[![версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-6.2.1-1F3A5F)](CHANGELOG.md)
 [![тесты](https://img.shields.io/badge/%D1%82%D0%B5%D1%81%D1%82%D1%8B-307-2C6B45)](#проверки)
 [![стек](https://img.shields.io/badge/Vite%208%20%C2%B7%20React%2019%20%C2%B7%20TypeScript-1F2B3A)](#устройство-проекта)
 [![лицензия](https://img.shields.io/badge/%D0%BB%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F-MIT-5D6575)](LICENSE)
@@ -192,6 +192,8 @@ npm run dev
 | `npm run dev` | режим разработки вместе с API |
 | `npm run build` | проверка типов и сборка интерфейса в `dist/` |
 | `npm run build:iis` | комплект для публикации в IIS в `dist-iis/` |
+| `npm run build:vercel` | демонстрационная сборка (статика с тестовыми данными в браузере) в `.vercel/output` |
+| `npm run deploy` | публикация демонстрационной сборки на Vercel |
 | `npm run build:sql` | скрипт создания базы SQL Server `scripts/create-database.sql` из схемы приложения |
 | `scripts/clear-test-data.sql` | удаление тестовых данных, оставшихся от версий до 6.0.0 (SSMS; по умолчанию только показывает, что удалит) |
 | `deploy-iis-remote.bat -Server ИМЯ` | публикация в IIS с другого компьютера сети по WinRM (`-Check` — только проверить сервер) |
@@ -245,9 +247,15 @@ public/       значки, Service Worker уведомлений, PDF-руко�
 
 ## Публикация
 
-Только в IIS корпоративной сети, одним файлом `deploy-iis.bat` на сервере (архив — `npm run pack:iis`):
+**Рабочая версия — в IIS корпоративной сети**, одним файлом `deploy-iis.bat` на сервере (архив — `npm run pack:iis`):
 [docs/corporate-offline.md](docs/corporate-offline.md) — вход через Windows, SQL Server, Active Directory
 и установка без обращений наружу.
+
+**Демонстрационный сайт на Vercel** — [task-control-rho.vercel.app](https://task-control-rho.vercel.app): только интерфейс
+с тестовыми данными, без сервера и базы данных. Тестовый отдел создаётся в браузере посетителя и хранится в его
+`localStorage` (в подвале — «данные в этом браузере»); у каждого посетителя свои данные, вход по форме
+(`user` или `sidorov`, пароль `123456`), кнопка в шапке возвращает исходные данные. Сборка и публикация:
+`npm run build:vercel`, затем `npm run deploy`. Рабочие данные и SQL Server к Vercel не подключаются.
 Стили рассчитаны на Google Chrome 109 — последнюю версию для Windows 7 — и на все более новые браузеры.
 
 ## Документация
