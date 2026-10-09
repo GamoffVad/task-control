@@ -1,5 +1,6 @@
 {
   "version": "5.25.1",
   "tests": 265,
-  "pdf": "/manual/Kontrol-zadach-rukovodstvo-v5.25.1.pdf"
+  "pdf": "/manual/Kontrol-zadach-rukovodstvo-v5.25.1.pdf",
+  "iisPdf": "/manual/Kontrol-zadach-IIS-v6.3.0.pdf"
 }

@@ -14,7 +14,7 @@ import metaRaw from '../../docs/manual.meta.json?raw';
 const SHOTS = import.meta.glob('../../docs/shots/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 const shotUrl = (file: string) => SHOTS[`../../docs/shots/${file}`] ?? null;
 
-const meta = JSON.parse(metaRaw) as { version: string; tests: number | null; pdf?: string };
+const meta = JSON.parse(metaRaw) as { version: string; tests: number | null; pdf?: string; iisPdf?: string };
 
 /** Раздел «Информация»: документация — та же, что в PDF, — с оглавлением. Скриншоты — в теме, выбранной сейчас. */
 export const Info = () => {
@@ -74,6 +74,12 @@ export const Info = () => {
             {meta.pdf && (
               <a className="btn btn--primary" href={meta.pdf} download>
                 <Icon.Download size={15} /> Скачать PDF
+              </a>
+            )}
+            {/* Инструкция администратора по публикации в IIS (docs/iis-guide.md) — тем, кто разворачивает приложение. */}
+            {meta.iisPdf && (
+              <a className="btn" href={meta.iisPdf} download>
+                <Icon.Download size={15} /> Инструкция по публикации в IIS
               </a>
             )}
             <Link className="btn" to="/kit">

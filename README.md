@@ -7,7 +7,7 @@
 **Планирование задач отдела и контроль исполнения:** календарь, недельная матрица плана, доска сроков,
 график событий сотрудников, недельные отчёты, показатели эффективности и уведомления — без обращений в интернет.
 
-[![версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-6.2.1-1F3A5F)](CHANGELOG.md)
+[![версия](https://img.shields.io/badge/%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D1%8F-6.3.0-1F3A5F)](CHANGELOG.md)
 [![тесты](https://img.shields.io/badge/%D1%82%D0%B5%D1%81%D1%82%D1%8B-307-2C6B45)](#проверки)
 [![стек](https://img.shields.io/badge/Vite%208%20%C2%B7%20React%2019%20%C2%B7%20TypeScript-1F2B3A)](#устройство-проекта)
 [![лицензия](https://img.shields.io/badge/%D0%BB%D0%B8%D1%86%D0%B5%D0%BD%D0%B7%D0%B8%D1%8F-MIT-5D6575)](LICENSE)
@@ -250,6 +250,9 @@ public/       значки, Service Worker уведомлений, PDF-руко�
 **Рабочая версия — в IIS корпоративной сети**, одним файлом `deploy-iis.bat` на сервере (архив — `npm run pack:iis`):
 [docs/corporate-offline.md](docs/corporate-offline.md) — вход через Windows, SQL Server, Active Directory
 и установка без обращений наружу.
+
+Пошаговая инструкция для администратора — [docs/iis-guide.md](docs/iis-guide.md); её PDF (`Контроль-задач-инструкция-IIS-v<версия>.pdf`)
+приложен к каждому выпуску на GitHub, лежит в архиве для IIS и скачивается в приложении («Информация → Инструкция по публикации в IIS»).
 
 **Демонстрационный сайт на Vercel** — [task-control-rho.vercel.app](https://task-control-rho.vercel.app): только интерфейс
 с тестовыми данными, без сервера и базы данных. Тестовый отдел создаётся в браузере посетителя и хранится в его

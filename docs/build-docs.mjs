@@ -63,10 +63,12 @@ try {
   // Раздел «Информация»: PDF для скачивания и сведения о сборке документации.
   const pub = path.join(root, 'public', 'manual');
   mkdirSync(pub, { recursive: true });
-  for (const f of readdirSync(pub)) rmSync(path.join(pub, f));
+  // Прежние PDF руководства убираем; PDF инструкции по IIS (его кладёт docs/build-iis-guide.mjs) остаётся.
+  for (const f of readdirSync(pub)) if (!f.startsWith('Kontrol-zadach-IIS-')) rmSync(path.join(pub, f));
   const pdfName = `Kontrol-zadach-rukovodstvo-v${version}.pdf`;
+  const previousMeta = existsSync(path.join(docs, 'manual.meta.json')) ? JSON.parse(readFileSync(path.join(docs, 'manual.meta.json'), 'utf8')) : {};
   copyFileSync(out, path.join(pub, pdfName));
-  writeFileSync(path.join(docs, 'manual.meta.json'), JSON.stringify({ version, tests: numPassedTests, pdf: `/manual/${pdfName}` }, null, 2) + String.fromCharCode(10));
+  writeFileSync(path.join(docs, 'manual.meta.json'), JSON.stringify({ version, tests: numPassedTests, pdf: `/manual/${pdfName}`, ...(previousMeta.iisPdf ? { iisPdf: previousMeta.iisPdf } : {}) }, null, 2) + String.fromCharCode(10));
 } finally {
   await browser.close();
   rmSync(tmp);

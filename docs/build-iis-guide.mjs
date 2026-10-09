@@ -1,6 +1,6 @@
 // PDF инструкции по публикации в IIS: docs/iis-guide.md → docs/Контроль-задач-инструкция-IIS-v<версия>.pdf
 // Оформление — как у руководства (docs/manual.html). Запуск: node docs/build-iis-guide.mjs.
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import puppeteer from 'puppeteer-core';
@@ -128,6 +128,15 @@ try {
       <span>Контроль задач ${version} · Публикация в IIS</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
   });
   console.log('PDF:', out);
+  // Копия в приложение: раздел «Информация» предлагает её скачать (кнопка «Инструкция по публикации в IIS»).
+  const pub = path.join(root, 'public', 'manual');
+  mkdirSync(pub, { recursive: true });
+  for (const f of readdirSync(pub)) if (f.startsWith('Kontrol-zadach-IIS-')) rmSync(path.join(pub, f));
+  const name = `Kontrol-zadach-IIS-v${version}.pdf`;
+  copyFileSync(out, path.join(pub, name));
+  const metaFile = path.join(docs, 'manual.meta.json');
+  const meta = existsSync(metaFile) ? JSON.parse(readFileSync(metaFile, 'utf8')) : {};
+  writeFileSync(metaFile, JSON.stringify({ ...meta, iisPdf: `/manual/${name}` }, null, 2) + String.fromCharCode(10));
 } finally {
   await browser.close();
   rmSync(tmp);

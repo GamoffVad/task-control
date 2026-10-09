@@ -6,6 +6,7 @@ import { lightShot, parseManual } from '../lib/manual';
 import { createSeed } from '../lib/seed';
 import { StoreProvider } from '../lib/StoreProvider';
 import raw from '../../docs/manual.html?raw';
+import meta from '../../docs/manual.meta.json';
 
 vi.mock('../lib/staff', async (original) => ({ ...(await original<typeof import('../lib/staff')>()), STAFF_USERS: [] }));
 
@@ -67,5 +68,20 @@ describe('информация', () => {
     // С клавиатуры — Enter на рисунке.
     fireEvent.keyDown(pictures[2], { key: 'Enter' });
     expect(screen.getByRole('dialog', { name: 'Рис. 3' })).toBeInTheDocument();
+  });
+
+  it('предлагает скачать инструкцию по публикации в IIS', () => {
+    // Ссылка на PDF инструкции прописывается сборкой docs/build-iis-guide.mjs и ведёт на файл в public/manual.
+    expect(meta.iisPdf).toMatch(/^\/manual\/Kontrol-zadach-IIS-v\d+\.\d+\.\d+\.pdf$/);
+    render(
+      <StoreProvider initial={{ ...createSeed(), user: { email: 'user@example.com', employeeId: 1, role: 'administrator' } }}>
+        <MemoryRouter initialEntries={['/info']}>
+          <AppRoutes />
+        </MemoryRouter>
+      </StoreProvider>,
+    );
+    const link = screen.getByRole('link', { name: /Инструкция по публикации в IIS/ });
+    expect(link).toHaveAttribute('href', meta.iisPdf);
+    expect(link).toHaveAttribute('download');
   });
 });
