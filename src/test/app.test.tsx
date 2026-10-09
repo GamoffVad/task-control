@@ -1015,3 +1015,25 @@ describe('отсутствия', () => {
     expect(loadState().entitlements.find((e) => e.employeeId === 2 && e.year === 2026)?.carriedOver).toBe(10);
   });
 });
+
+describe('обнуление показателей', () => {
+  it('в «Администрировании → Оценка» удаляет отчёты после подтверждения, и «Показатели» пустеют', async () => {
+    const user = userEvent.setup();
+    const state = loggedIn();
+    expect(state.reports.length).toBeGreaterThan(0);
+    const { unmount } = renderAt('/admin', state);
+    await user.click(screen.getByRole('button', { name: 'Оценка' }));
+    expect(screen.getByRole('heading', { name: 'Обнуление показателей' })).toBeInTheDocument();
+    // Первое нажатие только просит подтверждения.
+    await user.click(screen.getByRole('button', { name: 'Обнулить все показатели' }));
+    expect(screen.getByRole('button', { name: 'Точно обнулить все показатели?' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Точно обнулить все показатели?' }));
+    expect(screen.getByText(/Сейчас в отчётах/)).toHaveTextContent('0 недель, 0 записей, 0 баллов');
+    expect(screen.getByRole('button', { name: 'Обнулить все показатели' })).toBeDisabled();
+    unmount();
+
+    renderAt('/kpi', { ...state, reports: [] });
+    expect(screen.getByRole('heading', { name: 'Показатели эффективности' })).toBeInTheDocument();
+    expect(screen.getByText('нет данных', { exact: false })).toBeInTheDocument();
+  });
+});

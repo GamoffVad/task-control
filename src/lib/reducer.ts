@@ -62,6 +62,8 @@ export type Action =
   | { type: 'saveRolePermissions'; role: Role; permissions: Permission[] }
   | { type: 'saveAuthentication'; mode: AuthenticationMode; allowEmergencyForm: boolean }
   | { type: 'saveScoring'; scoring: ScoringSettings }
+  /** Обнуление показателей: удаляет отчёты (все либо недель, начавшихся раньше даты YYYY-MM-DD). Баллы пересчитываются из отчётов. */
+  | { type: 'resetScores'; before?: string }
   | { type: 'saveAppearance'; appearance: AppearanceSettings }
   | { type: 'reset'; now?: Date };
 
@@ -98,6 +100,7 @@ export const PERSISTED: Action['type'][] = [
   'saveRolePermissions',
   'saveAuthentication',
   'saveScoring',
+  'resetScores',
   'reset',
 ];
 
@@ -400,6 +403,13 @@ export const reducer = (state: AppState, action: Action): AppState => {
           byDirection,
         },
       };
+    }
+    case 'resetScores': {
+      // Права те же, что у правил подсчёта баллов: обнуление — их часть. Всегда возвращаем новое состояние,
+      // даже если отчётов не было: иначе сервер принял бы «ничего не изменилось» за отказ в праве.
+      if (!hasPermission(state.user, 'scoring.manage')) return state;
+      const before = action.before;
+      return { ...state, reports: before ? state.reports.filter((report) => report.weekStart >= before) : [] };
     }
     case 'saveAppearance':
       // Оформление у каждого своё и хранится в браузере, поэтому отдельного разрешения не требует.

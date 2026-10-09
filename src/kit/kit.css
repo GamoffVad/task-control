@@ -290,6 +290,11 @@ input[type='search']::-webkit-search-cancel-button, input[type='search']::-webki
   .sticky-head { position: sticky; top: var(--topbar-h, 64px); z-index: 20; background: var(--paper); }
 }
 
+/* Обнуление показателей («Администрирование → Оценка»). */
+.reset-now { margin: 8px 0 10px; font-size: 13.5px; color: var(--ink-2); }
+.reset-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; margin: 8px 0; }
+.reset-field { display: flex; flex-direction: column; gap: 4px; min-width: 190px; }
+
 /* Панель управления в строке заголовка (Календарь): период и вид рядом с названием, как подпись у других разделов. */
 .page-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; align-self: center; min-width: 0; }
 .page-toolbar .tool { display: flex; align-items: center; gap: 10px; padding: 0 18px; border-left: 1px dashed var(--dash); min-width: 0; }

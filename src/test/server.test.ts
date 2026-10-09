@@ -173,6 +173,32 @@ describe('API', () => {
     expect(again.json.data!.absences.some((a) => a.employeeId === 4 && a.from === '2026-10-12' && a.decidedBy === 1)).toBe(true);
   });
 
+  it('обнуляет показатели: удаляет отчёты, а остальным ролям отказывает', async () => {
+    const admin = await login('user@example.com');
+    const before = (await call('/api/state', { token: admin })).json.data!.reports;
+    expect(before.length).toBeGreaterThan(1);
+    // Исполнитель и руководитель без права «Оценка» показатели не обнуляют.
+    for (const who of ['sidorov@example.com', 'petrov@example.com']) {
+      const denied = await call('/api/action', { method: 'POST', token: await login(who), body: { action: { type: 'resetScores' } } });
+      expect(denied.status).toBe(403);
+    }
+    expect((await call('/api/state', { token: admin })).json.data!.reports).toHaveLength(before.length);
+    // Неверная дата отклоняется.
+    expect((await call('/api/action', { method: 'POST', token: admin, body: { action: { type: 'resetScores', before: 'вчера' } } })).status).toBe(400);
+    // Отчёты недель до даты.
+    const cut = before[before.length - 1].weekStart;
+    const part = await call('/api/action', { method: 'POST', token: admin, body: { action: { type: 'resetScores', before: cut } } });
+    expect(part.status).toBe(200);
+    expect(part.json.data!.reports.map((r) => r.weekStart)).toEqual([cut]);
+    // Все отчёты; повторное обнуление пустого списка — не ошибка.
+    for (let i = 0; i < 2; i++) {
+      const all = await call('/api/action', { method: 'POST', token: admin, body: { action: { type: 'resetScores' } } });
+      expect(all.status).toBe(200);
+      expect(all.json.data!.reports).toEqual([]);
+    }
+    expect((await call('/api/state', { token: admin })).json.data!.tasks.length).toBeGreaterThan(0);
+  });
+
   it('сохраняет позиции плана и возвращает их в общем состоянии', async () => {
     const token = await login('user');
     const saved = await call('/api/action', { method: 'POST', token, body: { action: { type: 'savePlanRow', draft: { id: '1.9', title: 'Новая позиция', isHeader: false, baseScore: 3 } } } });

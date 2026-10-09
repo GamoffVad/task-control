@@ -141,18 +141,26 @@ export const defaultDeadlineFor = (bucket: DeadlineBucket, now: Date = new Date(
   }
 };
 
+/** Первое число месяца, в который попадает дата. */
+export const startOfMonth = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), 1);
+
+/**
+ * Начало периода показателей: отсчёт назад на нужное число месяцев, но не с того же числа, а с 1-го числа месяца,
+ * в который он попал. Так баллы месяца считаются за целые календарные месяцы, а не со «скользящей» даты.
+ * Пример на 9 октября: «Месяц» — с 1 сентября, «Квартал» — с 1 июля, «Год» — с 1 октября прошлого года.
+ */
 export const periodStart = (period: Period, now: Date = new Date()): Date | null => {
   switch (period) {
     case 'all':
       return null;
     case 'month':
-      return addMonths(now, -1);
+      return startOfMonth(addMonths(now, -1));
     case 'quarter':
-      return addMonths(now, -3);
+      return startOfMonth(addMonths(now, -3));
     case 'half':
-      return addMonths(now, -6);
+      return startOfMonth(addMonths(now, -6));
     case 'year':
-      return addMonths(now, -12);
+      return startOfMonth(addMonths(now, -12));
   }
 };
 

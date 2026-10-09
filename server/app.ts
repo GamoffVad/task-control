@@ -279,6 +279,9 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
       if (!permissions.every((permission) => typeof permission === 'string' && allowed.includes(permission as Permission))) bad('разрешения');
       return { type: 'saveRolePermissions', role: a.role as Role, permissions: a.permissions as Permission[] };
     }
+    case 'resetScores':
+      if (a.before !== undefined && !dateKey(a.before)) bad('дата, до которой обнуляются показатели');
+      return { type: 'resetScores', ...(a.before !== undefined ? { before: a.before as string } : {}) };
     case 'saveScoring': {
       const raw = a.scoring;
       if (!isObj(raw)) bad('правила подсчёта баллов');

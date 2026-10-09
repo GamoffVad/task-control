@@ -1,11 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Icon } from '../components/Icons';
 import { DirectoryUserAutocomplete } from '../components/DirectoryUserAutocomplete';
-import { Button, Checkbox, ColorPicker, Dialog, PageHeader, Segmented, Select, Slider, TextArea, TextInput } from '../kit';
+import { Button, Checkbox, ColorPicker, DateField, Dialog, PageHeader, Segmented, Select, Slider, TextArea, TextInput } from '../kit';
 import { DEFAULT_TEMPLATES, TEMPLATE_SCOPES, placeholdersFor, renderTemplate } from '../lib/templates';
 import { reportDocContext } from '../lib/reportExport';
 import { planDocContext, planItems } from '../lib/planExport';
-import { addDays, fmtRange, planWeekStart } from '../lib/dates';
+import { addDays, fmtDate, fmtNum, fmtRange, fromDateKey, planWeekStart, plural } from '../lib/dates';
 import { PERMISSIONS, hasPermission, permissionsFor } from '../lib/access';
 import { COLOR_GROUPS, COLOR_TOKENS, DEFAULT_APPEARANCE, FONT_STACKS, isPresetActive, MAX_PRESETS, MONO_STACKS, presetsFor, SIZE_TOKENS, tokenValue, type TokenDef } from '../lib/appearance';
 import { applyTheme, useTheme, type Theme } from '../lib/theme';
@@ -406,7 +406,59 @@ const ScoringTab = ({ state, dispatch }: TabProps) => {
       Показывать разрез по направлениям в «Показателях»
     </Checkbox>
     <p className="subtitle">Направления — отделения основного отдела, те же, что в фильтре «Группа».</p>
+
+    <ResetScores state={state} dispatch={dispatch} />
   </div>;
+};
+
+/**
+ * Обнуление показателей. Баллы складываются из отправленных отчётов, а отчёт — снимок на момент отправки: он не исчезает,
+ * когда удаляют задачи, поэтому после очистки тестовых задач баллы остаются. Здесь отчёты удаляют — все либо недель до даты.
+ */
+const ResetScores = ({ state, dispatch }: TabProps) => {
+  const [before, setBefore] = useState('');
+  const [confirm, setConfirm] = useState<'all' | 'before' | null>(null);
+  const reports = state.reports;
+  const entries = reports.reduce((sum, report) => sum + report.entries.length, 0);
+  const score = reports.reduce((sum, report) => sum + report.entries.reduce((s, e) => s + e.score, 0), 0);
+  const older = before ? reports.filter((report) => report.weekStart < before) : [];
+  const run = (kind: 'all' | 'before') => {
+    if (confirm !== kind) return setConfirm(kind);
+    dispatch(kind === 'all' ? { type: 'resetScores' } : { type: 'resetScores', before });
+    setConfirm(null);
+    if (kind === 'before') setBefore('');
+  };
+
+  return <>
+    <h3 className="admin-subhead">Обнуление показателей</h3>
+    <p className="subtitle">
+      Баллы берутся из отправленных отчётов, и отчёт не меняется, когда задачи удаляют, — поэтому после очистки тестовых задач баллы остаются. Здесь отчёты можно удалить:
+      «Показатели» и карточки сотрудников обнулятся за прошедшие периоды. Задачи, сотрудники и настройки не затрагиваются. Действие нельзя отменить.
+    </p>
+    <p className="reset-now" role="status">
+      Сейчас в отчётах: <b className="num">{reports.length}</b> {plural(reports.length, 'неделя', 'недели', 'недель')}, <b className="num">{entries}</b> {plural(entries, 'запись', 'записи', 'записей')}, <b className="num">{fmtNum(Math.round(score * 10) / 10)}</b> баллов.
+    </p>
+    <div className="reset-row">
+      <div className="reset-field">
+        <span className="caps">Удалить отчёты недель до даты</span>
+        <DateField value={before} onChange={(value) => { setBefore(value); setConfirm(null); }} placeholder="дд.мм.гггг" />
+      </div>
+      <Button
+        variant="danger"
+        disabled={!before || older.length === 0}
+        onClick={() => run('before')}
+        onBlur={() => setConfirm(null)}
+      >
+        {confirm === 'before' ? `Точно удалить: ${older.length} ${plural(older.length, 'неделя', 'недели', 'недель')}?` : older.length || !before ? `Обнулить до ${before ? fmtDate(fromDateKey(before)) : 'даты'}` : 'До этой даты отчётов нет'}
+      </Button>
+    </div>
+    <div className="reset-row">
+      <Button variant="danger" disabled={reports.length === 0} onClick={() => run('all')} onBlur={() => setConfirm(null)} icon={<Icon.Trash size={15} />}>
+        {confirm === 'all' ? 'Точно обнулить все показатели?' : 'Обнулить все показатели'}
+      </Button>
+    </div>
+    <p className="subtitle">Отметки об исполнении в задачах остаются: если снова нажать «Направить в отчёт» в «Планировании», исполненные задачи недели попадут в отчёт заново.</p>
+  </>;
 };
 
 /** Строка цвета: выбор цвета, название и возврат к значению дизайн-системы. */
