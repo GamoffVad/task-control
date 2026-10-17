@@ -40,7 +40,7 @@ const holders = (data: Data, permission: Permission) => data.users.filter((u) =>
 const others = (ids: number[], actor: number) => [...new Set(ids)].filter((id) => id !== actor);
 
 const absenceTitle = (data: Data, a: Absence) =>
-  data.dictionaries.find((d) => d.dictionary === 'absenceType' && d.code === a.type)?.title.toLowerCase() ?? a.type;
+  (a.type === 'vacation' && a.vacationType ? data.dictionaries.find((d) => d.dictionary === 'vacationType' && d.code === a.vacationType)?.title.toLowerCase() : a.type === 'duty' && a.dutyType ? data.dictionaries.find((d) => d.dictionary === 'dutyType' && d.code === a.dutyType)?.title.toLowerCase() : undefined) ?? data.dictionaries.find((d) => d.dictionary === 'absenceType' && d.code === a.type)?.title.toLowerCase() ?? a.type;
 const absenceRange = (a: Absence) => (a.to ? `${dm(a.from)}–${dm(a.to)}` : `с ${dm(a.from)}`);
 
 /** События действия `actor`: сравнение данных до и после. */
@@ -100,8 +100,8 @@ export const detectEvents = (before: Data, after: Data, actor: User, timeZone = 
   const oldReports = new Map(before.reports.map((r) => [r.weekStart, r.submittedAt]));
   for (const r of after.reports.filter((x) => oldReports.get(x.weekStart) !== x.submittedAt)) {
     const start = new Date(`${r.weekStart}T12:00:00Z`);
-    const end = new Date(start.getTime() + 6 * 86400000);
-    const week = `${dm(r.weekStart)}–${dm(end.toISOString().slice(0, 10))}`;
+    const end = r.periodEnd ?? new Date(start.getTime() + 6 * 86400000).toISOString().slice(0, 10);
+    const week = `${dm(r.weekStart)}–${dm(end)}`;
     const total = r.entries.reduce((s, e) => s + e.score, 0);
     const heads = others(holders(after, 'reports.view'), me);
     if (heads.length) events.push({ to: heads, title: 'Отчёт за неделю направлен', body: `Неделя ${week}: записей ${r.entries.length}, баллов ${pts(total)} · ${who}`, url: '/reports' });

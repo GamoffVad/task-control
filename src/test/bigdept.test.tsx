@@ -18,9 +18,9 @@ beforeAll(() => {
 afterAll(() => vi.useRealTimers());
 
 const state = (): AppState => ({ ...createSeed(), user: { email: 'user@example.com', employeeId: 1, role: 'manager' } });
-const renderAt = (path: string) =>
+const renderAt = (path: string, initial = state()) =>
   render(
-    <StoreProvider initial={state()}>
+    <StoreProvider initial={initial}>
       <MemoryRouter initialEntries={[path]}>
         <AppRoutes />
       </MemoryRouter>
@@ -44,9 +44,26 @@ describe('большой отдел', () => {
     const user = userEvent.setup();
     renderAt('/tetris');
     expect(document.querySelectorAll('.tl-who')).toHaveLength(47);
+    expect(document.querySelectorAll('.tl-who.tl-group-start')).toHaveLength(7);
+    expect(document.querySelectorAll('.tl-lane.tl-group-start')).toHaveLength(7);
+    expect(document.querySelector('.tl-who')).not.toHaveClass('tl-group-start');
     expect(screen.getByRole('region', { name: 'Сводка' })).toHaveTextContent(/из 47/);
     await user.click(screen.getByRole('button', { name: /^Группа: Весь отдел/ }));
     await user.click(screen.getByRole('option', { name: 'Отделение тестирования' }));
     expect(document.querySelectorAll('.tl-who')).toHaveLength(10);
+    expect(document.querySelector('.tl-group-start')).toBeNull();
+  });
+
+  it('порядок в «Тетрисе» совпадает с деревом сотрудников после смены подразделений', () => {
+    const initial = state();
+    initial.user = { email: 'user@example.com', employeeId: 1, role: 'administrator' };
+    // Младший ID переходит в дочернее подразделение, старший — в руководство.
+    initial.users = initial.users.map((u) => u.employeeId === 1 ? { ...u, unitId: 's-dev' } : u.employeeId === 107 ? { ...u, unitId: 'g-1' } : u);
+    const directory = renderAt('/employees/1', initial);
+    const expected = [...document.querySelectorAll('.employee-directory .tree-row')].map((el) => el.getAttribute('href'));
+    expect(expected.indexOf('/employees/107')).toBeLessThan(expected.indexOf('/employees/1'));
+    directory.unmount();
+    renderAt('/tetris', initial);
+    expect([...document.querySelectorAll('.tl-who')].map((el) => el.getAttribute('href'))).toEqual(expected);
   });
 });

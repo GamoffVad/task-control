@@ -1,10 +1,11 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTaskEditor } from '../components/taskEditor';
 import { EmployeeFilter, GroupFilter } from '../components/ui';
-import { FilterCard, PageHeader, Stepper } from '../kit';
+import { FilterCard, PageHeader, SearchField, Stepper } from '../kit';
 import { Icon } from '../components/Icons';
-import { absenceType, categoryLabel, employees, groupMembers, shortName } from '../lib/data';
-import { addDays, fmtDate, fmtDateTime, fmtRange, planWeekStart, plural, startOfDay, toDateKey } from '../lib/dates';
+import { absenceType, categoryLabel, department, employees, groupMembers, shortName } from '../lib/data';
+import { addDays, fmtDate, fmtDateTime, fmtRange, plural, startOfDay, toDateKey } from '../lib/dates';
+import { normalizePeriodSettings, weeklyPeriodEnd, weeklyPeriodLabel, weeklyPeriodStart } from '../lib/periods';
 import { planDocContext, planItems, planToCsv } from '../lib/planExport';
 import { saveFile } from '../lib/download';
 import { DocumentDialog } from '../components/DocumentDialog';
@@ -24,9 +25,32 @@ export const Planning = () => {
   const { openTask } = useTaskEditor();
   const manager = isManager(state.user);
   const me = state.user?.employeeId ?? 0;
-  const [weekStart, setWeekStart] = useState(() => planWeekStart(new Date()));
+  const periods = useMemo(() => normalizePeriodSettings(state.periodSettings), [state.periodSettings]);
+  const [weekAnchor, setWeekStart] = useState(() => new Date());
+  const weekStart = useMemo(() => weeklyPeriodStart(weekAnchor, periods.planning), [weekAnchor, periods.planning]);
+  const weekEnd = useMemo(() => weeklyPeriodEnd(weekStart, periods.planning), [weekStart, periods.planning]);
+  const reportStart = useMemo(() => weeklyPeriodStart(weekStart, periods.reporting), [weekStart, periods.reporting]);
+  const reportingEnd = useMemo(() => weeklyPeriodEnd(reportStart, periods.reporting), [reportStart, periods.reporting]);
   const [group, setGroup] = useState('all');
   const [employee, setEmployee] = useState<number | null>(null);
+  const [rowQuery, setRowQuery] = useState('');
+  const shownRows = useMemo(() => {
+    const normalize = (text: string) => text.toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/\s+/g, ' ').trim();
+    const query = normalize(rowQuery);
+    if (!query) return state.planRows;
+    const included = new Set<string>();
+    for (const row of state.planRows) {
+      if (!normalize(`${row.id} ${row.title}`).includes(query)) continue;
+      // Коды задают иерархию: для 3.1.2 оставляем также разделы 3.1 и 3.
+      let id = row.id;
+      while (id) {
+        included.add(id);
+        const dot = id.lastIndexOf('.');
+        id = dot < 0 ? '' : id.slice(0, dot);
+      }
+    }
+    return state.planRows.filter((row) => included.has(row.id));
+  }, [state.planRows, rowQuery]);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const now = new Date();
   const clashes = useClashes();
@@ -48,7 +72,7 @@ export const Planning = () => {
     return () => window.removeEventListener('resize', fit);
   });
 
-  const weekTasks = useMemo(() => tasksInWeek(state.tasks, weekStart), [state.tasks, weekStart]);
+  const weekTasks = useMemo(() => tasksInWeek(state.tasks, weekStart, weekEnd), [state.tasks, weekStart, weekEnd]);
   const cells = useMemo(() => groupByCell(weekTasks), [weekTasks]);
   // Исполнитель видит и планирует только свой столбец.
   // Руководитель сужает матрицу до группы отдела, а внутри неё — до одного сотрудника.
@@ -58,7 +82,7 @@ export const Planning = () => {
   const shownId = manager ? employee : me;
   const columns = shownId ? employees.filter((e) => e.id === shownId) : people;
   const [docOpen, setDocOpen] = useState(false);
-  const items = useMemo(() => planItems(state.tasks, state.planRows, weekStart, columns.map((e) => e.id)), [state.tasks, state.planRows, weekStart, columns]);
+  const items = useMemo(() => planItems(state.tasks, state.planRows, weekStart, columns.map((e) => e.id), weekEnd), [state.tasks, state.planRows, weekStart, weekEnd, columns]);
   const exportCsv = () => saveFile(`plan-${toDateKey(weekStart)}.csv`, planToCsv(items, state.planRows), 'text/csv;charset=utf-8');
 
   const changeGroup = (g: string) => {
@@ -66,9 +90,8 @@ export const Planning = () => {
     // Сотрудник из другой группы сбрасывается, иначе матрица показала бы человека вне выбранной группы.
     if (employee && !groupMembers(g).some((e) => e.id === employee && inScope(scope, e.id))) setEmployee(null);
   };
-  const weekEnd = addDays(weekStart, 6);
-  const report = findReport(state.reports, weekStart);
-  const doneCount = useMemo(() => buildReportEntries(state, weekStart).length, [state, weekStart]);
+  const report = findReport(state.reports, reportStart);
+  const doneCount = useMemo(() => buildReportEntries(state, reportStart, reportingEnd).length, [state, reportStart, reportingEnd]);
   const unplanned = weekTasks.filter((t) => !t.rowId && (manager || t.assigneeIds.includes(me))).length;
 
   const move = (dir: number) => {
@@ -95,10 +118,10 @@ export const Planning = () => {
 
   const submit = () => {
     if (doneCount === 0) {
-      setStatus({ ok: false, text: 'За эту неделю нет исполненных задач с позицией плана: отметьте исполнение в карточке задачи.' });
+      setStatus({ ok: false, text: 'За отчётный период нет исполненных задач с позицией плана: отметьте исполнение в карточке задачи.' });
       return;
     }
-    dispatch({ type: 'submitReport', weekStart });
+    dispatch({ type: 'submitReport', weekStart: reportStart, periodEnd: reportingEnd });
     setStatus({
       ok: true,
       text: `${report ? 'Отчёт обновлён' : 'Отчёт отправлен'}: ${doneCount} ${plural(doneCount, 'запись', 'записи', 'записей')}. Он доступен в разделе «Отчётность».`,
@@ -111,7 +134,7 @@ export const Planning = () => {
         title="Планирование"
         subtitle={
           <>
-            {manager ? 'Плановые мероприятия' : 'Ваши плановые мероприятия'} на неделю <b>{fmtRange(weekStart, weekEnd)}</b>. Плановая неделя начинается в пятницу.
+            {department.name} · {manager ? 'Плановые мероприятия' : 'Ваши плановые мероприятия'} за выбранный плановый период. {weeklyPeriodLabel(periods.planning)}.
           </>
         }
         actions={
@@ -121,7 +144,7 @@ export const Planning = () => {
               Документ
             </button>
             {manager && (
-              <button type="button" className="btn btn--primary" onClick={submit}>
+              <button type="button" className="btn btn--primary report-submit" onClick={submit}>
                 <Icon.Send size={15} /> {report ? 'Обновить отчёт' : 'Направить в отчёт'}
               </button>
             )}
@@ -129,8 +152,8 @@ export const Planning = () => {
         }
       />
       <div className="filters">
-        <FilterCard label="Плановая неделя">
-          <Stepper label="Неделя" value={fmtRange(weekStart, weekEnd)} onPrev={() => move(-1)} onNext={() => move(1)} onToday={() => setWeekStart(planWeekStart(new Date()))} todayLabel="Текущая" />
+        <FilterCard label="Плановый период">
+          <Stepper label="Неделя" value={fmtRange(weekStart, weekEnd)} onPrev={() => move(-1)} onNext={() => move(1)} onToday={() => setWeekStart(new Date())} todayLabel="Текущая" />
         </FilterCard>
         {manager && (
           <FilterCard label="Группа">
@@ -141,11 +164,12 @@ export const Planning = () => {
           {manager ? (
             <EmployeeFilter value={employee} onChange={setEmployee} people={people} allLabel={group === 'all' ? 'Все сотрудники' : 'Вся группа'} />
           ) : (
-            <div style={{ minHeight: 34, display: 'flex', alignItems: 'center', fontSize: 15, fontWeight: 700 }}>{shortName(me)}</div>
+            <div style={{ minHeight: 34, display: 'flex', alignItems: 'center', fontSize: 15, fontWeight: 700 }}>{state.users.some((account) => account.employeeId === me) ? shortName(me) : 'Не отображается в составе отдела'}</div>
           )}
         </FilterCard>
-        <FilterCard label="Отчёт за неделю">
-          <div style={{ minHeight: 34, display: 'flex', alignItems: 'center', fontSize: 13 }}>
+        <FilterCard label="Отчёт">
+          <div style={{ minHeight: 34, display: 'flex', flexWrap: 'wrap', gap: '2px 8px', alignItems: 'center', fontSize: 13 }}>
+            <span className="planning-report-period num">{fmtRange(reportStart, reportingEnd)}</span>
             {report ? (
               <span className="ok" style={{ fontWeight: 600 }}>отправлен {fmtDateTime(new Date(report.submittedAt))}</span>
             ) : (
@@ -166,7 +190,10 @@ export const Planning = () => {
         <table className={`plan-table${columns.length === 1 ? ' plan-table--single' : ''}`}>
           <thead>
             <tr>
-              <th className="sticky-col pos-cell">Разделы планирования</th>
+              <th className="sticky-col pos-cell" aria-label="Разделы планирования">
+                <SearchField className="plan-search" value={rowQuery} onChange={setRowQuery}
+                  label="Поиск разделов планирования" placeholder="РАЗДЕЛЫ ПЛАНИРОВАНИЯ" autoComplete="off" />
+              </th>
               {columns.map((e) => (
                 <th key={e.id} className="emp">
                   {shortName(e.id)}
@@ -181,7 +208,8 @@ export const Planning = () => {
             </tr>
           </thead>
           <tbody>
-            {state.planRows.map((row) =>
+            {!shownRows.length && <tr><td colSpan={columns.length + 1} className="plan-search-empty"><span role="status">Разделы не найдены</span></td></tr>}
+            {shownRows.map((row) =>
               row.isHeader ? (
                 <tr key={row.id} className="section">
                   <td className="sticky-col pos-cell">
@@ -232,7 +260,7 @@ export const Planning = () => {
         <span><i className="overdue" />просрочено</span>
         {unplanned > 0 && <span className="amber">Вне плана на этой неделе: <span className="num">{unplanned}</span> — они видны в Календаре и Контроле</span>}
       </div>
-      {docOpen && <DocumentDialog templates={state.templates.filter((t) => t.scope === 'planning')} context={planDocContext(items, state.planRows, weekStart, state.user)} fileBase={`plan-${toDateKey(weekStart)}`} source="Текст собирается из мероприятий недели в «Планировании»" onCsv={exportCsv} onClose={() => setDocOpen(false)} />}
+      {docOpen && <DocumentDialog templates={state.templates.filter((t) => t.scope === 'planning')} context={planDocContext(items, state.planRows, weekStart, state.user, new Date(), weekEnd)} fileBase={`plan-${toDateKey(weekStart)}`} source="Текст собирается из мероприятий недели в «Планировании»" onCsv={exportCsv} onClose={() => setDocOpen(false)} />}
     </>
   );
 };

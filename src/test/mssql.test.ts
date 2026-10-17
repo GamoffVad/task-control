@@ -69,9 +69,14 @@ describe('SQL Server: настройки подключения', () => {
   it('схема создаётся отдельными операторами и повторный запуск её не ломает', () => {
     expect(SCHEMA.length).toBeGreaterThan(10);
     // Каждый оператор защищён проверкой существования, иначе второй запуск упал бы.
-    for (const statement of SCHEMA) expect(statement).toMatch(/if\s+(object_id|not exists|col_length)/i);
+    for (const statement of SCHEMA) expect(statement).toMatch(/if\s+(object_id|not exists|exists|col_length)/i);
     // Фильтрованному индексу нужен QUOTED_IDENTIFIER ON, иначе схему не применить вручную.
     expect(SCHEMA.find((s) => s.includes('tc_users_windows_login'))).toMatch(/set quoted_identifier on/i);
+  });
+  it('расширяет старый код события и снимает ограничение на пять видов', () => {
+    expect(SCHEMA.join('\n')).toContain('alter table dbo.tc_absences drop constraint [ck_tc_absences_type]');
+    expect(SCHEMA.join('\n')).toContain('alter column [type] nvarchar(64) not null');
+    expect(SCHEMA.join('\n')).toContain('[duty_type] nvarchar(48) null');
   });
 });
 
@@ -153,6 +158,48 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
     expect([...back.units!].sort((a, b) => a.id.localeCompare(b.id))).toEqual([...seed.units!].sort((a, b) => a.id.localeCompare(b.id)));
     expect([...back.templates!].sort((a, b) => a.id.localeCompare(b.id))).toEqual([...seed.templates!].sort((a, b) => a.id.localeCompare(b.id)));
     expect(back.planRows).toEqual(seed.planRows);
+  });
+
+  it('обновляет старую таблицу отсутствий и сохраняет произвольные коды и виды дежурств', async () => {
+    const before = (await repo.read())!;
+    await raw("alter table dbo.tc_absences drop column [duty_type]; alter table dbo.tc_absences alter column [type] nvarchar(16) not null; alter table dbo.tc_absences add constraint ck_tc_absences_type check ([type] in ('vacation','trip','dayoff','sick','study'));");
+    const again = createMssqlRepo({ server: server!, database, ...(user ? { user } : {}), ...(password ? { password } : {}), encrypt: false, trustServerCertificate: true });
+    try {
+      expect((await again.read())!.absences).toEqual(before.absences);
+      const duty = { id: 'duty-test', employeeId: 3, type: 'duty', dutyType: 'daily', from: '2026-09-19', to: '2026-09-20', note: '', status: 'approved' as const, decidedBy: 1, createdAt: NOW.toISOString() };
+      const custom = { ...duty, id: 'custom-test', type: 'отсутствие-с-длинным-кодом-из-справочника', dutyType: undefined };
+      await again.update((data) => ({ ...data!, absences: [...data!.absences, duty, custom] }));
+      const back = (await again.read())!;
+      expect(back.absences.find((a) => a.id === duty.id)).toEqual(duty);
+      expect(back.absences.find((a) => a.id === custom.id)?.type).toBe(custom.type);
+      await again.update(() => before);
+    } finally { await again.close?.(); }
+  }, 60_000);
+
+  it('сохраняет нормы, тип отпуска и дату ежегодного сброса в SQL Server', async () => {
+    await repo.update(() => toData(createSeed(NOW)));
+    await repo.update((data) => ({ ...data!, vacationSettings: { resetMonth: 4, resetDay: 15 }, users: data!.users.map((u) => u.employeeId === 3 ? { ...u, annualVacationDays: 42 } : u), absences: data!.absences.map((a) => a.type === 'vacation' ? { ...a, vacationType: 'annual', travelDaysBefore: 1, travelDaysAfter: 1 } : a) }));
+    const back = (await repo.read())!;
+    expect(back.vacationSettings).toEqual({ resetMonth: 4, resetDay: 15 });
+    expect(back.users.find((u) => u.employeeId === 3)).toMatchObject({ annualVacationDays: 42 });
+    expect(back.absences.filter((a) => a.type === 'vacation').every((a) => a.vacationType === 'annual' && a.travelDaysBefore === 1 && a.travelDaysAfter === 1)).toBe(true);
+  });
+  it('хранит общие периоды и фиксирует последний день отправленного отчёта', async () => {
+    const before = (await repo.read())!;
+    const settings = { planning: { startDay: 1, endDay: 0 }, reporting: { startDay: 1, endDay: 5 } };
+    await repo.update((data) => ({ ...data!, periodSettings: settings, reports: data!.reports.map((r, i) => i === 0 ? { ...r, periodEnd: r.weekStart } : r) }));
+    const back = (await repo.read())!;
+    expect(back.periodSettings).toEqual(settings);
+    expect(back.reports[0].periodEnd).toBe(back.reports[0].weekStart);
+    await repo.update(() => before);
+  });
+
+  it('сохраняет и снимает скрытие сотрудника в SQL Server', async () => {
+    const before = (await repo.read())!;
+    await repo.update((data) => ({ ...data!, users: data!.users.map((account) => account.employeeId === 3 ? { ...account, hidden: true } : account) }));
+    expect((await repo.read())!.users.find((account) => account.employeeId === 3)).toMatchObject({ hidden: true, active: true });
+    await repo.update((data) => ({ ...data!, users: before.users }));
+    expect((await repo.read())!.users.find((account) => account.employeeId === 3)?.hidden).toBeFalsy();
   });
 
   it('недостающие столбцы дописываются при подключении, данные остаются', async () => {

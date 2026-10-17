@@ -19,6 +19,10 @@ import { DEFAULT_UNITS, MAIN_DEPARTMENT_ID } from '../src/lib/units';
 import { validateTask, type TaskDraft } from '../src/lib/logic';
 import { fromData, PERSISTED, reducer, toData, type Action } from '../src/lib/reducer';
 import { createSeed, DEFAULT_DICTIONARIES } from '../src/lib/seed';
+import { validVacationDays, validVacationSettings, vacationTypeCode, vacationTypes } from '../src/lib/vacations';
+import { dutyTypeCode, dutyTypes, eventTypeExists, withDutyTypes } from '../src/lib/eventTypes';
+import type { VacationSettings } from '../src/lib/types';
+import { normalizePeriodSettings, validPeriodSettings, validReportRange } from '../src/lib/periods';
 import type { Data, DictionaryKind, Entitlement, ManagedUser, Permission, Role, ScoringSettings, UnitKind, User } from '../src/lib/types';
 import { signToken, verifyToken } from './auth';
 import type { Repo } from './repo';
@@ -127,15 +131,23 @@ const checkAbsenceDraft = (d: unknown, data: Data, now: Date): AbsenceDraft => {
   if (!isObj(d)) return bad('отсутствие');
   if (d.id !== undefined && !str(d.id, 100)) bad('идентификатор отсутствия');
   if (typeof d.employeeId !== 'number' || !employeeById.has(d.employeeId)) bad('сотрудник');
-  if (!['vacation', 'trip', 'dayoff', 'sick', 'study'].includes(d.type as string)) bad('вид отсутствия');
+  if (!eventTypeExists(d.type, data.dictionaries)) bad('вид события');
   if (!dateKey(d.from) || (d.to !== null && !dateKey(d.to))) bad('даты');
   if (d.to !== null && (d.to as string) < (d.from as string)) bad('даты: последний день раньше первого');
   if (!['request', 'approved', 'rejected'].includes(d.status as string)) bad('статус');
   if (!str(d.note, 500)) bad('комментарий');
+  const vacationType = vacationTypeCode(d as AbsenceDraft, data.dictionaries);
+  const dutyType = dutyTypeCode(d as AbsenceDraft, data.dictionaries);
+  if (d.type === 'duty' && !dutyTypes(data.dictionaries).some((e) => e.code === dutyType)) bad('вид дежурства');
+  if (d.type === 'vacation' && !vacationTypes(data.dictionaries).some((e) => e.code === vacationType)) bad('тип отпуска');
+  if (d.type === 'vacation' && [d.travelDaysBefore, d.travelDaysAfter].some((n) => n !== undefined && !validVacationDays(n as number))) bad('дни на дорогу (целые числа от 0 до 366)');
   const draft: AbsenceDraft = {
     ...(d.id ? { id: d.id as string } : {}),
     employeeId: d.employeeId as number,
     type: d.type as AbsenceDraft['type'],
+    ...(d.type === 'duty' ? { dutyType } : {}),
+    ...(d.type === 'vacation' ? { vacationType } : {}),
+    ...(d.type === 'vacation' ? { travelDaysBefore: (d.travelDaysBefore as number | undefined) ?? 0, travelDaysAfter: (d.travelDaysAfter as number | undefined) ?? 0 } : {}),
     from: d.from as string,
     to: d.to as string | null,
     status: d.status as AbsenceDraft['status'],
@@ -156,9 +168,11 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
     case 'deleteTask':
       if (!str(a.id, 100)) bad('идентификатор задачи');
       return { type: 'deleteTask', id: a.id as string };
-    case 'submitReport':
+    case 'submitReport': {
       if (!isoDate(a.weekStart)) bad('неделя отчёта');
-      return { type: 'submitReport', weekStart: new Date(a.weekStart as string), now };
+      if (a.periodEnd !== undefined && (!isoDate(a.periodEnd) || !validReportRange(new Date(a.weekStart as string), new Date(a.periodEnd as string)))) bad('конец отчётного периода');
+      return { type: 'submitReport', weekStart: new Date(a.weekStart as string), ...(a.periodEnd !== undefined ? { periodEnd: new Date(a.periodEnd as string) } : {}), now };
+    }
     case 'markChatRead':
       return { type: 'markChatRead', now };
     case 'sendMessage':
@@ -183,14 +197,22 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
         (k) => typeof n[k] === 'number' && Number.isFinite(n[k]) && (n[k] as number) >= 0 && (n[k] as number) <= 3000,
       );
       if (!nums) bad('нормы сотрудника');
-      return { type: 'saveEntitlement', entitlement: e as unknown as Entitlement };
+      if (a.dayoffYear !== undefined && (typeof a.dayoffYear !== 'number' || !Number.isInteger(a.dayoffYear) || a.dayoffYear < 1900 || a.dayoffYear > 3000)) bad('год нормы отгулов');
+      return { type: 'saveEntitlement', entitlement: e as unknown as Entitlement, ...(a.dayoffYear !== undefined ? { dayoffYear: a.dayoffYear as number } : {}), now };
     }
+    case 'saveVacationSettings': {
+      if (!isObj(a.settings) || !validVacationSettings(a.settings as VacationSettings)) bad('дату ежегодного сброса отпусков');
+      return { type: 'saveVacationSettings', settings: { resetMonth: (a.settings as VacationSettings).resetMonth, resetDay: (a.settings as VacationSettings).resetDay } };
+    }
+    case 'savePeriodSettings':
+      if (!validPeriodSettings(a.settings)) bad('настройки планового и отчётного периода');
+      return { type: 'savePeriodSettings', settings: normalizePeriodSettings(a.settings as import('../src/lib/types').PeriodSettings) };
     case 'saveDictionary': {
       const draft = a.draft;
       if (!isObj(draft)) bad('значение справочника');
       const entry = draft as Record<string, unknown>;
       if (entry.id !== undefined && !str(entry.id, 100)) bad('идентификатор значения');
-      if (!['taskCategory', 'absenceType', 'taskStatus'].includes(entry.dictionary as string)) bad('справочник');
+      if (!['taskCategory', 'absenceType', 'taskStatus', 'vacationType', 'dutyType'].includes(entry.dictionary as string)) bad('справочник');
       if (entry.color !== undefined && (typeof entry.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(entry.color))) bad('цвет значения');
       if (!str(entry.code, 48) || !str(entry.title, 160)) bad('код или название значения');
       return {
@@ -220,6 +242,8 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
       return { type: 'deletePlanRow', id: a.id as string };
     case 'saveManagedUser':
       if (typeof a.employeeId !== 'number' || !data.users.some((user) => user.employeeId === a.employeeId)) bad('пользователь');
+      if (a.hidden !== undefined && typeof a.hidden !== 'boolean') bad('скрытие сотрудника');
+      if (a.annualVacationDays !== undefined && !validVacationDays(a.annualVacationDays as number)) bad('ежегодную норму отпуска (целое число от 0 до 366)');
       if (!['administrator', 'manager', 'executor'].includes(a.role as string) || typeof a.active !== 'boolean' || (a.windowsLogin !== undefined && (!str(a.windowsLogin, 128) || !(a.windowsLogin as string).trim()))) bad('роль или Windows-логин пользователя');
       if (a.unitId !== undefined && (typeof a.unitId !== 'string' || (a.unitId !== '' && !(data.units ?? DEFAULT_UNITS).some((u) => u.id === a.unitId)))) bad('подразделение пользователя');
       if (a.fullName !== undefined && (!str(a.fullName, 200) || !String(a.fullName).trim())) bad('ФИО сотрудника');
@@ -230,6 +254,9 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
         employeeId: a.employeeId as number,
         role: a.role as Role,
         active: a.active as boolean,
+        ...(a.hidden !== undefined ? { hidden: a.hidden as boolean } : {}),
+        ...(a.annualVacationDays !== undefined ? { annualVacationDays: a.annualVacationDays as number } : {}),
+        now,
         ...(a.windowsLogin !== undefined ? { windowsLogin: a.windowsLogin as string } : {}),
         ...(a.unitId !== undefined ? { unitId: a.unitId as string } : {}),
         ...(a.fullName !== undefined ? { fullName: a.fullName as string } : {}),
@@ -242,6 +269,8 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
       if (typeof account.employeeId !== 'number' || !Number.isInteger(account.employeeId) || account.employeeId < 1) bad('идентификатор пользователя');
       if (!str(account.fullName, 200) || !String(account.fullName).trim() || !str(account.position, 200) || !str(account.email, 200) || !str(account.windowsLogin, 128) || !String(account.windowsLogin).trim()) bad('данные пользователя');
       if (!['administrator', 'manager', 'executor'].includes(account.role as string) || typeof account.active !== 'boolean') bad('роль пользователя');
+      if (account.hidden !== undefined && typeof account.hidden !== 'boolean') bad('скрытие сотрудника');
+      if (account.annualVacationDays !== undefined && !validVacationDays(account.annualVacationDays as number)) bad('ежегодную норму отпуска (целое число от 0 до 366)');
       if (account.unitId !== undefined && (typeof account.unitId !== 'string' || !(data.units ?? DEFAULT_UNITS).some((u) => u.id === account.unitId))) bad('подразделение пользователя');
       return { type: 'addManagedUser', account: account as unknown as ManagedUser };
     }
@@ -412,7 +441,7 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
     const storedRoles = data.roles ?? DEFAULT_ROLES;
     const roles = data.accessVersion === ACCESS_VERSION ? storedRoles : withAddedPermissions(storedRoles);
     const access = recoverAdministrativeAccess(normalizeUsers(data.users ?? []), roles, fallbackAdministrator);
-    return { ...data, ...access, authentication };
+    return { ...data, ...access, authentication, dictionaries: withDutyTypes(data.dictionaries ?? DEFAULT_DICTIONARIES) };
   };
   /**
    * Начальные данные пустой базы — без тестовых данных: справочники, роли, шаблоны и разделы плана

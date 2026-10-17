@@ -2,11 +2,13 @@
 // пересечения со сроками задач и остатки. Цвет заливки берётся из справочника «Виды отсутствий»,
 // поэтому совпадает с цветом полосы на графике.
 
-import { absenceDays, covers, fmtSpan, type Clash } from './absences';
-import { employees, shortName } from './data';
+import { absenceDays, covers, fmtSpan, travelNote, type Clash } from './absences';
+import { department, employees, shortName } from './data';
 import { fmtDate, fmtMonthYear } from './dates';
 import { buildXlsx, columnName, type Cell, type Sheet } from './xlsx';
 import type { Absence, AbsenceType, DictionaryEntry, Employee, Task } from './types';
+import { vacationTypeTitle } from './vacations';
+import { dutyTypeTitle } from './eventTypes';
 
 /** Цвета видов по умолчанию — те же, что в стилях приложения (светлая тема). */
 const DEFAULT_COLORS: Record<string, string> = {
@@ -15,6 +17,7 @@ const DEFAULT_COLORS: Record<string, string> = {
   dayoff: '#6A4C93',
   sick: '#983A6E',
   study: '#1E7268',
+  duty: '#446B46',
 };
 
 /** Осветление к белому: заливка ячейки должна оставаться читаемой под чёрным текстом. */
@@ -36,6 +39,7 @@ export type TetrisExportInput = {
   types: { key: AbsenceType; label: string; full: string }[];
   /** Остаток отпуска и отгулов сотрудника; null — не показывать. */
   balance: (employeeId: number) => { vacation: number; dayoff: number } | null;
+  vacationPeriodLabel?: string;
   /** Пересечения: срок неисполненной задачи приходится на событие её исполнителя. */
   clashes: Clash[];
   today: Date;
@@ -57,7 +61,7 @@ const approved = (a: Absence) => a.status === 'approved';
 /** Заголовок листа: название и пояснение над таблицей. Шапка таблицы — четвёртая строка. */
 const titleRows = (title: string, note: string, lastColumn: string, merges: string[]): Sheet['rows'] => {
   merges.push(`A1:${lastColumn}1`, `A2:${lastColumn}2`);
-  return [{ cells: [{ value: title, style: { bold: true } }] }, { cells: [{ value: note, style: { color: MUTED } }] }, { cells: [] }];
+  return [{ height: 32, cells: [{ value: `${department.name} · ${title}`, style: { bold: true, wrap: true } }] }, { cells: [{ value: note, style: { color: MUTED } }] }, { cells: [] }];
 };
 
 const headerRow = (titles: string[]): Sheet['rows'][number] => ({
@@ -118,7 +122,7 @@ const chartSheet = (input: TetrisExportInput): Sheet => {
 
   // Итоговая строка: доля отсутствующих по каждому дню.
   const share = days.map((day) => {
-    const count = people.filter((p) => absences.some((a) => a.employeeId === p.id && approved(a) && covers(a, day, today))).length;
+    const count = people.filter((p) => absences.some((a) => a.type !== 'duty' && a.employeeId === p.id && approved(a) && covers(a, day, today))).length;
     return people.length ? Math.round((count / people.length) * 100) : 0;
   });
   rows.push({
@@ -164,11 +168,11 @@ const eventsSheet = (input: TetrisExportInput): Sheet => {
     rows.push({
       cells: [
         { value: shortName(a.employeeId), style: { border: true } },
-        { value: type?.full ?? a.type, style: { border: true, fill: lighten(typeColor(dictionaries, a.type), approved(a) ? 0.55 : 0.25) } },
+        { value: a.type === 'vacation' ? vacationTypeTitle(a, dictionaries) : a.type === 'duty' ? dutyTypeTitle(a, dictionaries) : type?.full ?? a.type, style: { border: true, fill: lighten(typeColor(dictionaries, a.type), approved(a) ? 0.55 : 0.25) } },
         { value: fmtSpan(a), style: { border: true } },
         { value: absenceDays(a), style: { border: true, center: true } },
         { value: approved(a) ? 'согласовано' : 'заявка', style: { border: true } },
-        { value: a.note, style: { border: true, wrap: true } },
+        { value: [travelNote(a), a.note].filter(Boolean).join('. '), style: { border: true, wrap: true } },
       ],
     });
   }
@@ -198,7 +202,7 @@ const clashesSheet = (input: TetrisExportInput): Sheet => {
         { value: clash.task.title, style: { border: true, wrap: true } },
         { value: shortName(clash.employeeId), style: { border: true } },
         { value: fmtDate(new Date(clash.task.end)), style: { border: true, center: true, color: overdue ? DANGER : INK } },
-        { value: type?.full ?? clash.absence.type, style: { border: true, fill: lighten(typeColor(dictionaries, clash.absence.type), approved(clash.absence) ? 0.55 : 0.25) } },
+        { value: clash.absence.type === 'vacation' ? vacationTypeTitle(clash.absence, dictionaries) : type?.full ?? clash.absence.type, style: { border: true, fill: lighten(typeColor(dictionaries, clash.absence.type), approved(clash.absence) ? 0.55 : 0.25) } },
         { value: fmtSpan(clash.absence), style: { border: true } },
         { value: SEVERITY[clash.severity], style: { border: true, bold: overdue, color: overdue ? DANGER : INK } },
       ],
@@ -219,7 +223,7 @@ const balancesSheet = (input: TetrisExportInput): Sheet | null => {
   if (!withBalance.length) return null;
 
   const merges: string[] = [];
-  const rows = titleRows(`Остатки на ${month.getFullYear()} год`, `Выгружено ${fmtDate(today)}. Остаток отпуска 5 дней и меньше выделен.`, 'D', merges);
+  const rows = titleRows(`Остатки на ${month.getFullYear()} год`, `Выгружено ${fmtDate(today)}. ${input.vacationPeriodLabel ? `Отпускной период: ${input.vacationPeriodLabel}. ` : ''}Остаток отпуска 5 дней и меньше выделен.`, 'D', merges);
   rows.push(headerRow(['Сотрудник', 'Должность', 'Остаток отпуска, дней', 'Остаток отгулов, дней']));
   for (const { person, bal } of withBalance) {
     const low = bal.vacation <= 5;

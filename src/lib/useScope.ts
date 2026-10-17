@@ -6,7 +6,8 @@ import type { Employee } from './types';
 
 /** Область видимости задач вошедшего сотрудника (null — весь отдел). */
 export const useScope = (): Scope => {
-  const { state } = useStore();
+  // Скрытие сотрудника не меняет его права просмотра и область доступа.
+  const { state } = useStore({ includeHidden: true });
   const id = state.user?.employeeId;
   return useMemo(() => (id == null ? new Set<number>() : scopeOf(id, state.users, state.units, state.roles)), [id, state.users, state.units, state.roles]);
 };

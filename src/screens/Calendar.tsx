@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode, type PointerEvent } from 'react';
 import { useTaskEditor } from '../components/taskEditor';
 import { EmployeeFilter } from '../components/ui';
 import { FilterCard, MultiSelect, PageHeader, SearchField, Segmented, Stepper } from '../kit';
@@ -9,6 +9,7 @@ import {
   addDays,
   addMonths,
   fmtDate,
+  fmtDateTime,
   fmtDayMonth,
   fmtMonthYear,
   fmtRange,
@@ -19,8 +20,9 @@ import {
   startOfWeek,
 } from '../lib/dates';
 import { isOverdue, searchTasks } from '../lib/logic';
-import { FIRST_HOUR, LAST_HOUR, layoutDay } from '../lib/calendarLayout';
-import { isManager } from '../lib/permissions';
+import { FIRST_HOUR, LAST_HOUR, layoutDay, movedTaskDates } from '../lib/calendarLayout';
+import { isManager, taskAccess } from '../lib/permissions';
+import { useCalendarDrag, type CalendarDrop } from '../lib/useCalendarDrag';
 import { loadCalendarView, storeCalendarView } from '../lib/calendarView';
 import { useStore } from '../lib/store';
 import { useClashes } from '../lib/useClashes';
@@ -60,7 +62,7 @@ const highlight = (text: string, query: string): ReactNode => {
 };
 
 export const Calendar = () => {
-  const { state } = useStore();
+  const { state, dispatch } = useStore();
   const { openTask } = useTaskEditor();
   const manager = isManager(state.user);
   const employeeId = state.user?.employeeId;
@@ -80,6 +82,15 @@ export const Calendar = () => {
   const cats = useMemo(() => new Set(allCats.filter((k) => !hiddenCats.has(k))), [allCats, hiddenCats]);
   const [now, setNow] = useState(() => new Date());
   const clashes = useClashes();
+  const [moveMessage, setMoveMessage] = useState('');
+  const canMove = (task: Task) => taskAccess(state.user, task).plan;
+  const moveTask = (task: Task, start: Date) => {
+    if (!canMove(task) || start.getTime() === new Date(task.start).getTime()) return;
+    dispatch({ type: 'saveTask', draft: { ...task, ...movedTaskDates(task, start) } });
+    setMoveMessage(`Перенесено: ${task.title} — ${fmtDateTime(start)}`);
+  };
+  const { root, draggingId, drop, onStart, ...dragEvents } = useCalendarDrag(state.tasks, canMove, moveTask);
+  const drag = { draggingId, drop, onStart, canMove };
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 60_000);
@@ -130,7 +141,7 @@ export const Calendar = () => {
   };
 
   return (
-    <div className="calendar-layout">
+    <div className={`calendar-layout${draggingId ? ' calendar-dragging' : ''}`} ref={root} {...dragEvents}>
       {/* Заголовок и фильтры закреплены под шапкой приложения: при прокрутке они остаются на месте. */}
       <div className="sticky-head">
       <PageHeader
@@ -173,6 +184,7 @@ export const Calendar = () => {
         </FilterCard>
       </div>
       </div>
+      {manager && <p className="calendar-move-note" role="status">{moveMessage || 'Перетащите задачу в другой день или интервал. Alt+←/→ — день, Alt+↑/↓ — 30 минут. Escape — отмена переноса.'}</p>}
 
       {query.trim() && (
         <section className="search-results" aria-label="Результаты поиска">
@@ -201,7 +213,7 @@ export const Calendar = () => {
       )}
 
       {view === 'month' ? (
-        <MonthView cursor={cursor} tasks={tasks} now={now} clashes={clashes} onCreate={(d) => { const s = new Date(d); s.setHours(10, 0, 0, 0); create(s); }} onOpen={(t) => openTask({ task: t })} />
+        <MonthView cursor={cursor} tasks={tasks} now={now} clashes={clashes} drag={drag} onCreate={(d) => { const s = new Date(d); s.setHours(10, 0, 0, 0); create(s); }} onOpen={(t) => openTask({ task: t })} />
       ) : (
         <div className="cal">
           <div className="cal-scroll">
@@ -219,7 +231,7 @@ export const Calendar = () => {
                 ))}
               </div>
               {days.map((d) => (
-                <DayColumn key={d.toISOString()} day={d} tasks={tasks} now={now} clashes={clashes} onCreate={create} onOpen={(t) => openTask({ task: t })} />
+                <DayColumn key={d.toISOString()} day={d} tasks={tasks} now={now} clashes={clashes} drag={drag} onCreate={create} onOpen={(t) => openTask({ task: t })} />
               ))}
             </div>
           </div>
@@ -244,19 +256,29 @@ const nextQuarter = () => {
   return d;
 };
 
-const DayColumn = ({ day, tasks, now, clashes, onCreate, onOpen }: {
+type CalendarDrag = {
+  draggingId: string | null;
+  drop: CalendarDrop | null;
+  onStart: (event: PointerEvent<HTMLButtonElement>, task: Task) => void;
+  canMove: (task: Task) => boolean;
+};
+
+const DayColumn = ({ day, tasks, now, clashes, drag, onCreate, onOpen }: {
   day: Date;
   tasks: Task[];
   now: Date;
   clashes: Clash[];
+  drag: CalendarDrag;
   onCreate: (start: Date) => void;
   onOpen: (t: Task) => void;
 }) => {
   const placed = useMemo(() => layoutDay(tasks, day), [tasks, day]);
   const today = isSameDay(day, now);
   const nowOffset = now.getHours() + now.getMinutes() / 60 - FIRST_HOUR;
+  const previewTask = drag.drop?.day === day.toISOString() ? tasks.find((task) => task.id === drag.drop?.taskId) : null;
+  const preview = previewTask && drag.drop ? layoutDay([{ ...previewTask, ...movedTaskDates(previewTask, drag.drop.start) }], day)[0] : null;
   return (
-    <div className={`cal-day${today ? ' today' : ''}`}>
+    <div className={`cal-day${today ? ' today' : ''}`} data-calendar-day={day.toISOString()} data-calendar-mode="time">
       {HOURS.flatMap((h) =>
         [0, 30].map((m) => {
           const s = new Date(day);
@@ -276,7 +298,10 @@ const DayColumn = ({ day, tasks, now, clashes, onCreate, onOpen }: {
         <button
           key={task.id}
           type="button"
-          className={`cal-event cat${stateClass(task, now)}${clashes.some((c) => c.task.id === task.id) ? ' absent' : ''}`}
+          className={`cal-event cat${stateClass(task, now)}${clashes.some((c) => c.task.id === task.id) ? ' absent' : ''}${drag.canMove(task) ? ' calendar-movable' : ''}${drag.draggingId === task.id ? ' calendar-moving' : ''}`}
+          data-calendar-task={task.id}
+          draggable={false}
+          onPointerDown={(event) => drag.onStart(event, task)}
           style={{
             ...catStyle(task),
             top: `calc(var(--hour) * ${top})`,
@@ -304,6 +329,9 @@ const DayColumn = ({ day, tasks, now, clashes, onCreate, onOpen }: {
           {height >= 1.4 ? <span className="who">{whoOf(task)}</span> : <span className="who inline"> · {whoOf(task, true)}</span>}
         </button>
       ))}
+      {preview && <div className="cal-drop-preview" aria-hidden style={{ top: `calc(var(--hour) * ${preview.top})`, height: `calc(var(--hour) * ${preview.height} - 2px)` }}>
+        <b>{fmtTime(new Date(preview.task.start))}–{fmtTime(new Date(preview.task.end))}</b><span>{preview.task.title}</span>
+      </div>}
       {today && nowOffset >= 0 && nowOffset <= LAST_HOUR - FIRST_HOUR && (
         <div className="cal-now" style={{ top: `calc(var(--hour) * ${nowOffset})` }} aria-hidden />
       )}
@@ -311,11 +339,12 @@ const DayColumn = ({ day, tasks, now, clashes, onCreate, onOpen }: {
   );
 };
 
-const MonthView = ({ cursor, tasks, now, clashes, onCreate, onOpen }: {
+const MonthView = ({ cursor, tasks, now, clashes, drag, onCreate, onOpen }: {
   cursor: Date;
   tasks: Task[];
   now: Date;
   clashes: Clash[];
+  drag: CalendarDrag;
   onCreate: (d: Date) => void;
   onOpen: (t: Task) => void;
 }) => {
@@ -344,7 +373,9 @@ const MonthView = ({ cursor, tasks, now, clashes, onCreate, onOpen }: {
           return (
             <div
               key={d.toISOString()}
-              className={`month-cell${other ? ' other' : ''}${isSameDay(d, now) ? ' today' : ''}`}
+              className={`month-cell${other ? ' other' : ''}${isSameDay(d, now) ? ' today' : ''}${drag.drop?.day === d.toISOString() ? ' calendar-drop-day' : ''}`}
+              data-calendar-day={d.toISOString()}
+              data-calendar-mode="month"
               onClick={() => onCreate(d)}
               role="button"
               tabIndex={0}
@@ -362,7 +393,10 @@ const MonthView = ({ cursor, tasks, now, clashes, onCreate, onOpen }: {
                   <button
                     key={t.id}
                     type="button"
-                    className={`chip cat${stateClass(t, now)}${clashes.some((c) => c.task.id === t.id) ? ' absent' : ''}`}
+                    className={`chip cat${stateClass(t, now)}${clashes.some((c) => c.task.id === t.id) ? ' absent' : ''}${drag.canMove(t) ? ' calendar-movable' : ''}${drag.draggingId === t.id ? ' calendar-moving' : ''}`}
+                    data-calendar-task={t.id}
+                    draggable={false}
+                    onPointerDown={(event) => drag.onStart(event, t)}
                     style={catStyle(t)}
                     onClick={(e) => {
                       e.stopPropagation();

@@ -75,7 +75,11 @@ export const TABLES: SchemaTable[] = [
     columns: [
       { name: 'id', type: 'nvarchar(64)' },
       { name: 'employee_id', type: 'int', default: '0' },
-      { name: 'type', type: 'nvarchar(16)', default: "'vacation'", check: "[type] in ('vacation','trip','dayoff','sick','study')" },
+      { name: 'type', type: 'nvarchar(64)', default: "'vacation'" },
+      { name: 'duty_type', type: 'nvarchar(48)', nullable: true },
+      { name: 'vacation_type', type: 'nvarchar(48)', nullable: true },
+      { name: 'travel_days_before', type: 'int', nullable: true },
+      { name: 'travel_days_after', type: 'int', nullable: true },
       { name: 'date_from', type: 'char(10)', default: "'1970-01-01'" },
       { name: 'date_to', type: 'char(10)', nullable: true },
       { name: 'status', type: 'nvarchar(16)', default: "'request'", check: "[status] in ('request','approved','rejected')" },
@@ -102,6 +106,7 @@ export const TABLES: SchemaTable[] = [
     primaryKey: ['week_start'],
     columns: [
       { name: 'week_start', type: 'char(10)' },
+      { name: 'period_end', type: 'char(10)', nullable: true },
       { name: 'submitted_at', type: 'datetimeoffset(3)', default: NOW_SQL },
       { name: 'entries', type: 'nvarchar(max)', default: "'[]'" },
     ],
@@ -148,6 +153,8 @@ export const TABLES: SchemaTable[] = [
       { name: 'email', type: 'nvarchar(256)', default: "''" },
       { name: 'role', type: 'nvarchar(32)', default: "'executor'" },
       { name: 'active', type: 'bit', default: '1' },
+      { name: 'hidden', type: 'bit', default: '0' },
+      { name: 'annual_vacation_days', type: 'int', nullable: true },
       { name: 'windows_login', type: 'nvarchar(128)', default: "''" },
       { name: 'full_name', type: 'nvarchar(256)', default: "''" },
       { name: 'position', type: 'nvarchar(256)', default: "''" },
@@ -251,12 +258,16 @@ const indexSql = (t: SchemaTable, i: NonNullable<SchemaTable['indexes']>[number]
  * Схема — отдельными операторами: SQL Server компилирует пакет целиком,
  * и созданную в том же пакете таблицу изменить нельзя. Каждый оператор защищён проверкой существования.
  */
-export const SCHEMA: string[] = TABLES.flatMap((t) => [
+export const SCHEMA: string[] = [...TABLES.flatMap((t) => [
   createTableSql(t),
   // Ключевые столбцы есть всегда, остальные сверяются по одному.
   ...t.columns.filter((c) => !t.primaryKey.includes(c.name)).map((c) => addColumnSql(t, c)),
   ...(t.indexes ?? []).map((i) => indexSql(t, i)),
-]);
+]),
+  // Старые базы ограничивали виды пятью системными кодами. Снимаем ограничение без потери записей.
+  "if exists (select 1 from sys.check_constraints where name = 'ck_tc_absences_type' and parent_object_id = object_id('dbo.tc_absences')) alter table dbo.tc_absences drop constraint [ck_tc_absences_type]",
+  "if col_length('dbo.tc_absences', 'type') < 128 alter table dbo.tc_absences alter column [type] nvarchar(64) not null",
+];
 
 // ——— Параметры запросов ———
 
@@ -338,6 +349,8 @@ const readAll = async (q: Q): Promise<Data | null> => {
   const accessVersion = await meta(q, 'access-version');
   const authentication = await meta(q, 'authentication-settings');
   const scoring = await meta(q, 'scoring-settings');
+  const vacationSettings = await meta(q, 'vacation-settings');
+  const periodSettings = await meta(q, 'period-settings');
 
   const r = async (text: string) => rows(q, text);
   const tasks = await r('select * from dbo.tc_tasks order by [seq]');
@@ -383,16 +396,16 @@ const readAll = async (q: Q): Promise<Data | null> => {
       } as Task;
     }),
     absences: absences.map((x) => {
-      const a = x as unknown as { id: string; employee_id: number; type: Absence['type']; date_from: string; date_to: string | null; status: Absence['status']; note: string; decided_by: number | null; created_at: Date };
-      return { id: a.id, employeeId: a.employee_id, type: a.type, from: a.date_from, to: a.date_to, status: a.status, note: a.note, decidedBy: a.decided_by, createdAt: iso(a.created_at)! } as Absence;
+      const a = x as unknown as { id: string; employee_id: number; type: Absence['type']; duty_type: string | null; vacation_type: string | null; travel_days_before: number | null; travel_days_after: number | null; date_from: string; date_to: string | null; status: Absence['status']; note: string; decided_by: number | null; created_at: Date };
+      return { id: a.id, employeeId: a.employee_id, type: a.type, ...(a.duty_type ? { dutyType: a.duty_type } : {}), ...(a.vacation_type ? { vacationType: a.vacation_type } : {}), ...(a.travel_days_before != null ? { travelDaysBefore: a.travel_days_before } : {}), ...(a.travel_days_after != null ? { travelDaysAfter: a.travel_days_after } : {}), from: a.date_from, to: a.date_to, status: a.status, note: a.note, decidedBy: a.decided_by, createdAt: iso(a.created_at)! } as Absence;
     }),
     entitlements: entitlements.map((x) => {
       const e = x as unknown as { employee_id: number; year: number; vacation_days: number; carried_over: number; dayoff_accrued: number };
       return { employeeId: e.employee_id, year: e.year, vacationDays: e.vacation_days, carriedOver: e.carried_over, dayoffAccrued: e.dayoff_accrued } as Entitlement;
     }),
     reports: reports.map((x) => {
-      const rep = x as unknown as { week_start: string; submitted_at: Date; entries: string };
-      return { weekStart: rep.week_start, submittedAt: iso(rep.submitted_at)!, entries: json<Report['entries']>(rep.entries, []) } as Report;
+      const rep = x as unknown as { week_start: string; period_end: string | null; submitted_at: Date; entries: string };
+      return { weekStart: rep.week_start, ...(rep.period_end ? { periodEnd: rep.period_end } : {}), submittedAt: iso(rep.submitted_at)!, entries: json<Report['entries']>(rep.entries, []) } as Report;
     }),
     messages: messages.map((x) => {
       const m = x as unknown as { id: string; author_id: number; text: string; sent_at: Date };
@@ -423,8 +436,8 @@ const readAll = async (q: Q): Promise<Data | null> => {
     // Сотрудники — ровно то, что в tc_users: пустая таблица — пустой список, демонстрационные не подставляются.
     // Без единого администратора сервер сам добавит того, кто публиковал приложение (server/app.ts).
     users: users.map((x) => {
-      const u = x as unknown as { employee_id: number; email: string; full_name: string; position: string; windows_login: string; role: ManagedUser['role']; active: boolean; unit_id: string | null };
-      return { employeeId: u.employee_id, email: u.email, fullName: u.full_name, position: u.position, windowsLogin: u.windows_login || u.email.split('@')[0], role: u.role, active: u.active, ...(u.unit_id ? { unitId: u.unit_id } : {}) } as ManagedUser;
+      const u = x as unknown as { employee_id: number; email: string; full_name: string; position: string; windows_login: string; role: ManagedUser['role']; active: boolean; hidden: boolean; annual_vacation_days: number | null; unit_id: string | null };
+      return { employeeId: u.employee_id, email: u.email, fullName: u.full_name, position: u.position, windowsLogin: u.windows_login || u.email.split('@')[0], role: u.role, active: u.active, ...(u.hidden ? { hidden: true } : {}), ...(u.annual_vacation_days != null ? { annualVacationDays: u.annual_vacation_days } : {}), ...(u.unit_id ? { unitId: u.unit_id } : {}) } as ManagedUser;
     }),
     templates: templatesReady
       ? templates.map((x) => {
@@ -440,6 +453,8 @@ const readAll = async (q: Q): Promise<Data | null> => {
       : DEFAULT_UNITS.map((u) => ({ ...u })),
     roles: migratedRoles,
     authentication: authentication ? JSON.parse(authentication) : { ...DEFAULT_AUTHENTICATION },
+    ...(vacationSettings ? { vacationSettings: JSON.parse(vacationSettings) } : {}),
+    ...(periodSettings ? { periodSettings: JSON.parse(periodSettings) } : {}),
     scoring: scoring ? JSON.parse(scoring) : { ...DEFAULT_SCORING },
     // Отметка версии прав: без неё общий код дописывал бы их администратору при каждом чтении.
     ...(accessVersion ? { accessVersion } : {}),
@@ -480,10 +495,10 @@ const ABSENCES: Table<Absence> = {
       q,
       'tc_absences',
       '[id] = @v1',
-      '[employee_id]=@v2, [type]=@v3, [date_from]=@v4, [date_to]=@v5, [status]=@v6, [note]=@v7, [decided_by]=@v8',
-      '[id],[employee_id],[type],[date_from],[date_to],[status],[note],[decided_by],[created_at]',
-      '@v1,@v2,@v3,@v4,@v5,@v6,@v7,@v8,@v9',
-      [S(a.id, 64), I(a.employeeId), S(a.type, 16), S(a.from, 10), S(a.to, 10), S(a.status, 16), S(a.note), I(a.decidedBy), DT(a.createdAt)],
+      '[employee_id]=@v2, [type]=@v3, [date_from]=@v4, [date_to]=@v5, [status]=@v6, [note]=@v7, [decided_by]=@v8, [vacation_type]=@v10, [travel_days_before]=@v11, [travel_days_after]=@v12, [duty_type]=@v13',
+      '[id],[employee_id],[type],[date_from],[date_to],[status],[note],[decided_by],[created_at],[vacation_type],[travel_days_before],[travel_days_after],[duty_type]',
+      '@v1,@v2,@v3,@v4,@v5,@v6,@v7,@v8,@v9,@v10,@v11,@v12,@v13',
+      [S(a.id, 64), I(a.employeeId), S(a.type, 64), S(a.from, 10), S(a.to, 10), S(a.status, 16), S(a.note), I(a.decidedBy), DT(a.createdAt), S(a.vacationType ?? null, 48), I(a.travelDaysBefore ?? null), I(a.travelDaysAfter ?? null), S(a.dutyType ?? null, 48)],
     ),
   remove: (q, a) => run(q, 'delete from dbo.tc_absences where [id] = @v1', [S(a.id, 64)]),
 };
@@ -506,7 +521,7 @@ const ENTITLEMENTS: Table<Entitlement> = {
 const REPORTS: Table<Report> = {
   key: (r) => r.weekStart,
   upsert: (q, r) =>
-    upsert(q, 'tc_reports', '[week_start] = @v1', '[submitted_at]=@v2, [entries]=@v3', '[week_start],[submitted_at],[entries]', '@v1,@v2,@v3', [S(r.weekStart, 10), DT(r.submittedAt), J(r.entries)]),
+    upsert(q, 'tc_reports', '[week_start] = @v1', '[submitted_at]=@v2, [entries]=@v3, [period_end]=@v4', '[week_start],[submitted_at],[entries],[period_end]', '@v1,@v2,@v3,@v4', [S(r.weekStart, 10), DT(r.submittedAt), J(r.entries), S(r.periodEnd, 10)]),
   remove: (q, r) => run(q, 'delete from dbo.tc_reports where [week_start] = @v1', [S(r.weekStart, 10)]),
 };
 
@@ -566,10 +581,10 @@ const USERS: Table<ManagedUser> = {
       q,
       'tc_users',
       '[employee_id] = @v1',
-      '[email]=@v2, [full_name]=@v3, [position]=@v4, [windows_login]=@v5, [role]=@v6, [active]=@v7, [unit_id]=@v8',
-      '[employee_id],[email],[full_name],[position],[windows_login],[role],[active],[unit_id]',
-      '@v1,@v2,@v3,@v4,@v5,@v6,@v7,@v8',
-      [I(user.employeeId), S(user.email, 256), S(user.fullName, 256), S(user.position, 256), S(user.windowsLogin, 128), S(user.role, 32), BIT(user.active), S(user.unitId ?? null, 64)],
+      '[email]=@v2, [full_name]=@v3, [position]=@v4, [windows_login]=@v5, [role]=@v6, [active]=@v7, [unit_id]=@v8, [hidden]=@v9, [annual_vacation_days]=@v10',
+      '[employee_id],[email],[full_name],[position],[windows_login],[role],[active],[unit_id],[hidden],[annual_vacation_days]',
+      '@v1,@v2,@v3,@v4,@v5,@v6,@v7,@v8,@v9,@v10',
+      [I(user.employeeId), S(user.email, 256), S(user.fullName, 256), S(user.position, 256), S(user.windowsLogin, 128), S(user.role, 32), BIT(user.active), S(user.unitId ?? null, 64), BIT(user.hidden ?? false), I(user.annualVacationDays ?? null)],
     ),
   remove: (q, user) => run(q, 'delete from dbo.tc_users where [employee_id] = @v1', [I(user.employeeId)]),
 };
@@ -835,6 +850,8 @@ export const createMssqlRepo = (settings: MssqlSettings): Repo => {
         }
         if (stable(before.scoring ?? DEFAULT_SCORING) !== stable(next.scoring ?? DEFAULT_SCORING)) await setMeta(tx, 'scoring-settings', JSON.stringify(next.scoring ?? DEFAULT_SCORING));
         if (stable(before.authentication) !== stable(next.authentication)) await setMeta(tx, 'authentication-settings', JSON.stringify(next.authentication));
+        if (stable(before.vacationSettings) !== stable(next.vacationSettings)) await setMeta(tx, 'vacation-settings', JSON.stringify(next.vacationSettings ?? { resetMonth: 1, resetDay: 1 }));
+        if (stable(before.periodSettings) !== stable(next.periodSettings)) await setMeta(tx, 'period-settings', JSON.stringify(next.periodSettings ?? null));
 
         await setMetaOnce(tx, 'seeded', new Date().toISOString());
         for (const key of ['dictionaries-ready', 'plan-rows-ready', 'access-ready', 'units-ready', 'templates-ready']) await setMeta(tx, key, new Date().toISOString());

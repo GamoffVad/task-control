@@ -36,14 +36,18 @@ export const Employees = () => {
   }, [state.tasks]);
 
   const me = state.user?.employeeId ?? 1;
-  if (selected === null) return <Navigate to={`/employees/${me}`} replace />;
+  const ownVisible = state.users.some((account) => account.employeeId === me);
+  const firstVisible = state.users.find((account) => inScope(scope, account.employeeId));
+  const fallback = ownVisible ? `/employees/${me}` : firstVisible ? `/employees/${firstVisible.employeeId}` : '/calendar';
+  if (selected === null) return <Navigate to={fallback} replace />;
+  if (!state.users.some((account) => account.employeeId === selected)) return <div className="not-found"><h1>Сотрудник не найден</h1><p className="subtitle">Выберите сотрудника в списке.</p></div>;
   // Исполнитель видит только свою карточку.
   if (!isManager(state.user)) {
-    if (selected !== me) return <Navigate to={`/employees/${me}`} replace />;
+    if (selected !== me) return <Navigate to={fallback} replace />;
     return <EmployeeCard key={me} id={me} />;
   }
   // Начальник отделения видит карточки своего подразделения, начальник отдела — всех.
-  if (!inScope(scope, selected)) return <Navigate to={`/employees/${me}`} replace />;
+  if (!inScope(scope, selected)) return <Navigate to={fallback} replace />;
 
   return (
     <div className="split split--300 employees-layout">

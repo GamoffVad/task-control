@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { employees } from '../lib/data';
+import { employees, syncStaff } from '../lib/data';
+import { createSeed } from '../lib/seed';
+import { MAIN_DEPARTMENT_ID } from '../lib/units';
 import { buildXlsx } from '../lib/xlsx';
 import { tetrisSheets, tetrisXlsx, typeColor, type TetrisExportInput } from '../lib/tetrisExport';
 import type { Absence, DictionaryEntry, Employee, Task } from '../lib/types';
@@ -66,6 +68,14 @@ const byName = (name: string, over: Partial<TetrisExportInput> = {}) => sheets(o
 const dayCell = (absences: Absence[], index: number) => byName('График', { absences }).rows[4].cells[index + 2];
 
 describe('выгрузка «Тетриса» в Excel', () => {
+  it('каждый лист содержит актуальное название отдела', () => {
+    const seed = createSeed(TODAY);
+    const name = 'Отдел аналитики & планирования';
+    syncStaff(seed.users, seed.units.map((u) => u.id === MAIN_DEPARTMENT_ID ? { ...u, name } : u));
+    try {
+      for (const sheet of sheets()) expect(sheet.rows[0].cells[0]?.value).toContain(name);
+    } finally { syncStaff(seed.users, seed.units); }
+  });
   it('цвет вида берётся из словаря, а не из запасного списка', () => {
     expect(typeColor(DICTIONARY, 'vacation')).toBe('#9A6B12');
     expect(typeColor([], 'vacation')).toBe('#9A6B12');

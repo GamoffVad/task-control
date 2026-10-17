@@ -253,7 +253,7 @@ const TaskModal = ({ task, defaults, context, onClose }: OpenArgs & { onClose: (
                 <legend className="caps" style={{ padding: 0, marginBottom: 4 }}>Исполнители</legend>
                 <AssigneePicker
                   choices={assigneeChoices}
-                  selected={draft.assigneeIds}
+                  selected={draft.assigneeIds.filter((id) => assigneeChoices.some((employee) => employee.id === id))}
                   onChange={(update) => setDraft((d) => ({ ...d, assigneeIds: update(d.assigneeIds) }))}
                   readOnly={!access.plan || user?.role === 'executor'}
                   absence={(id) => {

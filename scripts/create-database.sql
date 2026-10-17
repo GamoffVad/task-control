@@ -158,7 +158,11 @@ GO
 if object_id(N'dbo.tc_absences', N'U') is null create table dbo.tc_absences (
     [id] nvarchar(64) not null primary key,
     [employee_id] int not null constraint df_tc_absences_employee_id default 0,
-    [type] nvarchar(16) not null constraint df_tc_absences_type default 'vacation' constraint ck_tc_absences_type check ([type] in ('vacation','trip','dayoff','sick','study')),
+    [type] nvarchar(64) not null constraint df_tc_absences_type default 'vacation',
+    [duty_type] nvarchar(48) null,
+    [vacation_type] nvarchar(48) null,
+    [travel_days_before] int null,
+    [travel_days_after] int null,
     [date_from] char(10) not null constraint df_tc_absences_date_from default '1970-01-01',
     [date_to] char(10) null,
     [status] nvarchar(16) not null constraint df_tc_absences_status default 'request' constraint ck_tc_absences_status check ([status] in ('request','approved','rejected')),
@@ -170,7 +174,19 @@ GO
 if col_length('dbo.tc_absences', 'employee_id') is null alter table dbo.tc_absences add [employee_id] int not null constraint df_tc_absences_employee_id default 0
 GO
 
-if col_length('dbo.tc_absences', 'type') is null alter table dbo.tc_absences add [type] nvarchar(16) not null constraint df_tc_absences_type default 'vacation' constraint ck_tc_absences_type check ([type] in ('vacation','trip','dayoff','sick','study'))
+if col_length('dbo.tc_absences', 'type') is null alter table dbo.tc_absences add [type] nvarchar(64) not null constraint df_tc_absences_type default 'vacation'
+GO
+
+if col_length('dbo.tc_absences', 'duty_type') is null alter table dbo.tc_absences add [duty_type] nvarchar(48) null
+GO
+
+if col_length('dbo.tc_absences', 'vacation_type') is null alter table dbo.tc_absences add [vacation_type] nvarchar(48) null
+GO
+
+if col_length('dbo.tc_absences', 'travel_days_before') is null alter table dbo.tc_absences add [travel_days_before] int null
+GO
+
+if col_length('dbo.tc_absences', 'travel_days_after') is null alter table dbo.tc_absences add [travel_days_after] int null
 GO
 
 if col_length('dbo.tc_absences', 'date_from') is null alter table dbo.tc_absences add [date_from] char(10) not null constraint df_tc_absences_date_from default '1970-01-01'
@@ -215,8 +231,12 @@ GO
 
 if object_id(N'dbo.tc_reports', N'U') is null create table dbo.tc_reports (
     [week_start] char(10) not null primary key,
+    [period_end] char(10) null,
     [submitted_at] datetimeoffset(3) not null constraint df_tc_reports_submitted_at default sysdatetimeoffset(),
     [entries] nvarchar(max) not null constraint df_tc_reports_entries default '[]')
+GO
+
+if col_length('dbo.tc_reports', 'period_end') is null alter table dbo.tc_reports add [period_end] char(10) null
 GO
 
 if col_length('dbo.tc_reports', 'submitted_at') is null alter table dbo.tc_reports add [submitted_at] datetimeoffset(3) not null constraint df_tc_reports_submitted_at default sysdatetimeoffset()
@@ -286,6 +306,8 @@ if object_id(N'dbo.tc_users', N'U') is null create table dbo.tc_users (
     [email] nvarchar(256) not null constraint df_tc_users_email default '' constraint uq_tc_users_email unique,
     [role] nvarchar(32) not null constraint df_tc_users_role default 'executor',
     [active] bit not null constraint df_tc_users_active default 1,
+    [hidden] bit not null constraint df_tc_users_hidden default 0,
+    [annual_vacation_days] int null,
     [windows_login] nvarchar(128) not null constraint df_tc_users_login default '',
     [full_name] nvarchar(256) not null constraint df_tc_users_full_name default '',
     [position] nvarchar(256) not null constraint df_tc_users_position default '',
@@ -299,6 +321,12 @@ if col_length('dbo.tc_users', 'role') is null alter table dbo.tc_users add [role
 GO
 
 if col_length('dbo.tc_users', 'active') is null alter table dbo.tc_users add [active] bit not null constraint df_tc_users_active default 1
+GO
+
+if col_length('dbo.tc_users', 'hidden') is null alter table dbo.tc_users add [hidden] bit not null constraint df_tc_users_hidden default 0
+GO
+
+if col_length('dbo.tc_users', 'annual_vacation_days') is null alter table dbo.tc_users add [annual_vacation_days] int null
 GO
 
 if col_length('dbo.tc_users', 'windows_login') is null alter table dbo.tc_users add [windows_login] nvarchar(128) not null constraint df_tc_users_login default ''
@@ -396,6 +424,12 @@ if col_length('dbo.tc_roles', 'name') is null alter table dbo.tc_roles add [name
 GO
 
 if col_length('dbo.tc_roles', 'permissions') is null alter table dbo.tc_roles add [permissions] nvarchar(max) not null constraint df_tc_roles_permissions default '[]'
+GO
+
+if exists (select 1 from sys.check_constraints where name = 'ck_tc_absences_type' and parent_object_id = object_id('dbo.tc_absences')) alter table dbo.tc_absences drop constraint [ck_tc_absences_type]
+GO
+
+if col_length('dbo.tc_absences', 'type') < 128 alter table dbo.tc_absences alter column [type] nvarchar(64) not null
 GO
 
 -- ------------------------------------------------------------

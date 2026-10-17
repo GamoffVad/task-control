@@ -1,7 +1,7 @@
 // Документ «Отчётности»: данные отправленного отчёта для шаблона.
 
 import { department, employees, fullName, shortName } from './data';
-import { addDays, fmtDate, fmtDateTime, fmtNum, fmtRange } from './dates';
+import { addDays, fmtDate, fmtDateTime, fmtNum, fmtRange, reportEnd } from './dates';
 import { reportRows } from './logic';
 import type { TemplateContext } from './templates';
 import type { PlanRow, Report, ReportEntry, User } from './types';
@@ -20,7 +20,7 @@ const byTask = (entries: ReportEntry[]) => {
 };
 
 /** Разделы верхнего уровня → позиции → исполненные мероприятия; итоги по сотрудникам. */
-export const reportDocContext = (report: Report | undefined, rows: PlanRow[], weekStart: Date, user: User | null, now: Date = new Date()): TemplateContext => {
+export const reportDocContext = (report: Report | undefined, rows: PlanRow[], weekStart: Date, user: User | null, now: Date = new Date(), periodEnd?: Date): TemplateContext => {
   const entries = report?.entries ?? [];
   const used = reportRows(entries, rows);
   const tasks = byTask(entries);
@@ -56,7 +56,7 @@ export const reportDocContext = (report: Report | undefined, rows: PlanRow[], we
     .map((e) => ({ id: e.id, list: entries.filter((x) => x.assigneeId === e.id) }))
     .filter((p) => p.list.length > 0)
     .map((p) => ({ сотрудник: shortName(p.id), фио: fullName(p.id), мероприятий: p.list.length, баллы: fmtNum(p.list.reduce((s, x) => s + x.score, 0)) }));
-  const weekEnd = addDays(weekStart, 6);
+  const weekEnd = report ? reportEnd(report) : periodEnd ?? addDays(weekStart, 6);
   return {
     отдел: department.name,
     неделя: fmtRange(weekStart, weekEnd),

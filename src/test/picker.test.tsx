@@ -42,10 +42,10 @@ describe('выбор исполнителей', () => {
     expect(matchesEmployee(f, '  ')).toBe(true);
   });
 
-  it('в маленьком отделе поиска нет, выбор и снятие работают', async () => {
+  it('в маленьком отделе тоже есть поиск, выбор и снятие работают', async () => {
     const user = userEvent.setup();
     render(<Harness choices={employees} />);
-    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Найти сотрудника' })).toBeInTheDocument();
     expect(screen.getByText('Никто не выбран')).toBeInTheDocument();
     await user.click(screen.getByRole('checkbox', { name: 'Сидоров Д.Е.' }));
     await user.click(screen.getByRole('checkbox', { name: 'Иванов А.Б.' }));

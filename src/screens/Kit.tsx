@@ -160,7 +160,7 @@ export const Kit = () => {
 
       <section>
         <h2>Выбор</h2>
-        <p className="kit-desc">Select — список со стрелками и Escape; Segmented — переключатель; Checkbox — флажок, зелёный для исполнения; Stepper — листалка периода.</p>
+        <p className="kit-desc">Select — список с поиском, стрелками и Escape; Segmented — переключатель; Checkbox — флажок, зелёный для исполнения; Stepper — листалка периода.</p>
         <div className="kit-row">
           <div style={{ minWidth: 220 }}>
             <Select

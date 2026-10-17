@@ -17,8 +17,8 @@ describe('разрешения вкладок администрирования
   it('у каждой вкладки есть разрешение в справочнике, и все они показываются в «Ролях»', () => {
     const catalogue = new Set(PERMISSIONS.map((item) => item.key));
     for (const permission of ADMIN_TAB_PERMISSIONS) expect(catalogue.has(permission), permission).toBe(true);
-    // Девять вкладок — девять разрешений, «Редактирование UI» среди них.
-    expect(new Set(ADMIN_TAB_PERMISSIONS).size).toBe(9);
+    // Каждой вкладке, включая настройки отпусков, соответствует разрешение.
+    expect(new Set(ADMIN_TAB_PERMISSIONS).size).toBe(11);
     expect(PERMISSIONS.find((item) => item.key === 'appearance.manage')!.label).toContain('Редактирование UI');
   });
 

@@ -1,6 +1,7 @@
 import { DEFAULT_USERS } from './access';
 import { DEFAULT_UNIT_OF, DEFAULT_UNITS, MAIN_DEPARTMENT_ID, unitWithDescendants } from './units';
 import type { AbsenceStatus, AbsenceType, Category, Department, DictionaryEntry, Employee, ManagedUser, PlanRow, Role, Unit } from './types';
+import { eventTypes, SYSTEM_EVENT_TYPES } from './eventTypes';
 
 // Сотрудники приложения — это пользователи из базы (Администрирование → Пользователи),
 // а группы в фильтрах — отделения основного отдела (Администрирование → Подразделения).
@@ -22,11 +23,13 @@ export const unitOf = (u: Pick<ManagedUser, 'employeeId' | 'unitId'>): string | 
 
 let staffKey = '';
 export const syncStaff = (users: ManagedUser[], units: Unit[]) => {
-  const key = JSON.stringify([users.map((u) => [u.employeeId, u.fullName, u.position, u.role, u.active, unitOf(u)]), units]);
+  const key = JSON.stringify([users.map((u) => [u.employeeId, u.fullName, u.position, u.role, u.active, u.hidden, unitOf(u)]), units]);
   if (key === staffKey) return;
   staffKey = key;
   const list = [...users].sort((x, y) => x.employeeId - y.employeeId).map(toEmployee);
-  employees.splice(0, employees.length, ...list);
+  const shownUsers = users.filter((user) => !user.hidden);
+  const shownIds = new Set(shownUsers.map((user) => user.employeeId));
+  employees.splice(0, employees.length, ...list.filter((employee) => shownIds.has(employee.id)));
   employeeById.clear();
   for (const e of list) employeeById.set(e.id, e);
   // Группы — отделения основного отдела (или первого отдела, если основной удалён).
@@ -39,10 +42,10 @@ export const syncStaff = (users: ManagedUser[], units: Unit[]) => {
   sections.sort((x, y) => order(x.id) - order(y.id));
   const groups = sections.map((sec) => {
     const inside = unitWithDescendants(units, sec.id);
-    return { id: sec.id, name: sec.name, employeeIds: users.filter((u) => inside.has(unitOf(u) ?? '')).map((u) => u.employeeId).sort((x, y) => x - y) };
+    return { id: sec.id, name: sec.name, employeeIds: shownUsers.filter((u) => inside.has(unitOf(u) ?? '')).map((u) => u.employeeId).sort((x, y) => x - y) };
   });
   const grouped = new Set(groups.flatMap((g) => g.employeeIds));
-  const rest = users.filter((u) => !grouped.has(u.employeeId)).map((u) => u.employeeId).sort((x, y) => x - y);
+  const rest = shownUsers.filter((u) => !grouped.has(u.employeeId)).map((u) => u.employeeId).sort((x, y) => x - y);
   if (rest.length) groups.push({ id: 'unit-none', name: 'Без отделения', employeeIds: rest });
   department.groups = groups.filter((g) => g.employeeIds.length > 0);
 };
@@ -90,7 +93,14 @@ const SHORT_CATEGORY = Object.fromEntries(DEFAULT_CATEGORIES.map((c) => [c.key, 
 export const CATEGORIES: { key: Category; label: string; short: string }[] = [...DEFAULT_CATEGORIES];
 
 let categoriesKey = '';
+let absenceTypesKey = '';
 export const syncCategories = (dictionaries: DictionaryEntry[]) => {
+  const absenceValues = dictionaries.filter((d) => d.dictionary === 'absenceType');
+  const absenceKey = JSON.stringify(absenceValues.map((d) => [d.code, d.title]));
+  if (absenceKey !== absenceTypesKey) {
+    absenceTypesKey = absenceKey;
+    ABSENCE_TYPES.splice(0, ABSENCE_TYPES.length, ...eventTypes(dictionaries));
+  }
   const values = dictionaries.filter((d) => d.dictionary === 'taskCategory');
   const key = JSON.stringify(values.map((d) => [d.code, d.title]));
   if (key === categoriesKey) return;
@@ -181,15 +191,9 @@ export const initials = (id: number): string => {
 };
 
 /** Виды отсутствий. Цвет — CSS-переменная --abs-<key>. Отгул считается в рабочих днях, остальное — в календарных. */
-export const ABSENCE_TYPES: { key: AbsenceType; label: string; full: string }[] = [
-  { key: 'vacation', label: 'Отпуск', full: 'Ежегодный отпуск' },
-  { key: 'trip', label: 'Командировка', full: 'Командировка' },
-  { key: 'dayoff', label: 'Отгул', full: 'Отгул' },
-  { key: 'sick', label: 'Больничный', full: 'Больничный' },
-  { key: 'study', label: 'Учёба', full: 'Обучение, курсы' },
-];
+export const ABSENCE_TYPES: { key: AbsenceType; label: string; full: string }[] = SYSTEM_EVENT_TYPES.map((t) => ({ ...t }));
 
-export const absenceType = (key: AbsenceType) => ABSENCE_TYPES.find((t) => t.key === key)!;
+export const absenceType = (key: AbsenceType) => ABSENCE_TYPES.find((t) => t.key === key) ?? { key, label: key, full: key };
 
 export const ABSENCE_STATUS_LABELS: Record<AbsenceStatus, string> = {
   request: 'заявка',

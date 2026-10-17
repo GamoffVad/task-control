@@ -4,6 +4,12 @@ import type { Task } from './types';
 export const FIRST_HOUR = 7;
 export const LAST_HOUR = 21;
 
+/** Перенос меняет только начало и окончание, сохраняя полную длительность, включая переход через полночь. */
+export const movedTaskDates = (task: Pick<Task, 'start' | 'end'>, start: Date) => ({
+  start: start.toISOString(),
+  end: new Date(start.getTime() + new Date(task.end).getTime() - new Date(task.start).getTime()).toISOString(),
+});
+
 export type Placed = { task: Task; top: number; height: number; lane: number; lanes: number };
 
 /** Раскладка пересекающихся задач дня по дорожкам. */

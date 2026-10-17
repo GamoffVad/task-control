@@ -1,4 +1,5 @@
 import { useStore } from '../lib/store';
+import { eventColorKey } from '../lib/eventTypes';
 
 /** Справочник → CSS-переменная: виды отсутствий красят --abs-<код>, категории задач — --cat-<код>. */
 const VARS = { absenceType: 'abs', taskCategory: 'cat' } as const;
@@ -23,9 +24,9 @@ const lighten = (hex: string, share: number) => {
  */
 export const DictionaryColors = () => {
   const { state } = useStore();
-  const colored = state.dictionaries.filter((e) => (e.dictionary === 'absenceType' || e.dictionary === 'taskCategory') && e.color && /^[\w-]+$/.test(e.code));
+  const colored = state.dictionaries.filter((e) => (e.dictionary === 'absenceType' || e.dictionary === 'taskCategory' && /^[\w-]+$/.test(e.code)) && e.color);
   if (colored.length === 0) return null;
-  const name = (e: (typeof colored)[number]) => `--${VARS[e.dictionary as keyof typeof VARS]}-${e.code}`;
+  const name = (e: (typeof colored)[number]) => `--${VARS[e.dictionary as keyof typeof VARS]}-${e.dictionary === 'absenceType' ? eventColorKey(e.code) : e.code}`;
   const light = colored.map((e) => `${name(e)}: ${e.color}; ${name(e)}-rgb: ${channels(e.color!).join(' ')};`).join(' ');
   const dark = colored
     .map((e) => {

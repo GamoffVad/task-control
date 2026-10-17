@@ -11,11 +11,11 @@ type Item = { row: PlanRow | null; task: Task };
 const topSection = (rows: PlanRow[], id: string): PlanRow | undefined => rows.find((r) => r.id === id.split('.')[0]);
 
 /** Мероприятия недели в порядке плана; только задачи выбранных сотрудников. */
-export const planItems = (tasks: Task[], rows: PlanRow[], weekStart: Date, people: number[]): Item[] => {
+export const planItems = (tasks: Task[], rows: PlanRow[], weekStart: Date, people: number[], periodEnd?: Date): Item[] => {
   const shown = new Set(people);
   const byId = new Map(rows.map((r) => [r.id, r]));
   const order = new Map(rows.map((r, i) => [r.id, i]));
-  return tasksInWeek(tasks, weekStart)
+  return tasksInWeek(tasks, weekStart, periodEnd)
     .filter((t) => t.assigneeIds.some((a) => shown.has(a)))
     .map((task) => ({ row: task.rowId ? byId.get(task.rowId) ?? null : null, task }))
     .sort((a, b) => (order.get(a.task.rowId ?? '') ?? 1e9) - (order.get(b.task.rowId ?? '') ?? 1e9) || a.task.end.localeCompare(b.task.end));
@@ -25,9 +25,10 @@ const status = (t: Task, now: Date) => (t.done ? 'исполнено' : isOverdu
 const doc = (t: Task) => [t.docName, t.docNumber && `№ ${t.docNumber}`].filter(Boolean).join(' ');
 
 export const planToCsv = (items: Item[], rows: PlanRow[], now: Date = new Date()): string => {
-  const head = ['Раздел', 'Позиция', 'Наименование позиции', 'Мероприятие', 'Срок', 'Исполнители', 'Категория', 'Статус', 'Документ', 'Результат'];
+  const head = ['Отдел', 'Раздел', 'Позиция', 'Наименование позиции', 'Мероприятие', 'Срок', 'Исполнители', 'Категория', 'Статус', 'Документ', 'Результат'];
   const lines = items.map(({ row, task }) =>
     [
+      department.name,
       row ? topSection(rows, row.id)?.title ?? row.id.split('.')[0] : '',
       row?.id ?? 'вне плана',
       row?.title ?? '',
@@ -46,7 +47,7 @@ export const planToCsv = (items: Item[], rows: PlanRow[], now: Date = new Date()
 };
 
 /** Данные для шаблона: разделы верхнего уровня → позиции → мероприятия. */
-export const planDocContext = (items: Item[], rows: PlanRow[], weekStart: Date, user: User | null, now: Date = new Date()): TemplateContext => {
+export const planDocContext = (items: Item[], rows: PlanRow[], weekStart: Date, user: User | null, now: Date = new Date(), periodEnd?: Date): TemplateContext => {
   const sections: TemplateContext[] = [];
   const bySection = new Map<string, Map<string, Item[]>>();
   for (const it of items) {
@@ -79,7 +80,7 @@ export const planDocContext = (items: Item[], rows: PlanRow[], weekStart: Date, 
       })),
     });
   }
-  const weekEnd = addDays(weekStart, 6);
+  const weekEnd = periodEnd ?? addDays(weekStart, 6);
   return {
     отдел: department.name,
     неделя: fmtRange(weekStart, weekEnd),

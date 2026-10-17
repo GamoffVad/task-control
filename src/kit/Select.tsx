@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { DropdownPanel } from './DropdownSearch';
+import { useDropdownSearch } from './useDropdownSearch';
 
 export type Option<T extends string | number> = { value: T; label: string };
 
@@ -12,94 +13,45 @@ type Props<T extends string | number> = {
   disabled?: boolean;
 };
 
-/** Выпадающий список: закрывается по Escape и клику вне, управляется стрелками. */
+/** Выпадающий список с поиском, стрелками, Enter и Escape. */
 export function Select<T extends string | number>({ value, options, onChange, variant = 'plain', label, id, disabled }: Props<T>) {
-  const [open, setOpen] = useState(false);
-  const [focus, setFocus] = useState(0);
-  const root = useRef<HTMLDivElement>(null);
-  const listId = useId();
-  const current = options.find((o) => o.value === value);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (root.current && !root.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [open]);
-
-  const openList = () => {
-    setFocus(Math.max(0, options.findIndex((o) => o.value === value)));
-    setOpen(true);
-  };
-
-  const choose = (v: T) => {
-    onChange(v);
-    setOpen(false);
-  };
-
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      if (!open) return;
-      // Открытый список закрывается сам, окно вокруг — нет.
-      e.preventDefault();
-      setOpen(false);
-      return;
-    }
-    if (!open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-      e.preventDefault();
-      openList();
-      return;
-    }
-    if (!open) return;
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setFocus((f) => Math.min(options.length - 1, f + 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setFocus((f) => Math.max(0, f - 1));
-    } else if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      choose(options[focus].value);
-    }
+  const { open, query, focus, setFocus, root, trigger, listId, filtered, show, close, search, onKey, setOpen } = useDropdownSearch(options);
+  const current = options.find((option) => option.value === value);
+  const active = focus < filtered.length ? focus : -1;
+  const choose = (index: number) => {
+    const option = filtered[index];
+    if (!option || disabled) return;
+    onChange(option.value);
+    close();
   };
 
   return (
-    <div className={`dd dd--${variant}`} ref={root} onKeyDown={onKey}>
-      <button
-        type="button"
-        id={id}
-        className="dd-btn"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={listId}
-        aria-label={`${label}: ${current?.label ?? ''}`}
-        disabled={disabled}
-        onClick={() => (open ? setOpen(false) : openList())}
-      >
+    <div className={`dd dd--${variant}`} ref={root}
+      onKeyDown={(event) => !disabled && onKey(event, filtered.length, choose)}
+      onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
+      <button type="button" id={id} ref={trigger} className="dd-btn"
+        aria-haspopup="listbox" aria-expanded={open && !disabled} aria-controls={open && !disabled ? listId : undefined}
+        aria-label={`${label}: ${current?.label ?? ''}`} disabled={disabled}
+        onClick={() => open ? close() : show()}>
         <span className="value">{current?.label ?? '—'}</span>
         <span className="arrow" aria-hidden>▾</span>
       </button>
-      {open && (
-        // Клик по пункту не передаётся подписи <label> вокруг поля: иначе браузер «нажимает» кнопку списка
-        // ещё раз, и выбранный список сразу открывается снова.
-        <ul className="dd-list" role="listbox" id={listId} aria-label={label} onClick={(e) => e.preventDefault()}>
-          {options.map((o, i) => (
-            <li key={String(o.value)}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={o.value === value}
-                className={i === focus ? 'focus' : undefined}
-                onMouseEnter={() => setFocus(i)}
-                onClick={() => choose(o.value)}
-              >
-                {o.label}
-              </button>
-            </li>
-          ))}
-        </ul>
+      {open && !disabled && (
+        <DropdownPanel label={label} listId={listId} query={query} onSearch={search} active={active}>
+          {/* Не пересылаем клик внешней подписи label: иначе список откроется повторно. */}
+          <ul className="dd-list" role="listbox" id={listId} aria-label={label} onClick={(event) => event.preventDefault()}>
+            {filtered.map((option, index) => (
+              <li key={String(option.value)} role="presentation">
+                <button type="button" role="option" id={`${listId}-${index}`} tabIndex={-1}
+                  aria-selected={option.value === value} className={index === active ? 'focus' : undefined}
+                  onMouseEnter={() => setFocus(index)} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(index)}>
+                  {option.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {!filtered.length && <p className="dd-empty" role="status">Ничего не найдено</p>}
+        </DropdownPanel>
       )}
     </div>
   );

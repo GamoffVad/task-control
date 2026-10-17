@@ -5,9 +5,6 @@ import type { Employee } from '../lib/types';
 import { Icon } from './Icons';
 import { Checkbox, SearchField } from '../kit';
 
-/** С какого числа сотрудников в списке появляется поиск. */
-const SEARCH_FROM = 9;
-
 /** Выбранные сотрудники отдельно от полного списка, чтобы окно задачи не росло с размером отдела. */
 export function AssigneePicker({
   choices,
@@ -72,9 +69,7 @@ export function AssigneePicker({
     <div className="picker">
       {chips}
       <div className="picker-bar">
-        {choices.length >= SEARCH_FROM && (
-          <SearchField value={query} onChange={setQuery} placeholder="Фамилия, имя или должность" label="Найти сотрудника" aria-controls={listId} />
-        )}
+        <SearchField value={query} onChange={setQuery} placeholder="Фамилия, имя или должность" label="Найти сотрудника" aria-controls={listId} />
         <span className="picker-count">
           выбрано {selected.length} из {choices.length}
         </span>

@@ -2,8 +2,10 @@ import { useState } from 'react';
 import {
   absenceDays,
   balanceFor,
+  dutyWeekendDays,
   covers,
   fmtSpan,
+  travelDays,
   validateAbsence,
   type AbsenceDraft,
   type AbsenceErrors,
@@ -15,6 +17,9 @@ import { useStore } from '../lib/store';
 import type { Absence, AbsenceStatus, AbsenceType } from '../lib/types';
 import { Checkbox, DateField, Dialog, Segmented, Select, TextInput } from '../kit';
 import { Icon } from './Icons';
+import { vacationPeriodLabel, vacationTypeCode, vacationTypes, vacationYear } from '../lib/vacations';
+import { dutyTypeCode, dutyTypes } from '../lib/eventTypes';
+import { absColor } from './absColor';
 
 type Props = { absence?: Absence; defaults?: Partial<AbsenceDraft>; onClose: () => void };
 
@@ -33,10 +38,12 @@ export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
   const today = new Date();
   const [draft, setDraft] = useState<AbsenceDraft>(() =>
     absence
-      ? { id: absence.id, employeeId: absence.employeeId, type: absence.type, from: absence.from, to: absence.to, status: absence.status, note: absence.note }
+      ? { id: absence.id, employeeId: absence.employeeId, type: absence.type, dutyType: dutyTypeCode(absence, state.dictionaries), vacationType: vacationTypeCode(absence, state.dictionaries), travelDaysBefore: absence.travelDaysBefore ?? 0, travelDaysAfter: absence.travelDaysAfter ?? 0, from: absence.from, to: absence.to, status: absence.status, note: absence.note }
       : {
           employeeId: user?.employeeId ?? 1,
           type: 'vacation',
+          vacationType: vacationTypeCode({}, state.dictionaries),
+          dutyType: dutyTypeCode({}, state.dictionaries),
           from: toDateKey(today),
           to: toDateKey(today),
           status: manager ? 'approved' : 'request',
@@ -46,6 +53,8 @@ export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
         },
   );
   const [errors, setErrors] = useState<AbsenceErrors>({});
+  const [roadBefore, setRoadBefore] = useState(String(absence?.travelDaysBefore ?? defaults?.travelDaysBefore ?? 0));
+  const [roadAfter, setRoadAfter] = useState(String(absence?.travelDaysAfter ?? defaults?.travelDaysAfter ?? 0));
   const [confirmDelete, setConfirmDelete] = useState(false);
   const readOnly = !access.edit;
 
@@ -64,22 +73,25 @@ export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
       return { ...d, from: value, to: toDateKey(to) };
     });
 
-  const probe: Absence = { ...draft, id: draft.id ?? 'new', createdAt: '', decidedBy: null };
+  const travelDraft = { ...draft, travelDaysBefore: Number(roadBefore), travelDaysAfter: Number(roadAfter) };
+  const probe: Absence = { ...travelDraft, id: draft.id ?? 'new', createdAt: '', decidedBy: null };
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(draft.from) && (draft.to === null || draft.to >= draft.from);
   const days = valid ? absenceDays(probe, today) : 0;
   const year = valid ? fromDateKey(draft.from).getFullYear() : today.getFullYear();
   // Остаток без этого отсутствия и после него.
   const others = state.absences.filter((a) => a.id !== draft.id);
-  const before = balanceFor(others, state.entitlements, draft.employeeId, year, today);
-  const withThis = draft.status === 'rejected' ? before : balanceFor([...others, { ...probe, status: 'approved' }], state.entitlements, draft.employeeId, year, today);
+  const referenceDate = valid ? fromDateKey(draft.from) : today;
+  const balanceOptions = { users: state.users, settings: state.vacationSettings, referenceDate };
+  const before = balanceFor(others, state.entitlements, draft.employeeId, year, today, balanceOptions);
+  const withThis = draft.status === 'rejected' ? before : balanceFor([...others, { ...probe, status: 'approved' }], state.entitlements, draft.employeeId, year, today, balanceOptions);
   const counted = draft.type === 'vacation' ? 'vacation' : draft.type === 'dayoff' ? 'dayoff' : null;
   const leftNow = counted === 'vacation' ? before.vacation.left : counted === 'dayoff' ? before.dayoff.left : null;
   const leftAfter = counted === 'vacation' ? withThis.vacation.left : counted === 'dayoff' ? withThis.dayoff.left : null;
 
-  const clashing = valid ? state.tasks.filter((t) => !t.done && t.assigneeIds.includes(draft.employeeId) && covers(probe, new Date(t.end), today)) : [];
+  const clashing = valid && draft.type !== 'duty' ? state.tasks.filter((t) => !t.done && t.assigneeIds.includes(draft.employeeId) && covers(probe, new Date(t.end), today)) : [];
 
   const save = (status?: AbsenceStatus) => {
-    const next = status ? { ...draft, status } : draft;
+    const next = status ? { ...travelDraft, status } : travelDraft;
     const errs = validateAbsence(next, state.absences, today);
     setErrors(errs);
     if (Object.keys(errs).length) return;
@@ -100,7 +112,7 @@ export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
     onClose();
   };
 
-  const typeOptions = ABSENCE_TYPES.map((t) => ({ value: t.key, label: t.full }));
+  const typeOptions = ABSENCE_TYPES.map((t) => ({ value: t.key, label: t.key === 'vacation' ? t.label : t.full }));
   const title = absence ? (readOnly ? 'Событие' : 'Изменить событие') : manager ? 'Новое событие' : 'Заявка на событие';
 
   return (
@@ -152,7 +164,7 @@ export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
             <div className="field">
               <span className="caps">Вид</span>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <i aria-hidden style={{ width: 10, height: 10, flex: 'none', background: `var(--abs-${draft.type})` }} />
+                <i aria-hidden style={{ ...absColor(draft.type), width: 10, height: 10, flex: 'none', background: 'var(--c)' }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <Select<AbsenceType>
                     variant="light"
@@ -166,6 +178,9 @@ export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
               </div>
             </div>
           </div>
+
+          {draft.type === 'vacation' && <div className="field"><span className="caps">Тип отпуска</span><Select<string> variant="light" label="Тип отпуска" value={vacationTypeCode(draft, state.dictionaries)} options={vacationTypes(state.dictionaries).map((e) => ({ value: e.code, label: e.title }))} disabled={readOnly} onChange={(v) => set('vacationType', v)} /></div>}
+          {draft.type === 'duty' && <div className="field"><span className="caps">Вид дежурства</span><Select<string> variant="light" label="Вид дежурства" value={dutyTypeCode(draft, state.dictionaries)} options={dutyTypes(state.dictionaries).map((e) => ({ value: e.code, label: e.title }))} disabled={readOnly} onChange={(v) => set('dutyType', v)} /></div>}
 
           <div className="field-row">
             <label className="field">
@@ -184,6 +199,14 @@ export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
               />
             </label>
           </div>
+          {draft.type === 'vacation' && <>
+            <div className="field-row">
+              <label className="field"><span className="caps">На дорогу туда, дней</span><TextInput inputMode="numeric" maxLength={3} mono readOnly={readOnly} value={roadBefore} invalid={!!errors.travel} onChange={(e) => { setRoadBefore(e.target.value); setErrors((prev) => ({ ...prev, travel: undefined })); }} /></label>
+              <label className="field"><span className="caps">На дорогу обратно, дней</span><TextInput inputMode="numeric" maxLength={3} mono readOnly={readOnly} value={roadAfter} invalid={!!errors.travel} onChange={(e) => { setRoadAfter(e.target.value); setErrors((prev) => ({ ...prev, travel: undefined })); }} /></label>
+            </div>
+            <p className="field-hint">Даты «С» и «По» включают дорогу. Дни на дорогу приходятся на начало и конец отсутствия и не вычитаются из годовой нормы отпуска.</p>
+            {errors.travel && <p className="field-error" role="alert">{errors.travel}</p>}
+          </>}
           {draft.type === 'sick' && !readOnly && (
             <Checkbox checked={draft.to === null} onChange={(open) => set('to', open ? null : draft.from)}>
               Дата окончания не известна (больничный открыт)
@@ -214,10 +237,14 @@ export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
               </>
             ) : (
               <div style={{ gridColumn: 'span 2' }}>
-                <small>{absenceType(draft.type).full} не уменьшает остаток отпуска и отгулов.</small>
+                {draft.type === 'duty' ? <><b>+{valid ? dutyWeekendDays(probe) : 0}</b><small>отгулов за выходные</small></> : <small>{absenceType(draft.type).full} не уменьшает остаток отпуска и отгулов.</small>}
               </div>
             )}
           </div>
+          {draft.type === 'duty' && <p className="field-hint">За каждую субботу и воскресенье согласованного дежурства начисляется один отгул, начиная с этого дня. Заявки и отклонённые дежурства отгулов не дают. При изменении или удалении дежурства баланс пересчитывается.</p>}
+          {draft.type === 'vacation' && Number.isInteger(travelDays(probe)) && travelDays(probe) > 0 && travelDays(probe) <= days && <p className="field-hint">Всего отсутствия: {days} дн. = отпуск {days - travelDays(probe)} дн. + дорога {travelDays(probe)} дн.</p>}
+
+          {draft.type === 'vacation' && <p className="field-hint">Остаток за отпускной период {vacationPeriodLabel(vacationYear(referenceDate, state.vacationSettings), state.vacationSettings)}. Если отпуск пересекает дату сброса, дни после неё учитываются в следующем периоде.</p>}
 
           {clashing.length > 0 && (
             <div className="warn-note" role="note">

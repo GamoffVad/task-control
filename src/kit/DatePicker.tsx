@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Icon } from '../components/Icons';
 import { addMonths, fromDateKey, isSameDay, toDateKey } from '../lib/dates';
+import { SearchField } from './SearchField';
 
 // Выбор даты и времени вместо системного календаря браузера.
 // Значения — как у стандартных полей: дата «2026-09-17», дата и время «2026-09-17T10:00».
@@ -62,6 +63,7 @@ type Props = {
 function DateInput({ mode, value, onChange, id, disabled, readOnly, invalid, placeholder, step = 30 }: Props & { mode: Mode }) {
   const [text, setText] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [timeQuery, setTimeQuery] = useState('');
   const selected = value ? fromDateKey(value.slice(0, 10)) : null;
   const time = value.slice(11, 16) || '09:00';
   const [month, setMonth] = useState(() => selected ?? new Date());
@@ -95,6 +97,7 @@ function DateInput({ mode, value, onChange, id, disabled, readOnly, invalid, pla
   }, [open, mode]);
 
   const show = () => {
+    setTimeQuery('');
     const base = selected ?? new Date();
     setMonth(base);
     setCursor(base);
@@ -154,6 +157,7 @@ function DateInput({ mode, value, onChange, id, disabled, readOnly, invalid, pla
   };
 
   const days = monthGrid(month);
+  const shownTimes = TIMES(step).filter((t) => t.includes(timeQuery.trim()));
   return (
     <div className={`datefield${open ? ' open' : ''}`} ref={root}>
       <input
@@ -246,12 +250,22 @@ function DateInput({ mode, value, onChange, id, disabled, readOnly, invalid, pla
             </div>
           </div>
           {mode === 'datetime' && (
-            <div className="datepop-time" role="listbox" aria-label="Время" ref={timeList}>
-              {TIMES(step).map((t) => (
-                <button key={t} type="button" role="option" aria-selected={t === time} onClick={() => pickTime(t)}>
-                  {t}
-                </button>
-              ))}
+            <div className="datepop-time">
+              <SearchField value={timeQuery} onChange={setTimeQuery} label="Поиск времени" placeholder="ЧЧ:ММ"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    if (shownTimes.length) pickTime(shownTimes[0]);
+                  }
+                }} />
+              <div className="datepop-time-list" role="listbox" aria-label="Время" ref={timeList}>
+                {shownTimes.map((t) => (
+                  <button key={t} type="button" role="option" aria-selected={t === time} onClick={() => pickTime(t)}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+              {!shownTimes.length && <p className="dd-empty" role="status">Ничего не найдено</p>}
             </div>
           )}
         </div>

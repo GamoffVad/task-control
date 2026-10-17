@@ -7,6 +7,7 @@ export type Permission =
   | 'admin.access'
   | 'authentication.manage'
   | 'scoring.manage'
+  | 'periods.manage'
   | 'users.manage'
   | 'units.manage'
   | 'roles.manage'
@@ -41,6 +42,10 @@ export type ManagedUser = {
   employeeId: number;
   role: Role;
   active: boolean;
+  /** Не показывать сотрудника в рабочих разделах; возможность входа определяется active. */
+  hidden?: boolean;
+  /** Индивидуальная ежегодная норма отпуска, календарных дней. */
+  annualVacationDays?: number;
   /** Подразделение пользователя (обычно отделение или отдел). */
   unitId?: string;
 };
@@ -201,8 +206,10 @@ export type ReportEntry = {
 };
 
 export type Report = {
-  /** Начало отчётной недели (пятница), YYYY-MM-DD. */
+  /** Начало отчётного периода, YYYY-MM-DD. */
   weekStart: string;
+  /** Последний день включительно; у старых отчётов — начало + 6 дней. */
+  periodEnd?: string;
   submittedAt: string;
   entries: ReportEntry[];
 };
@@ -244,7 +251,8 @@ export type User = {
 };
 
 /** Вид отсутствия. */
-export type AbsenceType = 'vacation' | 'trip' | 'dayoff' | 'sick' | 'study';
+/** Код из справочника видов событий; системные коды определяют правила расчёта. */
+export type AbsenceType = string;
 
 /** Заявка ждёт решения руководителя; отклонённая не учитывается в графике и остатках. */
 export type AbsenceStatus = 'request' | 'approved' | 'rejected';
@@ -253,6 +261,13 @@ export type Absence = {
   id: string;
   employeeId: number;
   type: AbsenceType;
+  /** Код из справочника типов отпусков; только для type = vacation. */
+  vacationType?: string;
+  /** Код из справочника видов дежурств; только для type = duty. */
+  dutyType?: string;
+  /** Дни дороги внутри дат отсутствия: в начале и в конце отпуска. */
+  travelDaysBefore?: number;
+  travelDaysAfter?: number;
   /** Первый день, YYYY-MM-DD. */
   from: string;
   /** Последний день включительно; null — больничный без известной даты окончания. */
@@ -275,8 +290,15 @@ export type Entitlement = {
   dayoffAccrued: number;
 };
 
+/** Первый день нового отпускного периода; ежегодно, без удаления истории. */
+export type VacationSettings = { resetMonth: number; resetDay: number };
+
+/** Дни недели: 0 — воскресенье, 1 — понедельник, …, 6 — суббота. */
+export type WeeklyPeriod = { startDay: number; endDay: number };
+export type PeriodSettings = { planning: WeeklyPeriod; reporting: WeeklyPeriod };
+
 /** Редактируемое значение одного из системных справочников. */
-export type DictionaryKind = 'taskCategory' | 'absenceType' | 'taskStatus';
+export type DictionaryKind = 'taskCategory' | 'absenceType' | 'taskStatus' | 'vacationType' | 'dutyType';
 
 export type DictionaryEntry = {
   id: string;
@@ -295,6 +317,8 @@ export type AppState = {
   chatReads: ChatRead[];
   absences: Absence[];
   entitlements: Entitlement[];
+  vacationSettings?: VacationSettings;
+  periodSettings?: PeriodSettings;
   planRows: PlanRow[];
   dictionaries: DictionaryEntry[];
   users: ManagedUser[];

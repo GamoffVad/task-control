@@ -425,15 +425,24 @@ h2 { font-size: var(--size-heading); font-weight: 700; margin: 0; color: var(--i
   .filter-card:first-child { padding-left: 0; border-left: none !important; }
 }
 
-.stepper { display: flex; align-items: center; gap: 6px; min-height: 44px; flex-wrap: wrap; }
-@media (min-width: 768px) { .stepper { min-height: 34px; } }
-.stepper .value { font-size: 15px; font-weight: 700; color: var(--ink); margin: 0 6px; }
+.stepper { display: grid; grid-template-columns: 36px 36px minmax(0, 1fr); align-items: center; gap: 6px; min-height: 44px; width: 100%; }
+.stepper .value { min-width: 0; font-size: 15px; font-weight: 700; color: var(--ink); margin: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stepper > .text-action { grid-column: 3; justify-self: start; white-space: nowrap; }
+.page-actions > .report-submit { min-width: 190px; }
+.stepper--compact { --stepper-value-width: 9em; grid-template-columns: 36px 36px var(--stepper-value-width) max-content; width: max-content; }
+.stepper--compact > .text-action { grid-column: auto; }
+@media (min-width: 768px) {
+  .stepper { min-height: 34px; width: max-content; grid-template-columns: 36px 36px var(--stepper-value-width, 16em) max-content; }
+  .stepper > .text-action { grid-column: auto; }
+}
 .stepper .icon-btn { width: 36px; height: 36px; }
-@media (min-width: 1024px) { .stepper .icon-btn { width: 30px; height: 30px; } }
+@media (min-width: 1024px) { .stepper { grid-template-columns: 30px 30px var(--stepper-value-width, 16em) max-content; } .stepper .icon-btn { width: 30px; height: 30px; } }
 
 .seg { display: flex; flex-wrap: wrap; gap: 0 16px; min-height: 44px; align-items: stretch; }
 @media (min-width: 768px) { .seg { min-height: 34px; } }
 .seg button {
+  display: inline-grid;
+  align-items: center;
   border: none;
   background: none;
   padding: 4px 0 2px;
@@ -443,6 +452,8 @@ h2 { font-size: var(--size-heading); font-weight: 700; margin: 0; color: var(--i
   cursor: pointer;
   white-space: nowrap;
 }
+.seg button .seg-label, .seg button::after { grid-area: 1 / 1; }
+.seg button::after { content: attr(data-label); font-weight: 700; visibility: hidden; pointer-events: none; }
 .seg button:hover { color: var(--accent); }
 .seg button[aria-pressed='true'] { font-weight: 700; color: var(--accent); border-bottom-color: var(--accent); }
 
@@ -481,23 +492,31 @@ h2 { font-size: var(--size-heading); font-weight: 700; margin: 0; color: var(--i
 .dd--plain .dd-btn:hover { color: var(--accent); }
 .dd--light .dd-btn { background: var(--sheet); border: 1px solid var(--dash); border-radius: 2px; padding: 0 12px; font-size: 13px; min-height: 42px; }
 .dd-btn .arrow { color: var(--ink-3); font-size: 12px; }
-.dd-list {
+.dd-pop {
   position: absolute;
   z-index: 60;
   top: calc(100% + 4px);
   left: 0;
   min-width: 100%;
   max-width: min(520px, 90vw);
-  max-height: 340px;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  width: max-content;
+  max-height: min(340px, 60vh);
+  overflow: hidden;
   background: var(--sheet);
   border: 1px dashed var(--dash);
   border-radius: 2px;
   padding: 4px 0;
   box-shadow: 0 0 0 4px var(--paper);
   margin: 0;
-  list-style: none;
 }
+.dd-list { margin: 0; padding: 0; list-style: none; overflow: auto; min-height: 0; }
+.dd-search { flex: none; padding: 6px 10px 10px; border-bottom: 1px dashed var(--dash); }
+.dd-search .search { width: 100%; min-width: 0; }
+.dd-search input { width: 100%; min-width: 0; }
+.dd-empty { margin: 0; padding: 14px; font-size: 13px; color: var(--ink-2); }
+.dd-search input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .dd-list button {
   display: block;
   width: 100%;
@@ -509,7 +528,8 @@ h2 { font-size: var(--size-heading); font-weight: 700; margin: 0; color: var(--i
   font-size: 13px;
   color: var(--ink-2);
   cursor: pointer;
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 @media (min-width: 1024px) { .dd-list button { min-height: 32px; } }
 .dd-list button:hover, .dd-list button.focus { color: var(--accent); background: var(--soft-alt); }
@@ -661,6 +681,11 @@ td.name { color: var(--ink); font-weight: 600; }
 .plan-table th.emp .pos { display: block; font-size: 10.5px; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--ink-4); }
 .plan-table .sticky-col { position: sticky; left: 0; z-index: 2; background: var(--paper); }
 .plan-table thead .sticky-col { z-index: 4; }
+.plan-search { width: 100%; min-width: 0; }
+.plan-search input { min-width: 0; font-size: 13px; font-weight: 600; }
+.plan-search input::placeholder { color: var(--ink-3); font-size: 11px; letter-spacing: 0.06em; }
+.plan-search input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.plan-table .plan-search-empty { padding: 16px 10px; color: var(--ink-2); }
 .plan-table .pos-cell { min-width: 240px; max-width: 300px; border-right: 1px dashed var(--dash); }
 .plan-table .pos-cell .code { font-family: var(--font-mono); color: var(--ink-4); font-size: 12px; margin-right: 8px; }
 .plan-table tr.section td { background: var(--soft-alt); color: var(--ink); font-weight: 700; font-size: 12.5px; padding-top: 8px; padding-bottom: 8px; }
@@ -766,6 +791,15 @@ td.name { color: var(--ink); font-weight: 600; }
   z-index: 2;
 }
 .cal-event:hover { outline: 1px solid var(--accent); }
+.calendar-move-note { margin: 6px 0; font-size: 12px; color: var(--ink-2); }
+.calendar-movable { touch-action: none; cursor: grab; }
+.calendar-dragging, .calendar-dragging * { cursor: grabbing !important; user-select: none; }
+.calendar-dragging .calendar-moving { opacity: 0.3; }
+.calendar-drag-ghost { position: fixed !important; z-index: 1000; pointer-events: none !important; margin: 0; opacity: 0.92; outline: 1px solid var(--accent); will-change: transform; transition: none; }
+.cal-drop-preview { position: absolute; left: 3px; right: 3px; z-index: 3; pointer-events: none; border: 2px dashed var(--accent); background: var(--soft); color: var(--ink); padding: 6px; overflow: hidden; font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
+.cal-drop-preview { transition: top 100ms ease-out; }
+@media (prefers-reduced-motion: reduce) { .cal-drop-preview { transition: none; } }
+.month-cell.calendar-drop-day { outline: 2px dashed var(--accent); outline-offset: -3px; background: var(--soft); }
 .cal-event .t { font-family: var(--font-mono); font-size: 10px; line-height: 1.25; font-weight: 400; color: var(--ink-3); display: block; }
 .cal-event .ti { display: block; }
 .cal-event .t { white-space: nowrap; }
@@ -1186,9 +1220,10 @@ a.label:hover { color: var(--accent); }
 .tl-who b { font-size: 12.5px; font-weight: 600; }
 .tl-who:hover b { color: var(--accent); }
 .tl-who .bal { display: flex; gap: 10px; font-size: 10.5px; color: var(--ink-3); }
-.tl-who .bal .num { color: var(--ink-2); }
-.tl-who .bal .low { color: var(--amber); font-weight: 600; }
 .tl-lane { display: grid; grid-template-columns: repeat(var(--days), minmax(var(--day), 1fr)); grid-template-rows: 1fr; border-bottom: 1px solid var(--grid-line); min-height: 40px; }
+/* Границы подразделений идут через фамилии и все дни, не меняя высоту строк. */
+.tl-lane.tl-group-start { position: relative; }
+.tl-group-start::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--ink-3); z-index: 2; pointer-events: none; }
 .tl-cell { grid-row: 1; border: none; border-right: 1px solid var(--grid-line-soft); background: none; padding: 0; cursor: pointer; }
 .tl-cell:disabled { cursor: default; }
 .tl-cell.we { background: var(--weekend); }
@@ -1451,7 +1486,11 @@ a.label:hover { color: var(--accent); }
 .tt-title h1 { font-size: clamp(22px, 1rem + 1vw, 26px); }
 .tt-sub { font-size: 13px; font-weight: 400; letter-spacing: 0; color: var(--ink-3); }
 .tt-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px; }
-.tt-group { display: flex; align-items: center; gap: 10px; min-width: 190px; }
+/* Постоянная ширина месяца удерживает стрелки на месте в выровненной вправо панели. */
+.tt-tools .stepper { flex: none; flex-wrap: nowrap; }
+.tt-tools .stepper .icon-btn { flex: none; }
+.tt-tools .stepper .value { white-space: nowrap; }
+.tt-group { display: flex; align-items: center; gap: 10px; flex: 0 0 210px; width: 210px; min-width: 0; }
 .tt-group .dd { flex: 1 1 auto; }
 .tt-stats { display: flex; flex-wrap: wrap; gap: 6px 0; padding: 8px 0; border-top: 1px dashed var(--dash); border-bottom: 1px dashed var(--dash); }
 .tt-stat { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding-right: 18px; margin-right: 18px; border-right: 1px dashed var(--dash); }
@@ -1514,9 +1553,9 @@ a.label:hover { color: var(--accent); }
 .tt-filter .dd-btn { font-size: 14px; }
 /* На телефоне кнопка списка остаётся удобной для пальца; на компьютере — компактной, по высоте сводки. */
 @media (min-width: 768px) { .tt-filter .dd-btn { min-height: 0; } }
-.dd--multi .dd-list { min-width: 220px; }
+.dd--multi .dd-pop { min-width: min(220px, 90vw); }
 /* Последний фильтр в строке: список раскрывается влево, иначе его обрезает край окна. */
-.filters .filter-card:last-child .dd-list { left: auto; right: 0; }
+.filters .filter-card:last-child .dd-pop { left: auto; right: 0; }
 .dd--multi .dd-list button { display: flex; align-items: center; gap: 9px; }
 .dd--multi .dd-list button[aria-selected] { font-weight: 400; background: none; color: var(--ink-2); }
 .dd--multi .dd-list button.focus { background: var(--soft); }
@@ -1550,3 +1589,10 @@ a.label:hover { color: var(--accent); }
 .auth-check h3 { font-size: 15px; margin: 0; }
 .auth-check-result { margin-top: 10px; }
 .auth-check-result .admin-table td:first-child { width: 42%; color: var(--ink-3); font-weight: 400; }
+.vacation-settings-form { max-width: 680px; }
+.period-settings-form { max-width: 1040px; }
+.period-settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+.period-settings-grid .card { min-width: 0; padding: 18px 0; }
+.period-settings-grid .field-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 760px) { .period-settings-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; } }
+@media (max-width: 480px) { .period-settings-grid .field-row { grid-template-columns: minmax(0, 1fr); } }

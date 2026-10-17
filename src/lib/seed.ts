@@ -19,8 +19,11 @@ export const DEFAULT_DICTIONARIES: DictionaryEntry[] = [
   { id: 'dict-absence-dayoff', dictionary: 'absenceType', code: 'dayoff', title: 'Отгул', color: '#6A4C93' },
   { id: 'dict-absence-sick', dictionary: 'absenceType', code: 'sick', title: 'Больничный', color: '#983A6E' },
   { id: 'dict-absence-study', dictionary: 'absenceType', code: 'study', title: 'Учёба', color: '#1E7268' },
+  { id: 'dict-absence-duty', dictionary: 'absenceType', code: 'duty', title: 'Дежурство', color: '#446B46' },
+  { id: 'dict-duty-regular', dictionary: 'dutyType', code: 'regular', title: 'Плановое дежурство' },
   { id: 'dict-status-planned', dictionary: 'taskStatus', code: 'planned', title: 'В работе' },
   { id: 'dict-status-done', dictionary: 'taskStatus', code: 'done', title: 'Выполнено' },
+  { id: 'dict-vacation-annual', dictionary: 'vacationType', code: 'annual', title: 'Ежегодный отпуск' },
 ];
 
 type SeedTask = [

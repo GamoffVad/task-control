@@ -18,11 +18,12 @@ import {
   isActive,
   shareIfApproved,
   vacationLoad,
+  travelNote,
   VACATION_LIMIT,
   type AbsenceDraft,
   type Clash,
 } from '../lib/absences';
-import { ABSENCE_TYPES, absenceType, employees, groupMembers, shortName } from '../lib/data';
+import { ABSENCE_TYPES, absenceType, department, employees, groupMembers, shortName } from '../lib/data';
 import { addDays, addMonths, fmtDate, fmtMonthYear, fmtWeekday, isSameDay, plural, startOfDay, toDateKey } from '../lib/dates';
 import { isManager } from '../lib/permissions';
 import { visibleBottom } from '../lib/viewport';
@@ -30,6 +31,8 @@ import { tetrisXlsx } from '../lib/tetrisExport';
 import { saveBlob } from '../lib/download';
 import { useStore } from '../lib/store';
 import type { Absence, AbsenceType, Task } from '../lib/types';
+import { vacationPeriodLabel, vacationTypeTitle, vacationYear } from '../lib/vacations';
+import { dutyTypeTitle } from '../lib/eventTypes';
 
 const SEVERITY: Record<Clash['severity'], [string, string]> = {
   overdue: ['Просрочено', 'var(--danger)'],
@@ -56,22 +59,26 @@ export const Absences = () => {
   const monthStart = days[0];
   const monthEnd = days[days.length - 1];
   const year = month.getFullYear();
+  const balanceDate = today >= monthStart && today <= monthEnd ? today : month;
 
-  const people = groupMembers(group);
+  // Тот же порядок, что в дереве «Сотрудники»: группы, затем сотрудники каждой группы.
+  const staffOrder = new Map(department.groups.flatMap((g) => g.employeeIds).map((id, index) => [id, index]));
+  const staffGroup = new Map(department.groups.flatMap((g) => g.employeeIds.map((id) => [id, g.id] as const)));
+  const people = [...groupMembers(group)].sort((a, b) => (staffOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (staffOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER));
   const visible = state.absences.filter((a) => isActive(a) && !hidden.has(a.type));
   const clashes = useMemo(() => findClashes(state.tasks, state.absences), [state.tasks, state.absences]);
   // Исполнитель видит пересечения только по своим задачам.
   const myClashes = manager ? clashes : clashes.filter((c) => c.employeeId === me);
   const requests = state.absences.filter((a) => a.status === 'request').sort((a, b) => a.from.localeCompare(b.from));
 
-  const absentToday = employees.filter((e) => state.absences.some((a) => a.employeeId === e.id && a.status === 'approved' && today >= new Date(`${a.from}T00:00`) && today <= absenceEnd(a)));
+  const absentToday = employees.filter((e) => state.absences.some((a) => a.type !== 'duty' && a.employeeId === e.id && a.status === 'approved' && today >= new Date(`${a.from}T00:00`) && today <= absenceEnd(a)));
   // Сколько сотрудников группы одновременно в отпуске: при доле выше порога — предупреждение.
   const load = vacationLoad(state.absences, people.map((e) => e.id), days, today);
   const overDays = new Set(load.over.map((d) => d.getDate()));
   const overReqDays = new Set(load.overWithRequests.map((d) => d.getDate()));
   const allIds = employees.map((e) => e.id);
   // Итоговая строка графика: сколько сотрудников отсутствует в каждый день (согласованные отсутствия любого вида).
-  const absentByDay = days.map((d) => people.filter((e) => state.absences.some((a) => a.employeeId === e.id && a.status === 'approved' && covers(a, d, today))));
+  const absentByDay = days.map((d) => people.filter((e) => state.absences.some((a) => a.type !== 'duty' && a.employeeId === e.id && a.status === 'approved' && covers(a, d, today))));
 
   // График занимает высоту окна под шапкой раздела и прокручивается внутри себя:
   // строка дней закреплена сверху, итоговая строка «Отсутствуют, %» — снизу.
@@ -101,10 +108,11 @@ export const Absences = () => {
       absences: state.absences.filter((a) => !hidden.has(a.type)),
       tasks: state.tasks,
       dictionaries: state.dictionaries,
+      vacationPeriodLabel: vacationPeriodLabel(vacationYear(balanceDate, state.vacationSettings), state.vacationSettings),
       types: ABSENCE_TYPES.map((t) => ({ key: t.key, label: t.label, full: t.full })),
       balance: (employeeId) => {
         if (!manager && employeeId !== me) return null;
-        const bal = balanceFor(state.absences, state.entitlements, employeeId, year);
+        const bal = balanceFor(state.absences, state.entitlements, employeeId, year, today, { users: state.users, settings: state.vacationSettings, referenceDate: balanceDate });
         return { vacation: bal.vacation.left, dayoff: bal.dayoff.left };
       },
       clashes,
@@ -146,6 +154,7 @@ export const Absences = () => {
         </div>
         <div className="tt-tools">
           <Stepper
+            compact
             label="Месяц"
             value={fmtMonthYear(month)}
             onPrev={() => setMonth((m) => addMonths(m, -1))}
@@ -234,24 +243,22 @@ export const Absences = () => {
               {fmtWeekday(d)}
             </div>
           ))}
-          {people.map((e) => {
-            const bal = balanceFor(state.absences, state.entitlements, e.id, year);
+          {people.map((e, index) => {
+            const groupStart = index > 0 && staffGroup.get(e.id) !== staffGroup.get(people[index - 1].id);
+            const bal = balanceFor(state.absences, state.entitlements, e.id, year, today, { users: state.users, settings: state.vacationSettings, referenceDate: balanceDate });
             const showBal = manager || e.id === me;
             const canAdd = canCreateFor(e.id);
             return (
               <div key={e.id} style={{ display: 'contents' }}>
-                <Link className="tl-who" to={`/employees/${e.id}`}>
+                <Link
+                  className={`tl-who${groupStart ? ' tl-group-start' : ''}`}
+                  to={`/employees/${e.id}`}
+                  data-tip={showBal ? `Осталось отпуска: ${bal.vacation.left} дн. Отпускной период: ${vacationPeriodLabel(vacationYear(balanceDate, state.vacationSettings), state.vacationSettings)}. Осталось отгулов: ${bal.dayoff.left} дн. (${year} год).` : undefined}
+                >
                   <b>{shortName(e.id)}</b>
-                  {showBal ? (
-                    <span className="bal">
-                      <span>отпуск <span className={`num${bal.vacation.left <= 5 ? ' low' : ''}`}>{bal.vacation.left}</span></span>
-                      <span>отгулы <span className="num">{bal.dayoff.left}</span></span>
-                    </span>
-                  ) : (
-                    <span className="bal">{e.position}</span>
-                  )}
+                  {!showBal && <span className="bal">{e.position}</span>}
                 </Link>
-                <div className="tl-lane">
+                <div className={`tl-lane${groupStart ? ' tl-group-start' : ''}`}>
                   {days.map((d) => (
                     <button
                       key={d.getDate()}
@@ -275,7 +282,7 @@ export const Absences = () => {
                         className={`tl-bar${a.status === 'request' ? ' request' : ''}${a.to === null ? ' open' : ''}${hit ? ' clash' : ''}${flash === a.id ? ' flash' : ''}`}
                         style={{ ...absColor(a.type), gridColumn: `${from} / span ${span}` }}
                         onClick={() => setEditing({ absence: a })}
-                        data-tip={`${t.full}${a.status === 'request' ? ' — заявка' : ''}: ${shortName(a.employeeId)}, ${fmtSpan(a)}${a.note ? `. ${a.note}` : ''}${hit ? '. Есть задачи со сроком в этот период' : ''}`}
+                        data-tip={`${a.type === 'vacation' ? vacationTypeTitle(a, state.dictionaries) : a.type === 'duty' ? dutyTypeTitle(a, state.dictionaries) : t.full}${a.status === 'request' ? ' — заявка' : ''}: ${shortName(a.employeeId)}, ${fmtSpan(a)}${travelNote(a) ? `. ${travelNote(a)}` : ''}${a.note ? `. ${a.note}` : ''}${hit ? '. Есть задачи со сроком в этот период' : ''}`}
                       >
                         {span >= 3 ? (
                           <>
@@ -337,7 +344,7 @@ export const Absences = () => {
         <span><i className="lg-dl" />назначен</span>
         <span><i className="lg-dl done" />выполнен</span>
         <span><i className="lg-dl bad" />во время события</span>
-        {manager && <span>под именем — остаток отпуска и отгулов</span>}
+        {manager && <span>остаток отпуска и отгулов — в подсказке у фамилии</span>}
       </div>
 
       <div className="split split--half">
@@ -357,7 +364,7 @@ export const Absences = () => {
                   </button>
                   <span className="sev">{label}</span>
                   <span className="m">
-                    {shortName(c.employeeId)} · срок <span className="num">{fmtDate(new Date(c.task.end))}</span> · {absenceType(c.absence.type).full.toLowerCase()} {fmtSpan(c.absence)}
+                    {shortName(c.employeeId)} · срок <span className="num">{fmtDate(new Date(c.task.end))}</span> · {(c.absence.type === 'vacation' ? vacationTypeTitle(c.absence, state.dictionaries) : absenceType(c.absence.type).full).toLowerCase()} {fmtSpan(c.absence)}
                     {c.absence.status === 'request' && ' (заявка)'}
                   </span>
                   <span className="act">
@@ -393,9 +400,9 @@ export const Absences = () => {
             {(manager ? requests : requests.filter((r) => r.employeeId === me)).map((r) => {
               const affected = clashes.filter((c) => c.absence.id === r.id).length;
               return (
-                <li key={r.id} style={{ ['--sev' as string]: `var(--abs-${r.type})` }}>
+                <li key={r.id} style={{ ...absColor(r.type), ['--sev' as string]: 'var(--c)' }}>
                   <button type="button" className="t" onClick={() => setEditing({ absence: r })}>
-                    {shortName(r.employeeId)} — {absenceType(r.type).full.toLowerCase()}
+                    {shortName(r.employeeId)} — {(r.type === 'vacation' ? vacationTypeTitle(r, state.dictionaries) : r.type === 'duty' ? dutyTypeTitle(r, state.dictionaries) : absenceType(r.type).full).toLowerCase()}
                   </button>
                   <span className="sev" style={{ color: 'var(--amber)' }}>заявка</span>
                   <span className="m">

@@ -1,12 +1,14 @@
 // Отсутствия: длительность, остатки отпуска и отгулов, пересечения со сроками задач.
 import { addDays, fromDateKey, startOfDay, toDateKey } from './dates';
-import type { Absence, AbsenceType, Entitlement, Task } from './types';
+import type { Absence, AbsenceType, Entitlement, ManagedUser, Task, VacationSettings } from './types';
+import { annualVacationDays, vacationPeriod, vacationYear } from './vacations';
 
 /** Больничный без даты окончания считается длящимся ещё столько дней после сегодняшнего. */
 export const OPEN_SICK_DAYS = 3;
-export const DEFAULT_VACATION_DAYS = 28;
+export { DEFAULT_VACATION_DAYS } from './vacations';
 
 export const isActive = (a: Absence) => a.status !== 'rejected';
+export const isAbsence = (a: Pick<Absence, 'type'>) => a.type !== 'duty';
 
 /** Последний день отсутствия; у открытого больничного — сегодня + OPEN_SICK_DAYS. */
 export const absenceEnd = (a: Absence, today: Date = new Date()): Date => {
@@ -23,6 +25,27 @@ export const covers = (a: Absence, day: Date, today: Date = new Date()): boolean
 
 const isWorkday = (d: Date) => d.getDay() !== 0 && d.getDay() !== 6;
 
+/** По одному отгулу за каждую субботу/воскресенье согласованного дежурства.
+ * Только наступившие дни; совпадающие записи одного сотрудника не удваивают начисление. */
+export const dutyDayoffs = (absences: Absence[], employeeId: number, year: number, today: Date = new Date()): number => {
+  const dates = new Set<string>();
+  const cutoff = startOfDay(today) < new Date(year, 11, 31) ? startOfDay(today) : new Date(year, 11, 31);
+  for (const a of absences) {
+    if (a.employeeId !== employeeId || a.type !== 'duty' || a.status !== 'approved' || !a.to) continue;
+    const from = fromDateKey(a.from) > new Date(year, 0, 1) ? fromDateKey(a.from) : new Date(year, 0, 1);
+    const to = fromDateKey(a.to) < cutoff ? fromDateKey(a.to) : cutoff;
+    for (let d = from; d <= to; d = addDays(d, 1)) if (!isWorkday(d)) dates.add(toDateKey(d));
+  }
+  return dates.size;
+};
+
+export const dutyWeekendDays = (a: Pick<Absence, 'from' | 'to'>): number => {
+  if (!a.to) return 0;
+  let days = 0;
+  for (let d = fromDateKey(a.from); d <= fromDateKey(a.to); d = addDays(d, 1)) if (!isWorkday(d)) days++;
+  return days;
+};
+
 /** Дни отсутствия в интервале [from; to]: отгул — рабочие, остальное — календарные. */
 export const daysBetween = (type: AbsenceType, from: Date, to: Date): number => {
   let n = 0;
@@ -31,23 +54,23 @@ export const daysBetween = (type: AbsenceType, from: Date, to: Date): number => 
 };
 
 export const absenceDays = (a: Absence, today: Date = new Date()): number => daysBetween(a.type, fromDateKey(a.from), absenceEnd(a, today));
+export const travelDays = (a: Pick<Absence, 'type' | 'travelDaysBefore' | 'travelDaysAfter'>): number => a.type === 'vacation' ? (a.travelDaysBefore ?? 0) + (a.travelDaysAfter ?? 0) : 0;
+export const travelNote = (a: Absence): string => travelDays(a) ? `Дорога: туда ${a.travelDaysBefore ?? 0} дн., обратно ${a.travelDaysAfter ?? 0} дн.` : '';
 
-/** Дни отсутствия, приходящиеся на год. */
-const daysInYear = (a: Absence, year: number, today: Date): number => {
-  const from = fromDateKey(a.from);
-  const to = absenceEnd(a, today);
-  const y0 = new Date(year, 0, 1);
-  const y1 = new Date(year, 11, 31);
+/** Дни отсутствия, приходящиеся на заданный период. */
+const daysInPeriod = (a: Absence, y0: Date, y1: Date, today: Date): number => {
+  const from = addDays(fromDateKey(a.from), a.type === 'vacation' ? a.travelDaysBefore ?? 0 : 0);
+  const to = addDays(absenceEnd(a, today), a.type === 'vacation' ? -(a.travelDaysAfter ?? 0) : 0);
   const s = from > y0 ? from : y0;
   const e = to < y1 ? to : y1;
   return s > e ? 0 : daysBetween(a.type, s, e);
 };
 
-export const entitlementFor = (list: Entitlement[], employeeId: number, year: number): Entitlement =>
+export const entitlementFor = (list: Entitlement[], employeeId: number, year: number, users: ManagedUser[] = []): Entitlement =>
   list.find((e) => e.employeeId === employeeId && e.year === year) ?? {
     employeeId,
     year,
-    vacationDays: DEFAULT_VACATION_DAYS,
+    vacationDays: annualVacationDays(users, list, employeeId),
     carriedOver: 0,
     dayoffAccrued: 0,
   };
@@ -64,29 +87,34 @@ export type Balance = {
  * Остатки за год. Отпуск: использовано (прошедшие дни), текущий (идёт сейчас), запланировано (впереди),
  * заявки — отдельно и в остаток не входят, пока руководитель их не согласует.
  */
-export const balanceFor = (absences: Absence[], entitlements: Entitlement[], employeeId: number, year: number, today: Date = new Date()): Balance => {
-  const ent = entitlementFor(entitlements, employeeId, year);
+export const balanceFor = (absences: Absence[], entitlements: Entitlement[], employeeId: number, year: number, today: Date = new Date(), options: { users?: ManagedUser[]; settings?: VacationSettings; referenceDate?: Date } = {}): Balance => {
+  const periodYear = vacationYear(options.referenceDate ?? new Date(year, today.getMonth(), today.getDate()), options.settings);
+  const period = vacationPeriod(periodYear, options.settings);
+  const ent = entitlementFor(entitlements, employeeId, periodYear, options.users);
+  const calendarEnt = entitlementFor(entitlements, employeeId, year, options.users);
   const mine = absences.filter((a) => a.employeeId === employeeId && isActive(a));
   const t = startOfDay(today);
   const b: Balance = {
     vacation: { total: ent.vacationDays + ent.carriedOver, used: 0, current: 0, planned: 0, requested: 0, left: 0 },
-    dayoff: { accrued: ent.dayoffAccrued, used: 0, requested: 0, left: 0 },
+    dayoff: { accrued: calendarEnt.dayoffAccrued + dutyDayoffs(absences, employeeId, year, today), used: 0, requested: 0, left: 0 },
     sick: { days: 0, cases: 0 },
     trip: { days: 0, cases: 0 },
     study: { days: 0, cases: 0 },
   };
   for (const a of mine) {
-    const days = daysInYear(a, year, today);
+    const days = a.type === 'vacation' ? daysInPeriod(a, period.from, period.to, today) : daysInPeriod(a, new Date(year, 0, 1), new Date(year, 11, 31), today);
     if (!days) continue;
     if (a.type === 'vacation') {
+      const vacationFrom = addDays(fromDateKey(a.from), a.travelDaysBefore ?? 0);
+      const vacationTo = addDays(absenceEnd(a, today), -(a.travelDaysAfter ?? 0));
       if (a.status === 'request') b.vacation.requested += days;
-      else if (absenceEnd(a, today) < t) b.vacation.used += days;
-      else if (fromDateKey(a.from) > t) b.vacation.planned += days;
+      else if (vacationTo < t || period.to < t) b.vacation.used += days;
+      else if (vacationFrom > t) b.vacation.planned += days;
       else b.vacation.current += days;
     } else if (a.type === 'dayoff') {
       if (a.status === 'request') b.dayoff.requested += days;
       else b.dayoff.used += days;
-    } else {
+    } else if (a.type === 'sick' || a.type === 'trip' || a.type === 'study') {
       b[a.type].days += days;
       b[a.type].cases += 1;
     }
@@ -105,7 +133,7 @@ export type Clash = { task: Task; employeeId: number; absence: Absence; severity
  * Прошедший срок — «просрочено», будущий — «под угрозой», отсутствие по заявке — «по заявке».
  */
 export const findClashes = (tasks: Task[], absences: Absence[], today: Date = new Date()): Clash[] => {
-  const active = absences.filter(isActive);
+  const active = absences.filter((a) => isActive(a) && isAbsence(a));
   const t = startOfDay(today);
   const out: Clash[] = [];
   for (const task of tasks) {
@@ -126,13 +154,18 @@ export const clashFor = (clashes: Clash[], taskId: string): Clash | undefined =>
 
 export type AbsenceDraft = Omit<Absence, 'id' | 'createdAt' | 'decidedBy'> & { id?: string };
 
-export type AbsenceErrors = Partial<Record<'from' | 'to' | 'overlap', string>>;
+export type AbsenceErrors = Partial<Record<'from' | 'to' | 'overlap' | 'travel', string>>;
 
 export const validateAbsence = (d: AbsenceDraft, all: Absence[], today: Date = new Date()): AbsenceErrors => {
   const errors: AbsenceErrors = {};
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d.from)) errors.from = 'Укажите первый день.';
   if (d.to === null && d.type !== 'sick') errors.to = 'Укажите последний день. Без даты окончания можно оформить только больничный.';
   if (d.to !== null && d.to < d.from) errors.to = 'Последний день раньше первого: исправьте даты.';
+  if (d.type === 'vacation') {
+    const values = [d.travelDaysBefore ?? 0, d.travelDaysAfter ?? 0];
+    if (values.some((n) => !Number.isInteger(n) || n < 0 || n > 366)) errors.travel = 'Дни на дорогу: укажите целые числа от 0 до 366.';
+    else if (!errors.from && !errors.to && d.to && travelDays(d) > daysBetween('vacation', fromDateKey(d.from), fromDateKey(d.to))) errors.travel = 'Дни на дорогу не могут превышать весь период отсутствия.';
+  }
   if (!errors.from && !errors.to) {
     const probe: Absence = { ...d, id: d.id ?? 'new', createdAt: '', decidedBy: null };
     const s = fromDateKey(probe.from);
@@ -227,7 +260,7 @@ export const absenceInPeriod = (absences: Absence[], employeeId: number, from: D
   const t = startOfDay(to);
   return (
     absences
-      .filter((a) => a.employeeId === employeeId && a.status === 'approved' && fromDateKey(a.from) <= t && absenceEnd(a, today) >= f)
+      .filter((a) => isAbsence(a) && a.employeeId === employeeId && a.status === 'approved' && fromDateKey(a.from) <= t && absenceEnd(a, today) >= f)
       .sort((a, b) => a.from.localeCompare(b.from))[0] ?? null
   );
 };

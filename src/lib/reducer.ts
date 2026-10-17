@@ -7,11 +7,16 @@ import { normalizeAppearance } from './appearance';
 import { buildReportEntries, clampScore, upsertReport, type TaskDraft } from './logic';
 import { absenceAccess, isManager, taskAccess } from './permissions';
 import { toDateKey } from './dates';
+import { normalizePeriodSettings, validPeriodSettings, validReportRange, weeklyPeriodEnd } from './periods';
+import type { PeriodSettings } from './types';
 import { scopeOf, taskVisible, type Scope } from './visibility';
-import type { AbsenceDraft } from './absences';
+import { entitlementFor, validateAbsence, type AbsenceDraft } from './absences';
 import type { Absence, AbsenceStatus, AppearanceSettings, AppState, ChatRead, AuthenticationMode, Data, DictionaryEntry, DictionaryKind, Entitlement, ManagedUser, Message, Permission, PlanRow, Role, RoleDefinition, ScoringSettings, Task, TemplateScope, Unit, UnitKind, User } from './types';
 import { DEFAULT_UNIT_OF, DEFAULT_UNITS, PARENT_KIND } from './units';
 import { DEFAULT_TEMPLATES, parseTemplate, templateScope } from './templates';
+import { normalizeVacationSettings, validVacationDays, validVacationSettings, vacationTypeCode, vacationTypes, vacationYear, withVacationTypes } from './vacations';
+import type { VacationSettings } from './types';
+import { dutyDictionaryInUse, dutyTypeCode, dutyTypes, eventTypeExists, systemEvent, withDutyTypes } from './eventTypes';
 
 export type DictionaryDraft = {
   id?: string;
@@ -40,19 +45,21 @@ export type Action =
   | { type: 'logout' }
   | { type: 'saveTask'; draft: TaskDraft; now?: Date }
   | { type: 'deleteTask'; id: string }
-  | { type: 'submitReport'; weekStart: Date; now?: Date }
+  | { type: 'submitReport'; weekStart: Date; periodEnd?: Date; now?: Date }
   | { type: 'sendMessage'; text: string; now?: Date }
   | { type: 'deleteMessage'; id: string }
   | { type: 'markChatRead'; now?: Date }
   | { type: 'saveAbsence'; draft: AbsenceDraft; now?: Date }
   | { type: 'deleteAbsence'; id: string }
   | { type: 'decideAbsence'; id: string; status: Exclude<AbsenceStatus, 'request'> }
-  | { type: 'saveEntitlement'; entitlement: Entitlement }
+  | { type: 'saveEntitlement'; entitlement: Entitlement; dayoffYear?: number; now?: Date }
+  | { type: 'saveVacationSettings'; settings: VacationSettings }
+  | { type: 'savePeriodSettings'; settings: PeriodSettings }
   | { type: 'saveDictionary'; draft: DictionaryDraft }
   | { type: 'deleteDictionary'; id: string }
   | { type: 'savePlanRow'; draft: PlanRowDraft }
   | { type: 'deletePlanRow'; id: string }
-  | { type: 'saveManagedUser'; employeeId: number; role: Role; active: boolean; windowsLogin?: string; unitId?: string; fullName?: string; position?: string; email?: string }
+  | { type: 'saveManagedUser'; employeeId: number; role: Role; active: boolean; hidden?: boolean; annualVacationDays?: number; windowsLogin?: string; unitId?: string; fullName?: string; position?: string; email?: string; now?: Date }
   | { type: 'saveUnit'; draft: UnitDraft }
   | { type: 'saveTemplate'; draft: { id?: string; name: string; body: string; scope: TemplateScope } }
   | { type: 'deleteTemplate'; id: string }
@@ -86,6 +93,8 @@ export const PERSISTED: Action['type'][] = [
   'deleteAbsence',
   'decideAbsence',
   'saveEntitlement',
+  'saveVacationSettings',
+  'savePeriodSettings',
   'saveDictionary',
   'deleteDictionary',
   'savePlanRow',
@@ -141,6 +150,9 @@ const saveAbsence = (state: AppState, draft: AbsenceDraft, now: Date): AppState 
     // Исполнитель подаёт заявку только на себя; согласует её руководитель.
     employeeId: manager ? draft.employeeId : user!.employeeId,
     type: draft.type,
+    ...(draft.type === 'duty' ? { dutyType: dutyTypeCode(draft, state.dictionaries) } : {}),
+    ...(draft.type === 'vacation' && draft.vacationType ? { vacationType: draft.vacationType } : {}),
+    ...(draft.type === 'vacation' ? { travelDaysBefore: draft.travelDaysBefore ?? 0, travelDaysAfter: draft.travelDaysAfter ?? 0 } : {}),
     from: draft.from,
     to: draft.type === 'sick' ? draft.to : (draft.to ?? draft.from),
     status: manager ? draft.status : 'request',
@@ -178,10 +190,13 @@ export const reducer = (state: AppState, action: Action): AppState => {
     case 'submitReport': {
       if (!hasPermission(state.user, 'reports.view') || !hasPermission(state.user, 'tasks.plan')) return state;
       const now = action.now ?? new Date();
+      const periodEnd = action.periodEnd ?? weeklyPeriodEnd(action.weekStart, normalizePeriodSettings(state.periodSettings).reporting);
+      if (!validReportRange(action.weekStart, periodEnd)) return state;
       const report = {
         weekStart: toDateKey(action.weekStart),
+        periodEnd: toDateKey(periodEnd),
         submittedAt: now.toISOString(),
-        entries: buildReportEntries(state, action.weekStart),
+        entries: buildReportEntries(state, action.weekStart, periodEnd),
       };
       return { ...state, reports: upsertReport(state.reports, report) };
     }
@@ -204,8 +219,19 @@ export const reducer = (state: AppState, action: Action): AppState => {
       // Отметка «прочитано» только для себя; время — серверное, поэтому состояние всегда новое.
       if (!state.user) return state;
       return { ...state, chatReads: markRead(state.chatReads, state.user.employeeId, (action.now ?? new Date()).toISOString()) };
-    case 'saveAbsence':
-      return saveAbsence(state, action.draft, action.now ?? new Date());
+    case 'saveAbsence': {
+      const draft = action.draft;
+      if (!eventTypeExists(draft.type, state.dictionaries)) return state;
+      if (validateAbsence(draft, state.absences, action.now ?? new Date()).travel) return state;
+      if (draft.type === 'duty' && !dutyTypes(state.dictionaries).some((e) => e.code === dutyTypeCode(draft, state.dictionaries))) return state;
+      const code = vacationTypeCode(draft, state.dictionaries);
+      if (draft.type === 'vacation' && !vacationTypes(state.dictionaries).some((e) => e.code === code)) return state;
+      return saveAbsence(state, { ...draft, vacationType: draft.type === 'vacation' ? code : undefined }, action.now ?? new Date());
+    }
+    case 'saveVacationSettings':
+      return hasPermission(state.user, 'entitlements.manage') && validVacationSettings(action.settings) ? { ...state, vacationSettings: { ...action.settings } } : state;
+    case 'savePeriodSettings':
+      return hasPermission(state.user, 'periods.manage') && validPeriodSettings(action.settings) ? { ...state, periodSettings: normalizePeriodSettings(action.settings) } : state;
     case 'deleteAbsence': {
       const a = state.absences.find((x) => x.id === action.id);
       if (!a || !absenceAccess(state.user, a).delete) return state;
@@ -226,10 +252,16 @@ export const reducer = (state: AppState, action: Action): AppState => {
         year: e.year,
         vacationDays: Math.max(0, Math.round(e.vacationDays)),
         carriedOver: Math.max(0, Math.round(e.carriedOver)),
-        dayoffAccrued: Math.max(0, Math.round(e.dayoffAccrued)),
+        dayoffAccrued: action.dayoffYear !== undefined && action.dayoffYear !== e.year ? entitlementFor(state.entitlements, e.employeeId, e.year, state.users).dayoffAccrued : Math.max(0, Math.round(e.dayoffAccrued)),
       };
       const rest = state.entitlements.filter((x) => !(x.employeeId === clean.employeeId && x.year === clean.year));
-      return { ...state, entitlements: [...rest, clean] };
+      let entitlements = [...rest, clean];
+      if (action.dayoffYear !== undefined && action.dayoffYear !== e.year) {
+        const calendarEnt = { ...entitlementFor(state.entitlements, e.employeeId, action.dayoffYear, state.users), dayoffAccrued: Math.max(0, Math.round(e.dayoffAccrued)) };
+        entitlements = [...entitlements.filter((x) => !(x.employeeId === e.employeeId && x.year === action.dayoffYear)), calendarEnt];
+      }
+      const users = clean.year === vacationYear(action.now ?? new Date(), state.vacationSettings) ? state.users.map((u) => u.employeeId === clean.employeeId ? { ...u, annualVacationDays: clean.vacationDays } : u) : state.users;
+      return { ...state, entitlements, users };
     }
     case 'saveDictionary': {
       if (!hasPermission(state.user, 'dictionaries.manage')) return state;
@@ -239,6 +271,10 @@ export const reducer = (state: AppState, action: Action): AppState => {
       if (!code || !title) return state;
       const existing = draft.id ? state.dictionaries.find((entry) => entry.id === draft.id) : undefined;
       if (draft.id && !existing) return state;
+      if (existing && existing.dictionary !== draft.dictionary) return state;
+      // Системные коды определяют правила расчёта; название и цвет можно менять.
+      if (existing?.dictionary === 'absenceType' && systemEvent(existing.code) && existing.code !== code) return state;
+      if (existing?.dictionary === 'absenceType' && existing.code !== code && systemEvent(code)) return state;
       const duplicate = state.dictionaries.some((entry) =>
         entry.id !== existing?.id && entry.dictionary === draft.dictionary && entry.code.toLowerCase() === code.toLowerCase(),
       );
@@ -248,10 +284,19 @@ export const reducer = (state: AppState, action: Action): AppState => {
       const dictionaries = existing
         ? state.dictionaries.map((item) => (item.id === entry.id ? entry : item))
         : [...state.dictionaries, entry];
-      return { ...state, dictionaries };
+      const absences = !existing || existing.code === code ? state.absences : state.absences.map((a) => {
+        if (existing.dictionary === 'absenceType' && a.type === existing.code) return { ...a, type: code };
+        if (existing.dictionary === 'vacationType' && a.type === 'vacation' && vacationTypeCode(a, state.dictionaries) === existing.code) return { ...a, vacationType: code };
+        if (existing.dictionary === 'dutyType' && a.type === 'duty' && dutyTypeCode(a, state.dictionaries) === existing.code) return { ...a, dutyType: code };
+        return a;
+      });
+      return { ...state, dictionaries, absences };
     }
     case 'deleteDictionary': {
       if (!hasPermission(state.user, 'dictionaries.manage') || !state.dictionaries.some((entry) => entry.id === action.id)) return state;
+      const entry = state.dictionaries.find((e) => e.id === action.id)!;
+      if (dutyDictionaryInUse(entry, state.dictionaries, state.absences)) return state;
+      if (entry.dictionary === 'vacationType' && (vacationTypes(state.dictionaries).length <= 1 || state.absences.some((a) => a.type === 'vacation' && vacationTypeCode(a, state.dictionaries) === entry.code))) return state;
       return { ...state, dictionaries: state.dictionaries.filter((entry) => entry.id !== action.id) };
     }
     case 'savePlanRow': {
@@ -294,6 +339,7 @@ export const reducer = (state: AppState, action: Action): AppState => {
       if (!hasPermission(state.user, 'users.manage')) return state;
       const current = state.users.find((item) => item.employeeId === action.employeeId);
       if (!current) return state;
+      if (action.annualVacationDays !== undefined && !validVacationDays(action.annualVacationDays)) return state;
       const windowsLogin = (action.windowsLogin ?? current.windowsLogin).trim().slice(0, 128);
       if (!windowsLogin || state.users.some((item) => item.employeeId !== action.employeeId && item.windowsLogin.toLowerCase() === windowsLogin.toLowerCase())) return state;
       if (action.unitId !== undefined && action.unitId !== '' && !state.units.some((u) => u.id === action.unitId)) return state;
@@ -305,15 +351,22 @@ export const reducer = (state: AppState, action: Action): AppState => {
       const email = (action.email ?? current.email).trim().toLowerCase().slice(0, 200);
       if (!fullName || !email) return state;
       if (state.users.some((item) => item.employeeId !== action.employeeId && item.email.toLowerCase() === email)) return state;
-      const users = state.users.map((item) => item.employeeId === action.employeeId ? { ...item, role: action.role, active: action.active, windowsLogin, unitId, fullName, position, email } : item);
+      const users = state.users.map((item) => item.employeeId === action.employeeId ? { ...item, role: action.role, active: action.active, hidden: action.hidden ?? item.hidden ?? false, ...(action.annualVacationDays !== undefined ? { annualVacationDays: action.annualVacationDays } : {}), windowsLogin, unitId, fullName, position, email } : item);
       const hasAdmin = users.some((item) => item.active && ['admin.access', 'users.manage', 'roles.manage'].every((permission) => permissionsFor(item.role, state.roles).includes(permission as Permission)));
       if (!hasAdmin) return state;
       const user = effectiveUser(state.user, users, state.roles);
-      return { ...state, users, user };
+      const year = vacationYear(action.now ?? new Date(), state.vacationSettings);
+      const currentEntitlement = entitlementFor(state.entitlements, action.employeeId, year, state.users);
+      const entitlements = action.annualVacationDays === undefined ? state.entitlements : [
+        ...state.entitlements.filter((e) => !(e.employeeId === action.employeeId && e.year === year)),
+        { ...currentEntitlement, vacationDays: action.annualVacationDays ?? currentEntitlement.vacationDays },
+      ];
+      return { ...state, users, user, entitlements };
     }
     case 'addManagedUser': {
       if (!hasPermission(state.user, 'users.manage')) return state;
       const account = action.account;
+      if (account.annualVacationDays !== undefined && !validVacationDays(account.annualVacationDays)) return state;
       const login = account.windowsLogin.trim().slice(0, 128);
       const fullName = account.fullName.trim().slice(0, 200);
       const email = account.email.trim().toLowerCase().slice(0, 200);
@@ -429,6 +482,8 @@ type Stored = {
   chatReads?: AppState['chatReads'];
   absences?: Absence[];
   entitlements?: Entitlement[];
+  vacationSettings?: VacationSettings;
+  periodSettings?: PeriodSettings;
   planRows?: PlanRow[];
   dictionaries?: DictionaryEntry[];
   users?: ManagedUser[];
@@ -471,10 +526,12 @@ export const migrate = (s: Stored): AppState => {
     chatReads: s.chatReads ?? [],
     absences: s.absences ?? [],
     entitlements: s.entitlements ?? [],
+    vacationSettings: normalizeVacationSettings(s.vacationSettings),
+    periodSettings: normalizePeriodSettings(s.periodSettings),
     planRows: sortedPlanRows(s.planRows ?? planRows),
-    dictionaries: s.dictionaries ?? DEFAULT_DICTIONARIES,
+    dictionaries: withDutyTypes(withVacationTypes(s.dictionaries ?? DEFAULT_DICTIONARIES)),
     users,
-    roles,
+    roles: s.periodSettings === undefined ? withAddedPermissions(roles) : roles,
     authentication: s.authentication ?? { ...DEFAULT_AUTHENTICATION },
     scoring: { ...DEFAULT_SCORING },
     appearance: normalizeAppearance(undefined),
@@ -483,7 +540,7 @@ export const migrate = (s: Stored): AppState => {
     user: null,
   };
   const legacyUser = s.user ? { ...s.user, role: s.user.role ?? roleOf(s.user.employeeId) } : null;
-  return { ...state, user: effectiveUser(legacyUser, users, roles) };
+  return { ...state, user: effectiveUser(legacyUser, users, state.roles) };
 };
 
 export const toData = (s: AppState): Data => ({
@@ -493,6 +550,8 @@ export const toData = (s: AppState): Data => ({
   chatReads: s.chatReads,
   absences: s.absences,
   entitlements: s.entitlements,
+  vacationSettings: normalizeVacationSettings(s.vacationSettings),
+  periodSettings: normalizePeriodSettings(s.periodSettings),
   planRows: s.planRows,
   dictionaries: s.dictionaries,
   users: s.users,
@@ -514,5 +573,5 @@ export const fromData = (d: Data, user: User | null): AppState => {
     return { ...account, windowsLogin: account.windowsLogin || account.email.split('@')[0], fullName: account.fullName || (employee ? `${employee.lastname} ${employee.name} ${employee.patronymic}` : account.windowsLogin), position: account.position || employee?.position || '', unitId: account.unitId ?? DEFAULT_UNIT_OF[account.employeeId] };
   });
   const { notices: _notices, accessVersion: _accessVersion, ...rest } = d;
-  return { version: 5, ...rest, chatReads: d.chatReads ?? [], units: d.units ?? DEFAULT_UNITS.map((u) => ({ ...u })), templates: (d.templates ?? DEFAULT_TEMPLATES).map((t) => ({ ...t, scope: templateScope(t) })), planRows: sortedPlanRows(d.planRows ?? planRows), dictionaries: d.dictionaries ?? DEFAULT_DICTIONARIES, users: normalizedUsers, roles, authentication: d.authentication ?? { ...DEFAULT_AUTHENTICATION }, scoring: d.scoring ?? { ...DEFAULT_SCORING }, appearance: normalizeAppearance(undefined), user: effectiveUser(user, normalizedUsers, roles) };
+  return { version: 5, ...rest, chatReads: d.chatReads ?? [], units: d.units ?? DEFAULT_UNITS.map((u) => ({ ...u })), templates: (d.templates ?? DEFAULT_TEMPLATES).map((t) => ({ ...t, scope: templateScope(t) })), planRows: sortedPlanRows(d.planRows ?? planRows), dictionaries: withDutyTypes(withVacationTypes(d.dictionaries ?? DEFAULT_DICTIONARIES)), vacationSettings: normalizeVacationSettings(d.vacationSettings), periodSettings: normalizePeriodSettings(d.periodSettings), users: normalizedUsers, roles, authentication: d.authentication ?? { ...DEFAULT_AUTHENTICATION }, scoring: d.scoring ?? { ...DEFAULT_SCORING }, appearance: normalizeAppearance(undefined), user: effectiveUser(user, normalizedUsers, roles) };
 };

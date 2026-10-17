@@ -9,6 +9,7 @@ export const PERMISSIONS: { key: Permission; label: string; group: string }[] = 
   { key: 'roles.manage', label: 'Роли и разрешения: настраивать', group: 'Администрирование' },
   { key: 'authentication.manage', label: 'Аутентификация: настраивать способ входа', group: 'Администрирование' },
   { key: 'scoring.manage', label: 'Оценка: настраивать правила подсчёта баллов', group: 'Администрирование' },
+  { key: 'periods.manage', label: 'Периоды: настраивать планирование и отчётность', group: 'Администрирование' },
   { key: 'dictionaries.manage', label: 'Словари: редактировать значения', group: 'Администрирование' },
   { key: 'planRows.manage', label: 'Разделы планирования: вести план', group: 'Администрирование' },
   { key: 'templates.manage', label: 'Шаблоны документов: редактировать', group: 'Администрирование' },
@@ -55,9 +56,9 @@ export const DEFAULT_AUTHENTICATION = { mode: 'form', allowEmergencyForm: true }
  * Версия набора прав. Права, добавленные после выпуска базы, дописываются один раз при обновлении:
  * иначе новый раздел администрирования остался бы недоступен.
  */
-export const ACCESS_VERSION = '8';
+export const ACCESS_VERSION = '9';
 /** Дописываются администратору: доступ к этим вкладкам выдаётся осознанно. */
-const ADDED_ADMIN_PERMISSIONS: Permission[] = ['authentication.manage', 'scoring.manage', 'units.manage', 'planRows.manage', 'templates.manage', 'tasks.viewAll', 'chat.moderate'];
+const ADDED_ADMIN_PERMISSIONS: Permission[] = ['authentication.manage', 'scoring.manage', 'units.manage', 'planRows.manage', 'templates.manage', 'tasks.viewAll', 'chat.moderate', 'periods.manage'];
 /** Дописываются всем ролям: оформление личное и по умолчанию доступно каждому. */
 const ADDED_FOR_ALL_PERMISSIONS: Permission[] = ['appearance.manage'];
 
@@ -75,6 +76,8 @@ export const ADMIN_TAB_PERMISSIONS: Permission[] = [
   'roles.manage',
   'authentication.manage',
   'scoring.manage',
+  'periods.manage',
+  'entitlements.manage',
   'appearance.manage',
   'dictionaries.manage',
   'planRows.manage',

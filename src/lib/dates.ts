@@ -1,4 +1,4 @@
-import type { DeadlineBucket, Period } from './types';
+import type { DeadlineBucket, Period, Report } from './types';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -60,6 +60,9 @@ export const fromDateKey = (key: string): Date => {
   const [y, m, d] = key.split('-').map(Number);
   return new Date(y, m - 1, d);
 };
+
+/** Границы отправленного отчёта не зависят от последующих настроек. */
+export const reportEnd = (report: Pick<Report, 'weekStart' | 'periodEnd'>): Date => report.periodEnd ? fromDateKey(report.periodEnd) : addDays(fromDateKey(report.weekStart), 6);
 
 /** Значение для <input type="datetime-local">. */
 export const toInputDateTime = (d: Date): string => {

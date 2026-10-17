@@ -1,5 +1,14 @@
 /* ——— Информация: документация внутри приложения (разметка из docs/manual.html) ——— */
 .info-layout { margin-top: 4px; }
+.info-search { max-width: 680px; margin: 0 0 18px; }
+.info-search .field-hint { margin: 6px 0 0; }
+.info-toc-text { min-width: 0; overflow-wrap: anywhere; }
+.info-hit-count, .info-snippet { display: block; font-weight: 400; font-size: 12px; line-height: 1.5; }
+.info-hit-count { color: var(--ink-3); margin-top: 4px; }
+.info-snippet { color: var(--ink-2); margin-top: 4px; }
+.info-match { background: var(--accent-bg); color: var(--ink); box-shadow: inset 0 -1px 0 var(--amber); scroll-margin-top: calc(var(--topbar-h) + 24px); }
+.info-match:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.info-empty { padding: 16px 0; }
 .info-toc > .caps { display: block; margin-bottom: 6px; }
 .info-toc ol { list-style: none; margin: 0; padding: 0; }
 .info-toc a {
@@ -13,6 +22,8 @@
 @media (max-width: 1023px) {
   .info-toc ol { display: flex; flex-wrap: wrap; gap: 0 14px; }
   .info-toc a { border-bottom: none; padding: 4px 0; }
+  .info-toc:has(.info-snippet) ol { display: block; }
+  .info-toc:has(.info-snippet) a { padding: 8px 0; border-bottom: 1px dashed var(--dash); }
 }
 
 .info-doc { min-width: 0; max-width: 980px; font-size: 14px; line-height: 1.6; color: var(--ink-2); }

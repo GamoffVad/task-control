@@ -1,4 +1,5 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useMemo } from 'react';
+import { displayState } from './displayState';
 import { createSeed } from './seed';
 import { isStored, migrate } from './reducer';
 import type { AppState, DirectoryUser } from './types';
@@ -63,8 +64,24 @@ export type StoreCtx = {
 };
 export const StoreContext = createContext<StoreCtx | null>(null);
 
-export const useStore = (): StoreCtx => {
+export const useStore = (options?: { includeHidden?: boolean }): StoreCtx => {
   const ctx = useContext(StoreContext);
-  if (!ctx) throw new Error('useStore вызван вне StoreProvider');
-  return ctx;
+  const includeHidden = options?.includeHidden;
+  const displayed = useMemo(() => {
+    if (!ctx || includeHidden) return ctx;
+    const state = displayState(ctx.state);
+    if (state === ctx.state) return ctx;
+    return { ...ctx, state, dispatch: (action: import('./reducer').Action) => {
+      if (action.type === 'saveTask' && action.draft.id) {
+        // Отредактированная общая задача не теряет скрытых исполнителей в исходных данных.
+        const taskId = action.draft.id;
+        const existing = ctx.state.tasks.find((task) => task.id === taskId);
+        const hiddenIds = existing?.assigneeIds.filter((id) => ctx.state.users.some((user) => user.employeeId === id && user.hidden)) ?? [];
+        if (hiddenIds.length) action = { ...action, draft: { ...action.draft, assigneeIds: [...new Set([...action.draft.assigneeIds, ...hiddenIds])] } };
+      }
+      ctx.dispatch(action);
+    } };
+  }, [ctx, includeHidden]);
+  if (!displayed) throw new Error('useStore вызван вне StoreProvider');
+  return displayed;
 };

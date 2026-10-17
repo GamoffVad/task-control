@@ -9,6 +9,7 @@ export const Stepper = ({
   onNext,
   onToday,
   todayLabel = 'Сегодня',
+  compact = false,
 }: {
   label: string;
   value: ReactNode;
@@ -16,15 +17,17 @@ export const Stepper = ({
   onNext: () => void;
   onToday?: () => void;
   todayLabel?: string;
+  /** Короткая подпись месяца; для диапазонов резервируется больше места. */
+  compact?: boolean;
 }) => (
-  <div className="stepper">
+  <div className={`stepper${compact ? ' stepper--compact' : ''}`}>
     <button type="button" className="icon-btn" onClick={onPrev} aria-label={`${label}: назад`}>
       <Icon.ChevronLeft size={15} />
     </button>
     <button type="button" className="icon-btn" onClick={onNext} aria-label={`${label}: вперёд`}>
       <Icon.Chevron size={15} />
     </button>
-    <span className="value" aria-live="polite">{value}</span>
+    <span className="value" aria-live="polite" data-tip={typeof value === 'string' ? value : undefined}>{value}</span>
     {onToday && (
       <button type="button" className="text-action" onClick={onToday}>
         {todayLabel}
@@ -43,8 +46,8 @@ export function Segmented<T extends string>({ value, options, onChange, label }:
   return (
     <div className="seg" role="group" aria-label={label}>
       {options.map((o) => (
-        <button key={o.value} type="button" aria-pressed={o.value === value} onClick={() => onChange(o.value)}>
-          {o.label}
+        <button key={o.value} type="button" data-label={o.label} aria-pressed={o.value === value} onClick={() => onChange(o.value)}>
+          <span className="seg-label">{o.label}</span>
         </button>
       ))}
     </div>

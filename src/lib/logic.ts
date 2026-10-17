@@ -1,6 +1,6 @@
 // Чистые функции предметной области — покрыты модульными тестами.
 import { categoryLabel, department, employees, fullName, planRows, unitOf } from './data';
-import { deadlineBucket, inRange, periodStart, planWeekRange, fromDateKey, toDateKey } from './dates';
+import { addDays, deadlineBucket, inRange, periodStart, planWeekRange, fromDateKey, startOfDay, toDateKey } from './dates';
 import { unitWithDescendants } from './units';
 import { DEFAULT_SCORING } from './access';
 import type { AppState, DeadlineBucket, Employee, ManagedUser, Period, PlanRow, Report, ReportEntry, ScoringSettings, Task, Unit } from './types';
@@ -31,8 +31,8 @@ export const isOverdue = (t: Task, now: Date = new Date()): boolean =>
 export const overdueTasks = (tasks: Task[], now: Date = new Date()): Task[] => tasks.filter((t) => isOverdue(t, now));
 
 /** Задачи плановой недели по строке и сотруднику. */
-export const tasksInWeek = (tasks: Task[], weekStart: Date): Task[] => {
-  const { from, to } = planWeekRange(weekStart);
+export const tasksInWeek = (tasks: Task[], weekStart: Date, periodEnd?: Date): Task[] => {
+  const { from, to } = periodEnd ? { from: startOfDay(weekStart), to: addDays(startOfDay(periodEnd), 1) } : planWeekRange(weekStart);
   return tasks.filter((t) => inRange(taskEnd(t), from, to));
 };
 
@@ -70,10 +70,10 @@ export const bucketize = (
 };
 
 /** Снимок исполненных задач недели для отчёта: одна запись на исполнителя. */
-export const buildReportEntries = (state: Pick<AppState, 'tasks'> & { planRows?: PlanRow[] }, weekStart: Date): ReportEntry[] => {
+export const buildReportEntries = (state: Pick<AppState, 'tasks'> & { planRows?: PlanRow[] }, weekStart: Date, periodEnd?: Date): ReportEntry[] => {
   const rows = state.planRows ?? planRows;
   const entries: ReportEntry[] = [];
-  for (const t of tasksInWeek(state.tasks, weekStart)) {
+  for (const t of tasksInWeek(state.tasks, weekStart, periodEnd)) {
     if (!t.done || !t.rowId) continue;
     const row = rows.find((item) => item.id === t.rowId);
     if (!row || row.isHeader) continue;
@@ -105,7 +105,12 @@ export const findReport = (reports: Report[], weekStart: Date): Report | undefin
 
 export const entriesInPeriod = (reports: Report[], period: Period, now: Date = new Date()): ReportEntry[] => {
   const from = periodStart(period, now);
-  const all = reports.flatMap((r) => r.entries);
+  // После смены границ соседние отчёты могут пересекаться: баллы задачи учитываются один раз.
+  const unique = new Map<string, ReportEntry>();
+  for (const report of [...reports].sort((a, b) => a.submittedAt.localeCompare(b.submittedAt))) {
+    for (const entry of report.entries) unique.set(`${entry.taskId}|${entry.assigneeId}`, entry);
+  }
+  const all = [...unique.values()];
   return from ? all.filter((e) => new Date(e.doneAt) >= from) : all;
 };
 
@@ -256,9 +261,10 @@ export const csvEscape = (v: string | number): string => {
 };
 
 export const reportToCsv = (report: Report, fullNameOf: (id: number) => string): string => {
-  const head = ['Позиция', 'Наименование позиции', 'Исполнитель', 'Задача', 'Результат', 'Срок', 'Документ', 'Баллы'];
+  const head = ['Отдел', 'Позиция', 'Наименование позиции', 'Исполнитель', 'Задача', 'Результат', 'Срок', 'Документ', 'Баллы'];
   const lines = report.entries.map((e) =>
     [
+      department.name,
       e.rowId,
       e.rowTitle,
       fullNameOf(e.assigneeId),

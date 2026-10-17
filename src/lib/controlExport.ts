@@ -1,8 +1,8 @@
 // Выгрузка «Контроля» в Word: то, что сейчас на доске, — раздел на каждую колонку срока.
 
-import { categoryLabel, shortName } from './data';
+import { categoryLabel, department, shortName } from './data';
 import { fmtDate, fmtDateTime, startOfDay } from './dates';
-import { wordDocument, wordTable } from './wordDoc';
+import { escapeHtml, wordDocument, wordTable } from './wordDoc';
 import type { DeadlineBucket, PlanRow, Task } from './types';
 
 export type ControlColumn = { key: DeadlineBucket; title: string; tasks: Task[] };
@@ -37,7 +37,7 @@ export const controlWordHtml = (columns: ControlColumn[], rows: PlanRow[], filte
     })
     .join('');
   const total = columns.reduce((s, c) => s + c.tasks.length, 0);
-  const body = `<h1>Контроль исполнения</h1><p class="sub">${filters}. Выгружено ${fmtDateTime(now)}. Всего задач: ${total}.</p>${
+  const body = `<h1>Контроль исполнения</h1><p class="sub">${escapeHtml(department.name)}</p><p class="sub">${filters}. Выгружено ${fmtDateTime(now)}. Всего задач: ${total}.</p>${
     sections || '<p>По выбранным условиям задач нет.</p>'
   }`;
   return wordDocument('Контроль исполнения', body);

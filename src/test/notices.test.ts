@@ -51,7 +51,7 @@ describe('события уведомлений', () => {
     const s1 = reducer(s0, { type: 'saveAbsence', draft: { employeeId: 3, type: 'vacation', from: '2026-10-05', to: '2026-10-09', status: 'request', note: '' }, now: NOW });
     const [request] = detectEvents(toData(s0), toData(s1), SIDOROV);
     expect(request).toMatchObject({ title: 'Заявка на отсутствие', url: '/tetris' });
-    expect(request.body).toBe('Сидоров Д.Е.: отпуск 05.10–09.10');
+    expect(request.body).toBe('Сидоров Д.Е.: ежегодный отпуск 05.10–09.10');
     expect(request.to).toContain(1);
     const id = s1.absences.find((a) => a.employeeId === 3 && a.from === '2026-10-05' && a.status === 'request')!.id;
     const s2 = reducer({ ...s1, user: BOSS }, { type: 'decideAbsence', id, status: 'approved' });

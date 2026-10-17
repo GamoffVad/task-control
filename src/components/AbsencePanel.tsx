@@ -1,6 +1,6 @@
 import { TextInput } from '../kit';
 import { useState } from 'react';
-import { absenceDays, balanceFor, entitlementFor, fmtSpan } from '../lib/absences';
+import { absenceDays, balanceFor, entitlementFor, fmtSpan, travelDays } from '../lib/absences';
 import { ABSENCE_STATUS_LABELS, absenceType } from '../lib/data';
 import { plural } from '../lib/dates';
 import { isManager } from '../lib/permissions';
@@ -9,6 +9,8 @@ import type { Absence } from '../lib/types';
 import { absColor } from './absColor';
 import { AbsenceModal } from './AbsenceModal';
 import { Icon } from './Icons';
+import { vacationPeriod, vacationPeriodLabel, vacationTypeTitle, vacationYear } from '../lib/vacations';
+import { dutyTypeTitle } from '../lib/eventTypes';
 
 const TOTALS = { sick: ['Больничные', 'случаев'], trip: ['Командировки', 'поездок'], study: ['Обучение', 'курсов'] } as const;
 
@@ -20,12 +22,15 @@ export const AbsencePanel = ({ id }: { id: number }) => {
   const manager = isManager(state.user);
   const own = state.user?.employeeId === id;
   const year = new Date().getFullYear();
-  const b = balanceFor(state.absences, state.entitlements, id, year);
-  const ent = entitlementFor(state.entitlements, id, year);
+  const periodYear = vacationYear(new Date(), state.vacationSettings);
+  const period = vacationPeriod(periodYear, state.vacationSettings);
+  const b = balanceFor(state.absences, state.entitlements, id, year, new Date(), { users: state.users, settings: state.vacationSettings });
+  const ent = entitlementFor(state.entitlements, id, periodYear, state.users);
+  const calendarEnt = entitlementFor(state.entitlements, id, year, state.users);
   const [editing, setEditing] = useState<{ absence?: Absence } | null>(null);
   const [norms, setNorms] = useState<{ vacationDays: string; carriedOver: string; dayoffAccrued: string } | null>(null);
   const list = state.absences
-    .filter((a) => a.employeeId === id && (a.from.startsWith(String(year)) || (a.to ?? '').startsWith(String(year))))
+    .filter((a) => a.employeeId === id && (a.type === 'vacation' ? new Date(`${a.from}T00:00:00`) <= period.to && new Date(`${a.to ?? a.from}T00:00:00`) >= period.from : a.from <= `${year}-12-31` && (a.to ?? `${year}-12-31`) >= `${year}-01-01`))
     .sort((a, b) => b.from.localeCompare(a.from));
 
   if (!manager && !own) return null;
@@ -35,7 +40,8 @@ export const AbsencePanel = ({ id }: { id: number }) => {
     const num = (v: string) => Math.max(0, Math.round(Number(v.replace(',', '.')) || 0));
     dispatch({
       type: 'saveEntitlement',
-      entitlement: { employeeId: id, year, vacationDays: num(norms.vacationDays), carriedOver: num(norms.carriedOver), dayoffAccrued: num(norms.dayoffAccrued) },
+      entitlement: { employeeId: id, year: periodYear, vacationDays: num(norms.vacationDays), carriedOver: num(norms.carriedOver), dayoffAccrued: num(norms.dayoffAccrued) },
+      dayoffYear: year,
     });
     setNorms(null);
   };
@@ -60,6 +66,8 @@ export const AbsencePanel = ({ id }: { id: number }) => {
             <i className="plan" style={{ width: pct(b.vacation.current + b.vacation.planned, b.vacation.total) }} />
           </div>
           <div className="bal-keys">
+            <span>норма <span className="num">{ent.vacationDays}</span> + перенесено <span className="num">{ent.carriedOver}</span></span>
+            <span>период <span className="num">{vacationPeriodLabel(periodYear, state.vacationSettings)}</span></span>
             <span>использовано <span className="num">{b.vacation.used}</span></span>
             <span>идёт и запланировано <span className="num">{b.vacation.current + b.vacation.planned}</span></span>
             {b.vacation.requested > 0 && <span className="amber">в заявках <span className="num">{b.vacation.requested}</span></span>}
@@ -77,6 +85,7 @@ export const AbsencePanel = ({ id }: { id: number }) => {
             <i className="used" style={{ width: pct(b.dayoff.used, b.dayoff.accrued) }} />
           </div>
           <div className="bal-keys">
+            <span>за дежурства <span className="num">{b.dayoff.accrued - calendarEnt.dayoffAccrued}</span> + вручную <span className="num">{calendarEnt.dayoffAccrued}</span></span>
             <span>использовано <span className="num">{b.dayoff.used}</span></span>
             {b.dayoff.requested > 0 && <span className="amber">в заявках <span className="num">{b.dayoff.requested}</span></span>}
           </div>
@@ -103,21 +112,22 @@ export const AbsencePanel = ({ id }: { id: number }) => {
       </div>
 
       <div className="card-head" style={{ marginTop: 20 }}>
-        <h2 style={{ fontSize: 14 }}>Отсутствия за год</h2>
+        <h2 style={{ fontSize: 14 }}>События сотрудника</h2>
         <button type="button" className="text-action" onClick={() => setEditing({})}>
-          <Icon.Plus size={12} /> {manager ? 'Добавить отсутствие' : 'Подать заявку'}
+          <Icon.Plus size={12} /> {manager ? 'Добавить событие' : 'Подать заявку'}
         </button>
       </div>
-      {list.length === 0 && <p className="empty">Отсутствий в этом году нет.</p>}
+      {list.length === 0 && <p className="empty">За расчётный период событий нет.</p>}
       <ul className="list">
         {list.map((a) => (
-          <li key={a.id} style={{ borderLeftColor: `var(--abs-${a.type})` }}>
+          <li key={a.id} style={{ ...absColor(a.type), borderLeftColor: 'var(--c)' }}>
             <button type="button" className="t" onClick={() => setEditing({ absence: a })}>
-              {absenceType(a.type).full}
+              {a.type === 'vacation' ? vacationTypeTitle(a, state.dictionaries) : a.type === 'duty' ? dutyTypeTitle(a, state.dictionaries) : absenceType(a.type).full}
             </button>
             <div className="m">
               <span className="num">{fmtSpan(a)}</span>
               <span>{absenceDays(a)} дн.</span>
+              {travelDays(a) > 0 && <span>включая дорогу {travelDays(a)} дн.</span>}
               <span className={`status-tag ${a.status}`}>{ABSENCE_STATUS_LABELS[a.status]}</span>
               {a.note && <span>{a.note}</span>}
             </div>
@@ -138,7 +148,7 @@ export const AbsencePanel = ({ id }: { id: number }) => {
                 <TextInput mono inputMode="numeric" value={norms.carriedOver} onChange={(e) => setNorms({ ...norms, carriedOver: e.target.value })} />
               </label>
               <label className="field">
-                <span className="caps">Отгулов накоплено</span>
+                <span className="caps">Отгулы, начисленные вручную</span>
                 <TextInput mono inputMode="numeric" value={norms.dayoffAccrued} onChange={(e) => setNorms({ ...norms, dayoffAccrued: e.target.value })} />
               </label>
               <button type="button" className="btn btn--primary" onClick={saveNorms}>
@@ -152,9 +162,9 @@ export const AbsencePanel = ({ id }: { id: number }) => {
             <button
               type="button"
               className="text-action"
-              onClick={() => setNorms({ vacationDays: String(ent.vacationDays), carriedOver: String(ent.carriedOver), dayoffAccrued: String(ent.dayoffAccrued) })}
+              onClick={() => setNorms({ vacationDays: String(ent.vacationDays), carriedOver: String(ent.carriedOver), dayoffAccrued: String(calendarEnt.dayoffAccrued) })}
             >
-              Нормы на {year} год: отпуск {ent.vacationDays} + перенесено {ent.carriedOver}, отгулов {ent.dayoffAccrued} — изменить
+              Нормы отпускного периода: отпуск {ent.vacationDays} + перенесено {ent.carriedOver}, отгулов в {year} году {calendarEnt.dayoffAccrued} — изменить
             </button>
           )}
         </div>

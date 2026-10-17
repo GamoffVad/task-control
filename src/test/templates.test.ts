@@ -4,7 +4,10 @@ import { createSeed } from '../lib/seed';
 import { DEFAULT_TEMPLATES, parseTemplate, renderTemplate, templateScope } from '../lib/templates';
 import { reportDocContext } from '../lib/reportExport';
 import { controlWordHtml } from '../lib/controlExport';
-import { bucketize } from '../lib/logic';
+import { bucketize, reportToCsv } from '../lib/logic';
+import { syncStaff } from '../lib/data';
+import { reducer } from '../lib/reducer';
+import { MAIN_DEPARTMENT_ID } from '../lib/units';
 import type { Report } from '../lib/types';
 import { planWeekStart } from '../lib/dates';
 
@@ -37,6 +40,27 @@ describe('выгрузка «Контроля» в Word', () => {
 });
 
 describe('документ отчётности', () => {
+  it('переименование отдела применяется к документам и CSV с безопасным экранированием', () => {
+    const original = createSeed(NOW);
+    const name = 'Отдел «Аналитика»; <исследования> & развитие';
+    const unit = original.units.find((u) => u.id === MAIN_DEPARTMENT_ID)!;
+    const state = reducer({ ...original, user: { email: 'user@example.com', employeeId: 1, role: 'administrator' } }, { type: 'saveUnit', draft: { ...unit, name } });
+    syncStaff(state.users, state.units);
+    try {
+      const start = planWeekStart(NOW);
+      const items = planItems(state.tasks, state.planRows, start, [1]);
+      const report = state.reports.at(-1)!;
+      expect(planDocContext(items, state.planRows, start, state.user, NOW).отдел).toBe(name);
+      expect(reportDocContext(report, state.planRows, start, state.user, NOW).отдел).toBe(name);
+      const planCsv = planToCsv(items, state.planRows, NOW);
+      const reportCsv = reportToCsv(report, () => 'Иванов');
+      expect(planCsv.split('\r\n')[1]).toMatch(/^"Отдел «Аналитика»; <исследования> & развитие";/);
+      expect(reportCsv.split('\r\n')[1]).toMatch(/^"Отдел «Аналитика»; <исследования> & развитие";/);
+      const html = controlWordHtml([], state.planRows, 'Все сотрудники', NOW);
+      expect(html).toContain('Отдел «Аналитика»; &lt;исследования&gt; &amp; развитие');
+      expect(html).not.toContain('<исследования>');
+    } finally { syncStaff(original.users, original.units); }
+  });
   it('объединяет исполнителей задачи, считает баллы и срок исполнения', () => {
     const base = { rowId: '1.1', rowTitle: '', title: 'Справка', deadline: '2026-09-10T18:00:00.000Z', result: 'готово', docName: 'Справка', docNumber: '7', score: 2 };
     const report: Report = { weekStart: '2026-09-04', submittedAt: '2026-09-11T09:00:00.000Z', entries: [
@@ -97,7 +121,7 @@ describe('шаблоны документов', () => {
     const items = planItems(s.tasks, s.planRows, planWeekStart(NOW), [1]);
     const csv = planToCsv(items, s.planRows, NOW);
     const [head, first] = csv.replace('\uFEFF', '').split('\r\n');
-    expect(head).toBe('Раздел;Позиция;Наименование позиции;Мероприятие;Срок;Исполнители;Категория;Статус;Документ;Результат');
+    expect(head).toBe('Отдел;Раздел;Позиция;Наименование позиции;Мероприятие;Срок;Исполнители;Категория;Статус;Документ;Результат');
     expect(first).toContain('Иванов Алексей Борисович');
     expect(csv.split('\r\n')).toHaveLength(items.length + 1);
   });

@@ -284,7 +284,7 @@ describe('логика задач', () => {
       },
       () => 'Иванов',
     );
-    expect(csv.startsWith('﻿Позиция;')).toBe(true);
+    expect(csv.startsWith('﻿Отдел;Позиция;')).toBe(true);
     expect(csv).toContain('"Текст; с ""кавычками"""');
     expect(csv).toContain('Док № 5;2,5');
   });

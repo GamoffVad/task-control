@@ -5,7 +5,9 @@ import { Button, Checkbox, ColorPicker, DateField, Dialog, PageHeader, Segmented
 import { DEFAULT_TEMPLATES, TEMPLATE_SCOPES, placeholdersFor, renderTemplate } from '../lib/templates';
 import { reportDocContext } from '../lib/reportExport';
 import { planDocContext, planItems } from '../lib/planExport';
-import { addDays, fmtDate, fmtNum, fmtRange, fromDateKey, planWeekStart, plural } from '../lib/dates';
+import { addDays, fmtDate, fmtNum, fmtRange, fromDateKey, reportEnd, plural } from '../lib/dates';
+import { normalizePeriodSettings, WEEKDAYS, weeklyPeriodDays, weeklyPeriodEnd, weeklyPeriodLabel, weeklyPeriodStart } from '../lib/periods';
+import type { WeeklyPeriod } from '../lib/types';
 import { PERMISSIONS, hasPermission, permissionsFor } from '../lib/access';
 import { COLOR_GROUPS, COLOR_TOKENS, DEFAULT_APPEARANCE, FONT_STACKS, isPresetActive, MAX_PRESETS, MONO_STACKS, presetsFor, SIZE_TOKENS, tokenValue, type TokenDef } from '../lib/appearance';
 import { applyTheme, useTheme, type Theme } from '../lib/theme';
@@ -15,14 +17,18 @@ import type { WindowsCheck } from '../lib/api';
 import type { AppearanceSettings, DictionaryEntry, DictionaryKind, DirectoryUser, DocumentTemplate, ManagedUser, ScoringSettings, TemplateScope, Permission, PlanRow, Role, Unit, UnitKind } from '../lib/types';
 import { PARENT_KIND, UNIT_KINDS, unitKindLabel, unitPath, unitTree, unitWithDescendants } from '../lib/units';
 import { unitOf } from '../lib/data';
+import { dutyDictionaryInUse, eventColorKey, systemEvent } from '../lib/eventTypes';
+import { annualVacationDays, normalizeVacationSettings, validVacationDays, vacationPeriodLabel, vacationTypeCode, vacationYear } from '../lib/vacations';
 
-type Tab = 'users' | 'units' | 'roles' | 'authentication' | 'scoring' | 'appearance' | 'dictionaries' | 'planRows' | 'templates';
+type Tab = 'users' | 'units' | 'roles' | 'authentication' | 'scoring' | 'appearance' | 'dictionaries' | 'planRows' | 'templates' | 'vacations' | 'periods';
 const ALL_TABS: { value: Tab; label: string; permission: Permission }[] = [
   { value: 'users', label: 'Пользователи', permission: 'users.manage' },
   { value: 'units', label: 'Подразделения', permission: 'units.manage' },
   { value: 'roles', label: 'Роли и разрешения', permission: 'roles.manage' },
   { value: 'authentication', label: 'Аутентификация', permission: 'authentication.manage' },
   { value: 'scoring', label: 'Оценка', permission: 'scoring.manage' },
+  { value: 'periods', label: 'Периоды', permission: 'periods.manage' },
+  { value: 'vacations', label: 'Отпуска', permission: 'entitlements.manage' },
   { value: 'appearance', label: 'Редактирование UI', permission: 'appearance.manage' },
   { value: 'dictionaries', label: 'Словари', permission: 'dictionaries.manage' },
   { value: 'planRows', label: 'Разделы планирования', permission: 'planRows.manage' },
@@ -38,13 +44,15 @@ const canAdminister = (role: Role, roles: ReturnType<typeof useStore>['state']['
 const DICTIONARIES: { value: DictionaryKind; label: string; hint: string }[] = [
   { value: 'taskCategory', label: 'Категории задач', hint: 'Обозначения для классификации задач.' },
   { value: 'absenceType', label: 'Виды отсутствий', hint: 'Причины отсутствия сотрудников.' },
+  { value: 'vacationType', label: 'Типы отпусков', hint: 'Выбираются при оформлении каждого отпуска. Все типы уменьшают общий остаток дней отпуска.' },
+  { value: 'dutyType', label: 'Виды дежурств', hint: 'Выбираются при оформлении дежурства в «Тетрисе». За каждую субботу и воскресенье согласованного дежурства начисляется один отгул.' },
   { value: 'taskStatus', label: 'Статусы задач', hint: 'Текстовые статусы процесса работы.' },
 ];
 
 type TabProps = { state: ReturnType<typeof useStore>['state']; dispatch: ReturnType<typeof useStore>['dispatch'] };
 
 export const Admin = () => {
-  const { state, dispatch } = useStore();
+  const { state, dispatch } = useStore({ includeHidden: true });
   const tabs = ALL_TABS.filter((item) => hasPermission(state.user, item.permission));
   const [tab, setTab] = useState<Tab>(() => tabs[0]?.value ?? 'users');
   const activeTab = tabs.some((item) => item.value === tab) ? tab : tabs[0]?.value;
@@ -64,6 +72,8 @@ export const Admin = () => {
       {activeTab === 'roles' && <RolesTab state={state} dispatch={dispatch} />}
       {activeTab === 'authentication' && <AuthenticationTab />}
       {activeTab === 'scoring' && <ScoringTab state={state} dispatch={dispatch} />}
+      {activeTab === 'periods' && <PeriodsTab state={state} dispatch={dispatch} />}
+      {activeTab === 'vacations' && <VacationsTab state={state} dispatch={dispatch} />}
       {activeTab === 'appearance' && <AppearanceTab state={state} dispatch={dispatch} />}
       {activeTab === 'dictionaries' && <DictionariesTab state={state} dispatch={dispatch} />}
       {activeTab === 'planRows' && <PlanRowsTab state={state} dispatch={dispatch} />}
@@ -91,7 +101,7 @@ const UsersTab = ({ state, dispatch }: TabProps) => {
           const protectedAccount = account.active && canAdminister(account.role, state.roles) && !state.users.some((other) => other.employeeId !== account.employeeId && other.active && canAdminister(other.role, state.roles));
           const currentAccount = state.user?.employeeId === account.employeeId;
           return <tr key={account.employeeId}>
-            <td><b>{account.fullName}</b><small className="admin-cell-note">{account.position || 'Сотрудник'}</small></td>
+            <td><b>{account.fullName}</b><small className="admin-cell-note">{account.position || 'Сотрудник'}{account.hidden && ' · скрыт в рабочих разделах'}</small></td>
             <td>{(() => { const path = unitPath(state.units, unitOf(account)); const last = path.at(-1); return last ? <span data-tip={path.map((u) => u.name).join(' › ')}>{last.name}</span> : <span className="muted">не выбрано</span>; })()}</td>
             <td><span className="num muted">{account.email}</span></td>
             <td><span className="num">{account.windowsLogin}</span></td>
@@ -107,13 +117,61 @@ const UsersTab = ({ state, dispatch }: TabProps) => {
     </div>
     <p className="help-note">Windows-логин указывается без пароля: например, ivanov или DOMAIN\ivanov. В системе всегда сохраняется хотя бы один активный пользователь с правами управления.</p>
     {adding && <AddUserDialog users={state.users} units={state.units} directoryAvailable={directoryAvailable} onClose={() => setAdding(false)} onSave={(account) => { dispatch({ type: 'addManagedUser', account }); setAdding(false); }} />}
-    {editing && <EditUserDialog account={editing} users={state.users} units={state.units} protectedAccount={editing.active && canAdminister(editing.role, state.roles) && state.users.filter((item) => item.active && canAdminister(item.role, state.roles)).length === 1} onClose={() => setEditing(null)} onSave={(draft) => { dispatch({ type: 'saveManagedUser', employeeId: editing.employeeId, role: draft.role, active: draft.active, windowsLogin: draft.windowsLogin, unitId: draft.unitId, fullName: draft.fullName, position: draft.position, email: draft.email }); setEditing(null); }} />}
+    {editing && <EditUserDialog account={editing} users={state.users} units={state.units} protectedAccount={editing.active && canAdminister(editing.role, state.roles) && state.users.filter((item) => item.active && canAdminister(item.role, state.roles)).length === 1} onClose={() => setEditing(null)} onSave={(draft) => { dispatch({ type: 'saveManagedUser', employeeId: editing.employeeId, role: draft.role, active: draft.active, hidden: draft.hidden, annualVacationDays: Number(draft.annualVacationDays), windowsLogin: draft.windowsLogin, unitId: draft.unitId, fullName: draft.fullName, position: draft.position, email: draft.email }); setEditing(null); }} />}
     {deleting && <DeleteUserDialog account={deleting} onClose={() => setDeleting(null)} onConfirm={() => { dispatch({ type: 'deleteManagedUser', employeeId: deleting.employeeId }); setDeleting(null); }} />}
   </div>;
 };
 
+const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+const PeriodsTab = ({ state, dispatch }: TabProps) => {
+  const [settings, setSettings] = useState(() => normalizePeriodSettings(state.periodSettings));
+  const [saved, setSaved] = useState(false);
+  const change = (kind: 'planning' | 'reporting', field: keyof WeeklyPeriod, value: number) => { setSettings((s) => ({ ...s, [kind]: { ...s[kind], [field]: value } })); setSaved(false); };
+  return <div className="admin-section">
+    <div className="card-head admin-content-head"><div><h2>Плановый и отчётный периоды</h2><p className="subtitle">Общие настройки для всех сотрудников. Каждый период повторяется еженедельно; последний день включён.</p></div></div>
+    <form className="form-stack period-settings-form" onSubmit={(e) => { e.preventDefault(); dispatch({ type: 'savePeriodSettings', settings }); setSaved(true); }}>
+      <div className="period-settings-grid">
+      {(['planning', 'reporting'] as const).map((kind) => {
+        const label = kind === 'planning' ? 'Плановый период' : 'Отчётный период';
+        const from = weeklyPeriodStart(new Date(), settings[kind]);
+        const end = weeklyPeriodEnd(from, settings[kind]);
+        return <section key={kind} className="card" aria-label={label}>
+          <div className="card-head"><h3>{label}</h3><span className="faint">{weeklyPeriodDays(settings[kind])} дн.</span></div>
+          <div className="field-row">
+            <div className="field"><span className="caps">Первый день</span><Select<number> variant="light" label={`${label}: первый день`} options={WEEKDAYS} value={settings[kind].startDay} onChange={(v) => change(kind, 'startDay', v)} /></div>
+            <div className="field"><span className="caps">Последний день (включительно)</span><Select<number> variant="light" label={`${label}: последний день`} options={WEEKDAYS} value={settings[kind].endDay} onChange={(v) => change(kind, 'endDay', v)} /></div>
+          </div>
+          <p className="field-hint">{weeklyPeriodLabel(settings[kind])}. Пример текущего периода: <span className="num">{fmtDate(from)} — {fmtDate(end)}</span>.</p>
+        </section>;
+      })}
+      </div>
+      <p className="field-hint">Состав мероприятий определяется их сроком. Если период короче семи дней, дни между его окончанием и следующим началом в него не входят. Отправленные отчёты сохраняют свои даты; повторная отправка с той же датой начала обновляет отчёт.</p>
+      <div className="form-actions"><Button type="submit" variant="primary" icon={<Icon.Save size={15} />}>Сохранить периоды</Button>{saved && <span role="status">Периоды сохранены</span>}</div>
+    </form>
+  </div>;
+};
+
+const VacationsTab = ({ state, dispatch }: TabProps) => {
+  const [settings, setSettings] = useState(() => ({ ...normalizeVacationSettings(state.vacationSettings) }));
+  const [saved, setSaved] = useState(false);
+  const maxDay = new Date(2000, settings.resetMonth, 0).getDate();
+  return <div className="admin-section">
+    <div className="card-head admin-content-head"><div><h2>Отпуска</h2><p className="subtitle">Дата ежегодного сброса определяет первый день нового отпускного периода.</p></div></div>
+    <form className="form-stack vacation-settings-form" onSubmit={(e) => { e.preventDefault(); dispatch({ type: 'saveVacationSettings', settings }); setSaved(true); }}>
+      <div className="field-row">
+        <div className="field"><span className="caps">День сброса</span><Select<number> variant="light" label="День сброса отпусков" value={settings.resetDay} options={Array.from({ length: maxDay }, (_, i) => ({ value: i + 1, label: String(i + 1) }))} onChange={(resetDay) => { setSettings({ ...settings, resetDay }); setSaved(false); }} /></div>
+        <div className="field"><span className="caps">Месяц сброса</span><Select<number> variant="light" label="Месяц сброса отпусков" value={settings.resetMonth} options={MONTHS.map((label, i) => ({ value: i + 1, label }))} onChange={(resetMonth) => { setSettings({ resetMonth, resetDay: Math.min(settings.resetDay, new Date(2000, resetMonth, 0).getDate()) }); setSaved(false); }} /></div>
+      </div>
+      <p className="field-hint">В этот день начинается новый период с индивидуальной нормой сотрудника. Использованные дни прошлого периода не вычитаются из нового; записи об отпусках сохраняются. Остаток автоматически не переносится. Норму задавайте в карточке редактирования сотрудника.</p>
+      {settings.resetMonth === 2 && settings.resetDay === 29 && <p className="field-hint">В невисокосные годы сброс происходит 28 февраля.</p>}
+      <p className="field-hint">Текущий период при этой настройке: <span className="num">{vacationPeriodLabel(vacationYear(new Date(), settings), settings)}</span>.</p>
+      <div className="form-actions"><Button type="submit" variant="primary" icon={<Icon.Save size={15} />}>Сохранить дату сброса</Button>{saved && <span role="status">Настройка сохранена</span>}</div>
+    </form>
+  </div>;
+};
+
 /** Поля сотрудника: одинаковые в добавлении и редактировании. */
-type PersonDraft = { fullName: string; position: string; email: string; windowsLogin: string; unitId: string; role: Role; active: boolean };
+type PersonDraft = { fullName: string; position: string; email: string; windowsLogin: string; unitId: string; role: Role; active: boolean; hidden: boolean; annualVacationDays: string };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -122,6 +180,7 @@ const checkPerson = (draft: PersonDraft, users: ManagedUser[], employeeId: numbe
   if (draft.fullName.trim().split(/\s+/).filter(Boolean).length < 2) return 'Укажите фамилию и имя сотрудника.';
   if (!EMAIL_RE.test(draft.email.trim())) return 'Укажите рабочую почту в виде ivanov@example.com.';
   if (!draft.windowsLogin.trim()) return 'Укажите Windows-логин: например, ivanov или DOMAIN\\ivanov.';
+  if (!draft.annualVacationDays.trim() || !validVacationDays(Number(draft.annualVacationDays))) return 'Укажите ежегодную норму отпуска: целое число от 0 до 366 дней.';
   const other = users.filter((u) => u.employeeId !== employeeId);
   if (other.some((u) => u.email.toLowerCase() === draft.email.trim().toLowerCase())) return 'Эта почта уже указана у другого сотрудника.';
   if (other.some((u) => u.windowsLogin.toLowerCase() === draft.windowsLogin.trim().toLowerCase())) return 'Этот Windows-логин уже назначен другому пользователю.';
@@ -155,10 +214,15 @@ const PersonFields = ({ draft, set, units, disabledRole, nameSlot }: { draft: Pe
     <div className="field"><span className="caps">Роль</span>
       <Select<Role> value={draft.role} options={ROLE_OPTIONS} disabled={disabledRole} label="Роль сотрудника" onChange={(v) => set('role', v)} />
     </div>
+    <label className="field"><span className="caps">Дней отпуска в год</span>
+      <TextInput inputMode="numeric" maxLength={3} mono value={draft.annualVacationDays} onChange={(e) => set('annualVacationDays', e.target.value)} />
+      <span className="field-hint">Индивидуальная ежегодная норма без дней на дорогу. Дни на дорогу указываются при оформлении каждого отпуска.</span>
+    </label>
   </>
 );
 
 const EditUserDialog = ({ account, users, units, protectedAccount, onClose, onSave }: { account: ManagedUser; users: ManagedUser[]; units: Unit[]; protectedAccount: boolean; onClose: () => void; onSave: (draft: PersonDraft) => void }) => {
+  const { state } = useStore({ includeHidden: true });
   const [draft, setDraft] = useState<PersonDraft>({
     fullName: account.fullName,
     position: account.position,
@@ -167,6 +231,8 @@ const EditUserDialog = ({ account, users, units, protectedAccount, onClose, onSa
     unitId: unitOf(account) ?? '',
     role: account.role,
     active: account.active,
+    hidden: account.hidden ?? false,
+    annualVacationDays: String(annualVacationDays(users, state.entitlements, account.employeeId)),
   });
   const [error, setError] = useState('');
   const set = <K extends keyof PersonDraft>(key: K, value: PersonDraft[K]) => {
@@ -182,6 +248,8 @@ const EditUserDialog = ({ account, users, units, protectedAccount, onClose, onSa
     <form className="form-stack edit-user-form" onSubmit={(event) => { event.preventDefault(); submit(); }} noValidate>
       <PersonFields draft={draft} set={set} units={units} disabledRole={protectedAccount} />
       <Checkbox checked={draft.active} disabled={protectedAccount} onChange={(v) => set('active', v)}>{protectedAccount ? 'Основной администратор должен оставаться активным' : 'Разрешить вход в приложение'}</Checkbox>
+      <Checkbox checked={draft.hidden} onChange={(v) => set('hidden', v)}>Скрыть сотрудника во всех рабочих разделах</Checkbox>
+      <p className="field-hint">Сотрудник не отображается в списках, планировании, календаре, графике событий и показателях. Вход и назначенные права сохраняются. Учётная запись остаётся доступной здесь.</p>
       <p className="field-hint">ФИО, должность и почта хранятся в приложении и правятся здесь независимо от способа входа и настройки Active Directory.</p>
       {error && <p className="field-error" role="alert">{error}</p>}
       <div className="form-actions"><Button type="submit" variant="primary" icon={<Icon.Save size={15} />}>Сохранить</Button><Button onClick={onClose}>Отмена</Button></div>
@@ -197,7 +265,7 @@ const DeleteUserDialog = ({ account, onClose, onConfirm }: { account: ManagedUse
 </Dialog>;
 
 const AddUserDialog = ({ users, units, directoryAvailable, onClose, onSave }: { users: ManagedUser[]; units: Unit[]; directoryAvailable: boolean; onClose: () => void; onSave: (account: ManagedUser) => void }) => {
-  const [draft, setDraft] = useState<PersonDraft>({ fullName: '', position: '', email: '', windowsLogin: '', unitId: '', role: 'executor', active: true });
+  const [draft, setDraft] = useState<PersonDraft>({ fullName: '', position: '', email: '', windowsLogin: '', unitId: '', role: 'executor', active: true, hidden: false, annualVacationDays: '28' });
   const [error, setError] = useState('');
   const set = <K extends keyof PersonDraft>(key: K, value: PersonDraft[K]) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -220,6 +288,7 @@ const AddUserDialog = ({ users, units, directoryAvailable, onClose, onSave }: { 
       email: draft.email.trim(),
       role: draft.role,
       active: draft.active,
+      annualVacationDays: Number(draft.annualVacationDays),
       ...(draft.unitId ? { unitId: draft.unitId } : {}),
     });
   };
@@ -664,10 +733,10 @@ const DictionariesTab = ({ state, dispatch }: TabProps) => {
           {entries.map((entry) => <tr key={entry.id}>
             <td><b>{entry.title}</b></td>
             <td><span className="num muted">{entry.code}</span></td>
-            {withColor && <td>{entry.color ? <span className="num"><i className="admin-swatch" style={{ background: entry.color }} aria-hidden />{entry.color}</span> : <span className="num muted"><i className="admin-swatch" style={{ background: `var(--${dictionary === 'absenceType' ? 'abs' : 'cat'}-${entry.code})` }} aria-hidden />по умолчанию</span>}</td>}
+            {withColor && <td>{entry.color ? <span className="num"><i className="admin-swatch" style={{ background: entry.color }} aria-hidden />{entry.color}</span> : <span className="num muted"><i className="admin-swatch" style={{ background: `var(--${dictionary === 'absenceType' ? 'abs' : 'cat'}-${dictionary === 'absenceType' ? eventColorKey(entry.code) : entry.code})` }} aria-hidden />по умолчанию</span>}</td>}
             <td className="admin-icon-actions">
               <button type="button" className="admin-icon-action" onClick={() => setEditing(entry)} aria-label={`Изменить значение ${entry.title}`} data-tip="Изменить"><Icon.Edit size={15} /></button>
-              <button type="button" className="admin-icon-action danger" onClick={() => setDeleting(entry)} aria-label={`Удалить значение ${entry.title}`} data-tip="Удалить"><Icon.Trash size={15} /></button>
+              <button type="button" className="admin-icon-action danger" disabled={dutyDictionaryInUse(entry, state.dictionaries, state.absences) || entry.dictionary === 'vacationType' && (entries.length <= 1 || state.absences.some((a) => a.type === 'vacation' && vacationTypeCode(a, state.dictionaries) === entry.code))} onClick={() => setDeleting(entry)} aria-label={`Удалить значение ${entry.title}`} data-tip={entry.dictionary === 'absenceType' || entry.dictionary === 'dutyType' || entry.dictionary === 'vacationType' ? 'Системное, используемое или последнее обязательное значение удалить нельзя' : 'Удалить'}><Icon.Trash size={15} /></button>
             </td>
           </tr>)}
           {entries.length === 0 && <tr><td colSpan={withColor ? 4 : 3} className="admin-empty">Значений пока нет. Нажмите «Добавить значение».</td></tr>}
@@ -698,7 +767,7 @@ const DictionaryDialog = ({ entry, kind, label, entries, onClose, onSave }: { en
     <form className="form-stack" onSubmit={(event) => { event.preventDefault(); submit(); }} noValidate>
       <div className="field-row">
         <label className="field"><span className="caps">Название</span><TextInput value={title} onChange={(event) => { setTitle(event.target.value); setError(''); }} placeholder="Название значения" maxLength={160} invalid={!!error} /></label>
-        <div className="field"><label className="caps" htmlFor="dict-code">Код</label><TextInput id="dict-code" value={code} onChange={(event) => { setCode(event.target.value); setError(''); }} placeholder="internal-review" maxLength={48} mono invalid={!!error} aria-describedby="dict-code-hint" /><span className="field-hint" id="dict-code-hint">Связывает значение с данными; меняйте осторожно.</span></div>
+        <div className="field"><label className="caps" htmlFor="dict-code">Код</label><TextInput id="dict-code" value={code} readOnly={kind === 'absenceType' && !!entry && systemEvent(entry.code)} onChange={(event) => { setCode(event.target.value); setError(''); }} placeholder="internal-review" maxLength={48} mono invalid={!!error} aria-describedby="dict-code-hint" /><span className="field-hint" id="dict-code-hint">{kind === 'absenceType' && !!entry && systemEvent(entry.code) ? 'Системный код: определяет правила расчёта и не меняется.' : 'Связывает значение с данными. При смене кода события обновятся автоматически.'}</span></div>
       </div>
       {withColor && <div className="field"><span className="caps">Цвет</span><ColorPicker value={color} onChange={(value) => { setColor(value); setError(''); }} label={kind === 'absenceType' ? 'Цвет вида отсутствия' : 'Цвет категории'} /><span className="field-hint">В тёмной теме цвет автоматически высветляется.</span></div>}
       {error && <p className="field-error" role="alert">{error}</p>}
@@ -748,12 +817,14 @@ const TemplateDialog = ({ template, onClose, onSave }: { template?: DocumentTemp
   const [body, setBody] = useState(template?.body ?? defaultBody('planning'));
   const [error, setError] = useState('');
   const lastReport = useMemo(() => [...state.reports].sort((a, b) => b.weekStart.localeCompare(a.weekStart))[0], [state.reports]);
-  const reportWeek = lastReport ? new Date(`${lastReport.weekStart}T00:00:00`) : addDays(planWeekStart(new Date()), -7);
+  const periods = useMemo(() => normalizePeriodSettings(state.periodSettings), [state.periodSettings]);
+  const reportWeek = useMemo(() => lastReport ? fromDateKey(lastReport.weekStart) : addDays(weeklyPeriodStart(new Date(), periods.reporting), -7), [lastReport, periods.reporting]);
   const context = useMemo(() => {
-    const planWeek = planWeekStart(new Date());
-    if (scope === 'planning') return planDocContext(planItems(state.tasks, state.planRows, planWeek, state.users.map((u) => u.employeeId)), state.planRows, planWeek, state.user);
-    return reportDocContext(lastReport, state.planRows, lastReport ? new Date(`${lastReport.weekStart}T00:00:00`) : addDays(planWeek, -7), state.user);
-  }, [state.tasks, state.planRows, state.users, state.user, scope, lastReport]);
+    const planWeek = weeklyPeriodStart(new Date(), periods.planning);
+    const planEnd = weeklyPeriodEnd(planWeek, periods.planning);
+    if (scope === 'planning') return planDocContext(planItems(state.tasks, state.planRows, planWeek, state.users.map((u) => u.employeeId), planEnd), state.planRows, planWeek, state.user, new Date(), planEnd);
+    return reportDocContext(lastReport, state.planRows, reportWeek, state.user, new Date(), weeklyPeriodEnd(reportWeek, periods.reporting));
+  }, [state.tasks, state.planRows, state.users, state.user, periods, reportWeek, scope, lastReport]);
   const changeScope = (next: TemplateScope) => {
     // У нового шаблона текст по умолчанию меняется вместе с разделом, пока его не правили.
     if (!template && body === defaultBody(scope)) setBody(defaultBody(next));
@@ -777,7 +848,7 @@ const TemplateDialog = ({ template, onClose, onSave }: { template?: DocumentTemp
       <div className="field"><span className="caps">Раздел</span><Segmented<TemplateScope> label="Раздел шаблона" value={scope} options={TEMPLATE_SCOPES} onChange={changeScope} /></div>
       <div className="template-editor">
         <div className="field"><label className="caps" htmlFor="template-body">Текст шаблона</label><TextArea id="template-body" className="template-body" value={body} onChange={(event) => { setBody(event.target.value); setError(''); }} spellCheck={false} invalid={!!preview.error} /></div>
-        <div className="field"><span className="caps">Предпросмотр — {scope === 'reports' ? (lastReport ? `отчёт за ${fmtRange(reportWeek, addDays(reportWeek, 6))}` : 'отчётов ещё нет') : 'текущая неделя'}</span>{preview.error ? <p className="field-error" role="alert">{preview.error}</p> : <pre className="doc-preview template-preview">{preview.text}</pre>}</div>
+        <div className="field"><span className="caps">Предпросмотр — {scope === 'reports' ? (lastReport ? `отчёт за ${fmtRange(reportWeek, reportEnd(lastReport))}` : 'отчётов ещё нет') : 'текущая неделя'}</span>{preview.error ? <p className="field-error" role="alert">{preview.error}</p> : <pre className="doc-preview template-preview">{preview.text}</pre>}</div>
       </div>
       <details className="template-help"><summary>Подстановки</summary><dl>{placeholdersFor(scope).map((p) => <div key={p.tag}><dt><code>{p.tag}</code></dt><dd>{p.hint}</dd></div>)}</dl></details>
       {error && <p className="field-error" role="alert">{error}</p>}

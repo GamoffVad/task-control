@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
-import { initials, shortName } from '../lib/data';
+import { department, initials, shortName } from '../lib/data';
 import { hasPermission, roleLabel } from '../lib/access';
 import { overdueTasks } from '../lib/logic';
 import { countLabel, unreadMessages } from '../lib/chat';
@@ -33,12 +33,13 @@ export const Logo = ({ context }: { context?: string }) => {
 
 export const Shell = () => {
   const { state, dispatch, sync, reload } = useStore();
+  const { state: accountState } = useStore({ includeHidden: true });
   const [confirmReset, setConfirmReset] = useState(false);
   const user = state.user!;
   const manager = isManager(user);
   // Раздел администрирования виден, если доступна хоть одна его вкладка (по умолчанию — «Редактирование UI»).
   const canAdmin = canOpenAdmin(user);
-  const managedAccount = state.users.find((account) => account.employeeId === user.employeeId);
+  const managedAccount = accountState.users.find((account) => account.employeeId === user.employeeId);
   const managedParts = managedAccount?.fullName.trim().split(/\s+/) ?? [];
   const managedShortName = managedAccount && managedParts.length > 1 ? `${managedParts[0]} ${managedParts.slice(1, 3).map((part) => `${part[0]}.`).join('')}` : shortName(user.employeeId);
   const managedInitials = managedAccount && managedParts.length > 1 ? `${managedParts[0]?.[0] ?? ''}${managedParts[1]?.[0] ?? ''}` : initials(user.employeeId);
@@ -121,7 +122,7 @@ export const Shell = () => {
       <div className="app-shell">
         <div className="app-card">
           <header className="topbar" ref={topbar}>
-            <Logo context={`отдел разработки · ${managedShortName} · ${roleLabel(user.role, state.roles).toLowerCase()}`} />
+            <Logo context={`${department.name} · ${managedShortName} · ${roleLabel(user.role, state.roles).toLowerCase()}`} />
             <nav className="topnav" aria-label="Разделы" ref={nav}>
               {navFor(user).map((n) => (
                 <NavLink key={n.to} to={n.to}>
@@ -159,9 +160,9 @@ export const Shell = () => {
                   <Icon.Refresh size={16} />
                 </button>
               )}
-              <Link to={`/employees/${user.employeeId}`} className="avatar-btn" data-tip={`Моя карточка: ${managedShortName}`} aria-label={`Моя карточка: ${managedShortName}`}>
+              {managedAccount?.hidden ? <span className="avatar-btn" aria-label={`Учётная запись: ${managedShortName}`}>{managedInitials}</span> : <Link to={`/employees/${user.employeeId}`} className="avatar-btn" data-tip={`Моя карточка: ${managedShortName}`} aria-label={`Моя карточка: ${managedShortName}`}>
                 {managedInitials}
-              </Link>
+              </Link>}
               {state.authentication.mode !== 'windows' && <button type="button" className="icon-btn" onClick={() => dispatch({ type: 'logout' })} aria-label="Выйти" data-tip="Выйти">
                 <Icon.Logout size={16} />
               </button>}

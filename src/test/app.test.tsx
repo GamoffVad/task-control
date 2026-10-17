@@ -62,6 +62,18 @@ describe('вход', () => {
 });
 
 describe('разделы', () => {
+  it('название отдела из администрирования видно в отчётности, печатной форме и документе', async () => {
+    const state = loggedIn();
+    const name = 'Отдел аналитики и планирования';
+    state.units = state.units.map((u) => u.id === 'u-dept-dev' ? { ...u, name } : u);
+    renderAt('/reports', state);
+    expect(document.querySelector('.page-header')).toHaveTextContent(name);
+    expect(document.querySelector('.print-only')).toHaveTextContent(name);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Документ' }));
+    expect(screen.getByLabelText('Текст документа')).toHaveTextContent(name);
+    expect(screen.getByLabelText('Текст документа')).not.toHaveTextContent('Отдел разработки');
+  });
   it.each([
     ['/calendar', 'Календарь'],
     ['/planning', 'Планирование'],
@@ -332,6 +344,56 @@ describe('выпадающий список', () => {
     const cards = document.querySelectorAll('.task-card');
     expect(cards.length).toBeGreaterThan(0);
     cards.forEach((c) => expect(c).toHaveTextContent('Смирнова О.Л.'));
+  });
+});
+
+describe('планирование: поиск разделов', () => {
+  const rowCodes = () => [...document.querySelectorAll('.plan-table tbody .pos-cell .code')].map((cell) => cell.textContent);
+
+  it('поиск в заголовке оставляет совпавшую строку и всех её родителей, без соседних строк', async () => {
+    renderAt('/planning');
+    const user = userEvent.setup();
+    const header = screen.getByRole('columnheader', { name: 'Разделы планирования' });
+    const search = within(header).getByRole('searchbox', { name: 'Поиск разделов планирования' });
+    expect(search).toHaveAttribute('placeholder', 'РАЗДЕЛЫ ПЛАНИРОВАНИЯ');
+    await user.type(search, 'МОДУЛЬ 13');
+    expect(rowCodes()).toEqual(['3', '3.1', '3.1.13']);
+    expect(screen.getAllByRole('columnheader')).toHaveLength(8);
+    expect(screen.getByRole('button', { name: /Добавить задачу — 3\.1\.13.*Иванов/ })).toBeInTheDocument();
+    await user.click(within(header).getByRole('button', { name: 'Очистить поиск' }));
+    expect(rowCodes()).toEqual(loggedIn().planRows.map((row) => row.id));
+  });
+
+  it('ищет по коду, показывает только совпавший заголовок с родителем и объясняет пустой результат', async () => {
+    renderAt('/planning');
+    const user = userEvent.setup();
+    const search = screen.getByRole('searchbox', { name: 'Поиск разделов планирования' });
+    await user.type(search, '3.2.8');
+    expect(rowCodes()).toEqual(['3', '3.2', '3.2.8']);
+    await user.clear(search);
+    await user.type(search, 'Техническая документация');
+    expect(rowCodes()).toEqual(['3', '3.3']);
+    await user.clear(search);
+    await user.type(search, 'несуществующий раздел');
+    expect(rowCodes()).toHaveLength(0);
+    expect(screen.getByRole('status')).toHaveTextContent('Разделы не найдены');
+    await user.keyboard('{Escape}');
+    expect(rowCodes()).toHaveLength(loggedIn().planRows.length);
+  });
+
+  it('не ищет по тексту задач, работает у исполнителя и учитывает е/ё и пробелы', async () => {
+    renderAt('/planning', executorIn());
+    const user = userEvent.setup();
+    const search = screen.getByRole('searchbox', { name: 'Поиск разделов планирования' });
+    await user.type(search, '  планерок  ');
+    expect(rowCodes()).toEqual(['1', '1.2']);
+    await user.clear(search);
+    await user.type(search, 'Сборка модуля авторизации');
+    expect(rowCodes()).toHaveLength(0);
+    await user.clear(search);
+    await user.type(search, '3.1.2');
+    expect(rowCodes()).toEqual(['3', '3.1', '3.1.2']);
+    expect(screen.getAllByRole('columnheader')).toHaveLength(2);
   });
 });
 
@@ -614,7 +676,8 @@ describe('исполнитель', () => {
 
   it('в планировании видит только свой столбец и не отправляет отчёт', () => {
     renderAt('/planning', executorIn());
-    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Разделы планирования', 'Сидоров Д.Е.Ведущий специалист']);
+    expect(screen.getAllByRole('columnheader')[0]).toHaveAccessibleName('Разделы планирования');
+    expect(screen.getAllByRole('columnheader').slice(1).map((h) => h.textContent)).toEqual(['Сидоров Д.Е.Ведущий специалист']);
     expect(screen.queryByRole('button', { name: /Направить в отчёт/ })).not.toBeInTheDocument();
   });
 
@@ -863,7 +926,7 @@ describe('отсутствия', () => {
     await user.click(screen.getByRole('option', { name: 'Отпуск' }));
     // Список остаётся открытым — можно снять ещё один вид.
     expect(screen.getByRole('listbox', { name: 'Виды событий' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^Виды событий: .*4 из 5/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Виды событий: .*5 из 6/ })).toBeInTheDocument();
     expect(bars()).toBeLessThan(all);
     await user.click(screen.getByRole('option', { name: 'все виды' }));
     expect(bars()).toBe(all);

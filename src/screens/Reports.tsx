@@ -1,25 +1,33 @@
 import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { FilterCard, PageHeader, Stepper } from '../kit';
+import { FilterCard, PageHeader, Select, Stepper } from '../kit';
 import { Icon } from '../components/Icons';
-import { employees, fullName, shortName } from '../lib/data';
-import { addDays, fmtDate, fmtDateTime, fmtNum, fmtRange, planWeekStart, plural, points, toDateKey } from '../lib/dates';
-import { findReport, reportRows, reportToCsv } from '../lib/logic';
+import { department, employees, fullName, shortName } from '../lib/data';
+import { addDays, fmtDate, fmtDateTime, fmtNum, fmtRange, fromDateKey, reportEnd, plural, points, toDateKey } from '../lib/dates';
+import { normalizePeriodSettings, weeklyPeriodEnd, weeklyPeriodStart } from '../lib/periods';
+import { buildReportEntries, reportRows, reportToCsv } from '../lib/logic';
+import { hasPermission } from '../lib/access';
 import { useStore } from '../lib/store';
 import { DocumentDialog } from '../components/DocumentDialog';
 import { reportDocContext } from '../lib/reportExport';
 import { useFitHeight } from '../lib/useFitHeight';
 import type { ReportEntry } from '../lib/types';
+const EMPTY_ENTRIES: ReportEntry[] = [];
 
 export const Reports = () => {
   // Таблица на высоту окна: шапка, колонка разделов и итог закреплены.
   const wrap = useRef<HTMLDivElement>(null);
   useFitHeight(wrap, '--report-max');
-  const { state } = useStore();
-  const [weekStart, setWeekStart] = useState(() => addDays(planWeekStart(new Date()), -7));
-  const weekEnd = addDays(weekStart, 6);
-  const report = findReport(state.reports, weekStart);
-  const entries = useMemo(() => report?.entries ?? [], [report]);
+  const { state, dispatch } = useStore();
+  const periods = normalizePeriodSettings(state.periodSettings);
+  const [selectedStart, setWeekStart] = useState<Date | null>(null);
+  const weekStart = selectedStart ?? addDays(weeklyPeriodStart(new Date(), periods.reporting), -7);
+  const startKey = toDateKey(weekStart);
+  const report = useMemo(() => state.reports.find((r) => r.weekStart === startKey), [state.reports, startKey]);
+  const weekEnd = report ? reportEnd(report) : weeklyPeriodEnd(weekStart, periods.reporting);
+  const canSubmit = hasPermission(state.user, 'reports.view') && hasPermission(state.user, 'tasks.plan');
+  const doneCount = canSubmit ? buildReportEntries({ tasks: state.tasks, planRows: state.planRows }, weekStart, weekEnd).length : 0;
+  const entries = report?.entries ?? EMPTY_ENTRIES;
   const rows = useMemo(() => reportRows(entries, state.planRows), [entries, state.planRows]);
   const cols = employees.filter((e) => entries.some((x) => x.assigneeId === e.id));
   const byCell = useMemo(() => {
@@ -47,9 +55,10 @@ export const Reports = () => {
     <>
       <PageHeader
         title="Отчётность"
-        subtitle={<>Исполненные мероприятия за неделю <b>{fmtRange(weekStart, weekEnd)}</b>.</>}
+        subtitle={<>{department.name} · Исполненные мероприятия за выбранный отчётный период.</>}
         actions={
           <>
+            {canSubmit && <button type="button" className="btn btn--primary report-submit" disabled={!doneCount} onClick={() => dispatch({ type: 'submitReport', weekStart, periodEnd: weekEnd })}><Icon.Send size={15} /> {report ? 'Обновить отчёт' : 'Направить в отчёт'}</button>}
             <button type="button" className="btn" onClick={download} disabled={!report || entries.length === 0}>
               <Icon.Download size={15} /> Выгрузить CSV
             </button>
@@ -67,25 +76,26 @@ export const Reports = () => {
           templates={state.templates.filter((t) => t.scope === 'reports')}
           context={reportDocContext(report, state.planRows, weekStart, state.user)}
           fileBase={`otchet-${toDateKey(weekStart)}`}
-          source="Текст собирается из отчёта за неделю в «Отчётности»"
+          source="Текст собирается из отчёта за выбранный период в «Отчётности»"
           onCsv={download}
           onClose={() => setDocOpen(false)}
         />
       )}
       <div className="print-only" style={{ marginBottom: 12 }}>
-        <b>Отдел разработки.</b> Отчёт об исполнении мероприятий за неделю {fmtRange(weekStart, weekEnd)}.
+        <b>{department.name}.</b> Отчёт об исполнении мероприятий за период {fmtRange(weekStart, weekEnd)}.
       </div>
       <div className="filters no-print">
-        <FilterCard label="Отчётная неделя">
+        <FilterCard label="Отчётный период">
           <Stepper
             label="Неделя"
             value={fmtRange(weekStart, weekEnd)}
-            onPrev={() => setWeekStart((w) => addDays(w, -7))}
-            onNext={() => setWeekStart((w) => addDays(w, 7))}
-            onToday={() => setWeekStart(addDays(planWeekStart(new Date()), -7))}
+            onPrev={() => setWeekStart(addDays(weekStart, -7))}
+            onNext={() => setWeekStart(addDays(weekStart, 7))}
+            onToday={() => setWeekStart(null)}
             todayLabel="Прошлая"
           />
         </FilterCard>
+        {sent.length > 0 && <FilterCard label="Отправленные отчёты"><Select<string> label="Отправленные отчёты" value={report?.weekStart ?? ''} options={[{ value: '', label: 'Выбрать отчёт' }, ...sent.map((r) => ({ value: r.weekStart, label: `${fmtDate(fromDateKey(r.weekStart))} — ${fmtDate(reportEnd(r))}` }))]} onChange={(v) => setWeekStart(v ? fromDateKey(v) : null)} /></FilterCard>}
         <FilterCard label="Статус">
           <div style={{ minHeight: 34, display: 'flex', alignItems: 'center', fontSize: 13 }}>
             {report ? <span className="ok" style={{ fontWeight: 600 }}>получен {fmtDateTime(new Date(report.submittedAt))}</span> : <span className="muted">не отправлен</span>}
@@ -101,14 +111,14 @@ export const Reports = () => {
 
       {!report || entries.length === 0 ? (
         <div className="card">
-          <p className="empty" style={{ paddingBottom: 6 }}>{report ? 'Отчёт за эту неделю отправлен без исполненных задач.' : 'Отчёт за эту неделю ещё не отправлен.'}</p>
+          <p className="empty" style={{ paddingBottom: 6 }}>{report ? 'Отчёт за этот период отправлен без исполненных задач.' : 'Отчёт за этот период ещё не отправлен.'}</p>
           <p className="help-note">
-            Отметьте исполнение задач и нажмите «Направить в отчёт» в разделе <Link to="/planning">Планирование</Link> на нужной неделе.
+            Отметьте исполнение задач и нажмите «Направить в отчёт» за нужный период здесь или в разделе <Link to="/planning">Планирование</Link>.
             {sent.length > 0 && (
               <>
                 {' '}Последний полученный отчёт — за{' '}
                 <button type="button" className="text-action" style={{ minHeight: 0 }} onClick={() => setWeekStart(new Date(`${sent[0].weekStart}T00:00:00`))}>
-                  {fmtRange(new Date(`${sent[0].weekStart}T00:00:00`), addDays(new Date(`${sent[0].weekStart}T00:00:00`), 6))}
+                  {fmtRange(fromDateKey(sent[0].weekStart), reportEnd(sent[0]))}
                 </button>
                 .
               </>

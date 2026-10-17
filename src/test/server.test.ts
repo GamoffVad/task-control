@@ -61,6 +61,83 @@ const withApi = async (options: Partial<Parameters<typeof createApi>[0]> & { rep
 };
 
 describe('API', () => {
+  it('сохраняет раздельные периоды, применяет их к отчёту и проверяет права и границы', async () => {
+    const token = await login('user');
+    const action = (body: unknown, as = token) => call('/api/action', { method: 'POST', token: as, body: { action: body } });
+    const settings = { planning: { startDay: 1, endDay: 0 }, reporting: { startDay: 1, endDay: 5 } };
+    expect((await action({ type: 'savePeriodSettings', settings })).status).toBe(200);
+    expect((await call('/api/state', { token })).json.data?.periodSettings).toEqual(settings);
+    const executor = await login('sidorov');
+    expect((await action({ type: 'savePeriodSettings', settings }, executor)).status).toBe(403);
+    for (const badSettings of [{}, { ...settings, reporting: { startDay: -1, endDay: 4 } }, { ...settings, planning: { startDay: 1.5, endDay: 0 } }, { ...settings, planning: { startDay: '1', endDay: 0 } }]) expect((await action({ type: 'savePeriodSettings', settings: badSettings })).status).toBe(400);
+    expect((await action({ type: 'submitReport', weekStart: '2026-09-14' })).status).toBe(200);
+    expect((await repo.read())!.reports.find((r) => r.weekStart === '2026-09-14')?.periodEnd).toBe('2026-09-18');
+    for (const periodEnd of ['2026-09-13', '2026-09-21', 'wrong']) expect((await action({ type: 'submitReport', weekStart: '2026-09-14', periodEnd })).status).toBe(400);
+    expect((await action({ type: 'submitReport', weekStart: '2026-09-14', periodEnd: '2026-09-16' })).status).toBe(200);
+    expect((await repo.read())!.reports.find((r) => r.weekStart === '2026-09-14')?.periodEnd).toBe('2026-09-16');
+  });
+  it('принимает новые виды отсутствий и дежурств из словарей, проверяет ссылки', async () => {
+    const token = await login('user');
+    const action = (body: unknown) => call('/api/action', { method: 'POST', token, body: { action: body } });
+    expect((await action({ type: 'saveDictionary', draft: { dictionary: 'absenceType', code: 'медосмотр', title: 'Медосмотр', color: '#446B46' } })).status).toBe(200);
+    expect((await action({ type: 'saveDictionary', draft: { dictionary: 'dutyType', code: 'daily', title: 'Суточное дежурство' } })).status).toBe(200);
+    const draft = { employeeId: 3, type: 'медосмотр', from: '2027-02-01', to: '2027-02-03', note: '', status: 'approved' };
+    expect((await action({ type: 'saveAbsence', draft })).status).toBe(200);
+    expect((await action({ type: 'saveAbsence', draft: { ...draft, type: 'unknown', from: '2027-02-06', to: '2027-02-07' } })).status).toBe(400);
+    expect((await action({ type: 'saveAbsence', draft: { ...draft, type: 'duty', dutyType: 'unknown', from: '2027-02-06', to: '2027-02-07' } })).status).toBe(400);
+    expect((await action({ type: 'saveAbsence', draft: { ...draft, type: 'duty', dutyType: 'daily', from: '2027-02-06', to: '2027-02-07' } })).status).toBe(200);
+    expect((await action({ type: 'saveAbsence', draft: { ...draft, type: 'duty', dutyType: 'daily', from: '2027-02-08', to: null } })).status).toBe(400);
+    const data = (await repo.read())!;
+    expect(data.absences.find((a) => a.from === '2027-02-01')?.type).toBe('медосмотр');
+    expect(data.absences.find((a) => a.from === '2027-02-06')).toMatchObject({ type: 'duty', dutyType: 'daily' });
+    const executor = await login('sidorov');
+    expect((await call('/api/action', { method: 'POST', token: executor, body: { action: { type: 'saveAbsence', draft: { ...draft, type: 'duty', dutyType: 'daily', from: '2027-02-13', to: '2027-02-14', employeeId: 4 } } } })).status).toBe(200);
+    expect((await repo.read())!.absences.find((a) => a.from === '2027-02-13')).toMatchObject({ employeeId: 3, type: 'duty', status: 'request', decidedBy: null });
+  });
+  it('сохраняет ежегодный сброс, индивидуальную норму и словарный тип отпуска', async () => {
+    const token = await login('user');
+    const action = (body: unknown) => call('/api/action', { method: 'POST', token, body: { action: body } });
+    expect((await action({ type: 'saveVacationSettings', settings: { resetMonth: 4, resetDay: 15 } })).status).toBe(200);
+    expect((await action({ type: 'saveManagedUser', employeeId: 3, role: 'executor', active: true, annualVacationDays: 42 })).status).toBe(200);
+    expect((await action({ type: 'saveDictionary', draft: { dictionary: 'vacationType', code: 'extra', title: 'Дополнительный отпуск' } })).status).toBe(200);
+    const saved = await action({ type: 'saveAbsence', draft: { employeeId: 3, type: 'vacation', vacationType: 'extra', travelDaysBefore: 1, travelDaysAfter: 1, from: '2027-02-01', to: '2027-02-03', note: '', status: 'approved' } });
+    expect(saved.status).toBe(200);
+    const data = (await repo.read())!;
+    expect(data.vacationSettings).toEqual({ resetMonth: 4, resetDay: 15 });
+    expect(data.users.find((u) => u.employeeId === 3)?.annualVacationDays).toBe(42);
+    expect(data.entitlements.find((e) => e.employeeId === 3 && e.year === 2026)?.vacationDays).toBe(42);
+    expect(data.absences.find((a) => a.from === '2027-02-01')).toMatchObject({ vacationType: 'extra', travelDaysBefore: 1, travelDaysAfter: 1 });
+    expect((await call('/api/state', { token })).json.data?.vacationSettings).toEqual(data.vacationSettings);
+  });
+
+  it('проверяет нормы, даты, ссылки на типы и права изменения настроек отпусков', async () => {
+    const token = await login('user');
+    for (const settings of [{ resetMonth: 4, resetDay: 31 }, { resetMonth: 0, resetDay: 1 }, { resetMonth: 1, resetDay: 1.5 }, { resetMonth: '1', resetDay: 1 }]) {
+      expect((await call('/api/action', { method: 'POST', token, body: { action: { type: 'saveVacationSettings', settings } } })).status).toBe(400);
+    }
+    for (const annualVacationDays of [-1, 367, 1.5, '30']) {
+      expect((await call('/api/action', { method: 'POST', token, body: { action: { type: 'saveManagedUser', employeeId: 3, role: 'executor', active: true, annualVacationDays } } })).status).toBe(400);
+    }
+    for (const travelDaysBefore of [-1, 367, 1.5, '4', 4]) {
+      expect((await call('/api/action', { method: 'POST', token, body: { action: { type: 'saveAbsence', draft: { employeeId: 3, type: 'vacation', travelDaysBefore, from: '2027-02-01', to: '2027-02-03', note: '', status: 'approved' } } } })).status).toBe(400);
+    }
+    expect((await call('/api/action', { method: 'POST', token, body: { action: { type: 'saveAbsence', draft: { employeeId: 3, type: 'vacation', vacationType: 'missing', from: '2027-02-01', to: '2027-02-03', note: '', status: 'approved' } } } })).status).toBe(400);
+    const executor = await login('sidorov');
+    expect((await call('/api/action', { method: 'POST', token: executor, body: { action: { type: 'saveVacationSettings', settings: { resetMonth: 4, resetDay: 15 } } } })).status).toBe(403);
+  });
+
+  it('сохраняет скрытие сотрудника и не блокирует Windows-вход', async () => {
+    const token = await login('user');
+    const result = await call('/api/action', { method: 'POST', token, body: { action: { type: 'saveManagedUser', employeeId: 3, role: 'executor', active: true, hidden: true } } });
+    expect(result.status).toBe(200);
+    expect(result.json.data?.users.find((user) => user.employeeId === 3)).toMatchObject({ hidden: true, active: true });
+    expect((await repo.read())?.users.find((user) => user.employeeId === 3)?.hidden).toBe(true);
+    const entered = await call('/api/windows-login', { method: 'POST', windowsUser: 'CORP\\sidorov' });
+    expect(entered.status).toBe(200);
+    expect(entered.json.user).toMatchObject({ employeeId: 3 });
+    const invalid = await call('/api/action', { method: 'POST', token, body: { action: { type: 'saveManagedUser', employeeId: 3, role: 'executor', active: true, hidden: 'true' } } });
+    expect(invalid.status).toBe(400);
+  });
   it('сообщает о состоянии', async () => {
     expect(await call('/api/health')).toEqual({ status: 200, json: { ok: true, storage: 'memory' } });
   });
