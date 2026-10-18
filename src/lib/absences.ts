@@ -5,6 +5,7 @@ import { annualVacationDays, vacationPeriod, vacationYear } from './vacations';
 
 /** Больничный без даты окончания считается длящимся ещё столько дней после сегодняшнего. */
 export const OPEN_SICK_DAYS = 3;
+export const validDayoffAccrued = (n: number) => Number.isInteger(n) && n >= 0 && n <= 3000;
 export { DEFAULT_VACATION_DAYS } from './vacations';
 
 export const isActive = (a: Absence) => a.status !== 'rejected';

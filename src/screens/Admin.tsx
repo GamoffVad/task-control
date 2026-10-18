@@ -19,6 +19,7 @@ import type { AppearanceSettings, DictionaryEntry, DictionaryKind, DirectoryUser
 import { PARENT_KIND, UNIT_KINDS, unitKindLabel, unitPath, unitTree, unitWithDescendants } from '../lib/units';
 import { unitOf } from '../lib/data';
 import { dutyDictionaryInUse, eventColorKey, systemEvent } from '../lib/eventTypes';
+import { entitlementFor, validDayoffAccrued } from '../lib/absences';
 import { annualVacationDays, normalizeVacationSettings, validVacationDays, vacationPeriodLabel, vacationTypeCode, vacationYear } from '../lib/vacations';
 
 type Tab = 'users' | 'units' | 'roles' | 'authentication' | 'database' | 'scoring' | 'appearance' | 'dictionaries' | 'planRows' | 'templates' | 'vacations' | 'periods';
@@ -93,6 +94,16 @@ const UsersTab = ({ state, dispatch }: TabProps) => {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<ManagedUser | null>(null);
   const [deleting, setDeleting] = useState<ManagedUser | null>(null);
+  const saveUser = (draft: PersonDraft) => {
+    if (!editing) return;
+    dispatch({
+      type: 'saveManagedUser', employeeId: editing.employeeId, role: draft.role, active: draft.active, hidden: draft.hidden,
+      annualVacationDays: Number(draft.annualVacationDays),
+      ...(hasPermission(state.user, 'entitlements.manage') && draft.dayoffAccrued !== undefined ? { dayoffAccrued: Number(draft.dayoffAccrued) } : {}),
+      windowsLogin: draft.windowsLogin, unitId: draft.unitId, fullName: draft.fullName, position: draft.position, email: draft.email,
+    });
+    setEditing(null);
+  };
   return <div className="admin-section">
     <div className="card-head admin-content-head">
       <div><h2>Пользователи</h2><p className="subtitle">Данные сотрудника — ФИО, должность, почта, Windows-логин, подразделение и роль — правятся здесь. Отключённый пользователь не сможет войти.</p></div>
@@ -122,7 +133,7 @@ const UsersTab = ({ state, dispatch }: TabProps) => {
     </div>
     <p className="help-note">Windows-логин указывается без пароля: например, ivanov или DOMAIN\ivanov. В системе всегда сохраняется хотя бы один активный пользователь с правами управления.</p>
     {adding && <AddUserDialog users={state.users} units={state.units} directoryAvailable={directoryAvailable} onClose={() => setAdding(false)} onSave={(account) => { dispatch({ type: 'addManagedUser', account }); setAdding(false); }} />}
-    {editing && <EditUserDialog account={editing} users={state.users} units={state.units} protectedAccount={editing.active && canAdminister(editing.role, state.roles) && state.users.filter((item) => item.active && canAdminister(item.role, state.roles)).length === 1} onClose={() => setEditing(null)} onSave={(draft) => { dispatch({ type: 'saveManagedUser', employeeId: editing.employeeId, role: draft.role, active: draft.active, hidden: draft.hidden, annualVacationDays: Number(draft.annualVacationDays), windowsLogin: draft.windowsLogin, unitId: draft.unitId, fullName: draft.fullName, position: draft.position, email: draft.email }); setEditing(null); }} />}
+    {editing && <EditUserDialog account={editing} users={state.users} units={state.units} protectedAccount={editing.active && canAdminister(editing.role, state.roles) && state.users.filter((item) => item.active && canAdminister(item.role, state.roles)).length === 1} onClose={() => setEditing(null)} onSave={saveUser} />}
     {deleting && <DeleteUserDialog account={deleting} onClose={() => setDeleting(null)} onConfirm={() => { dispatch({ type: 'deleteManagedUser', employeeId: deleting.employeeId }); setDeleting(null); }} />}
   </div>;
 };
@@ -176,7 +187,7 @@ const VacationsTab = ({ state, dispatch }: TabProps) => {
 };
 
 /** Поля сотрудника: одинаковые в добавлении и редактировании. */
-type PersonDraft = { fullName: string; position: string; email: string; windowsLogin: string; unitId: string; role: Role; active: boolean; hidden: boolean; annualVacationDays: string };
+type PersonDraft = { fullName: string; position: string; email: string; windowsLogin: string; unitId: string; role: Role; active: boolean; hidden: boolean; annualVacationDays: string; dayoffAccrued?: string };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -186,6 +197,7 @@ const checkPerson = (draft: PersonDraft, users: ManagedUser[], employeeId: numbe
   if (!EMAIL_RE.test(draft.email.trim())) return 'Укажите рабочую почту в виде ivanov@example.com.';
   if (!draft.windowsLogin.trim()) return 'Укажите Windows-логин: например, ivanov или DOMAIN\\ivanov.';
   if (!draft.annualVacationDays.trim() || !validVacationDays(Number(draft.annualVacationDays))) return 'Укажите ежегодную норму отпуска: целое число от 0 до 366 дней.';
+  if (draft.dayoffAccrued !== undefined && (!draft.dayoffAccrued.trim() || !validDayoffAccrued(Number(draft.dayoffAccrued)))) return 'Укажите начисленные вручную отгулы: целое число от 0 до 3000 дней.';
   const other = users.filter((u) => u.employeeId !== employeeId);
   if (other.some((u) => u.email.toLowerCase() === draft.email.trim().toLowerCase())) return 'Эта почта уже указана у другого сотрудника.';
   if (other.some((u) => u.windowsLogin.toLowerCase() === draft.windowsLogin.trim().toLowerCase())) return 'Этот Windows-логин уже назначен другому пользователю.';
@@ -193,7 +205,7 @@ const checkPerson = (draft: PersonDraft, users: ManagedUser[], employeeId: numbe
 };
 
 /** Общие поля сотрудника. Все доступны для правки независимо от способа входа и настройки Active Directory. */
-const PersonFields = ({ draft, set, units, disabledRole, nameSlot }: { draft: PersonDraft; set: <K extends keyof PersonDraft>(key: K, value: PersonDraft[K]) => void; units: Unit[]; disabledRole?: boolean; nameSlot?: ReactNode }) => (
+const PersonFields = ({ draft, set, units, disabledRole, nameSlot, dayoffSlot }: { draft: PersonDraft; set: <K extends keyof PersonDraft>(key: K, value: PersonDraft[K]) => void; units: Unit[]; disabledRole?: boolean; nameSlot?: ReactNode; dayoffSlot?: ReactNode }) => (
   <>
     {nameSlot ?? (
       <label className="field"><span className="caps">ФИО</span>
@@ -219,15 +231,21 @@ const PersonFields = ({ draft, set, units, disabledRole, nameSlot }: { draft: Pe
     <div className="field"><span className="caps">Роль</span>
       <Select<Role> value={draft.role} options={ROLE_OPTIONS} disabled={disabledRole} label="Роль сотрудника" onChange={(v) => set('role', v)} />
     </div>
+    <div className={dayoffSlot ? 'employee-balances' : undefined}>
     <label className="field"><span className="caps">Дней отпуска в год</span>
       <TextInput inputMode="numeric" maxLength={3} mono value={draft.annualVacationDays} onChange={(e) => set('annualVacationDays', e.target.value)} />
       <span className="field-hint">Индивидуальная ежегодная норма без дней на дорогу. Дни на дорогу указываются при оформлении каждого отпуска.</span>
     </label>
+    {dayoffSlot}
+    </div>
   </>
 );
 
 const EditUserDialog = ({ account, users, units, protectedAccount, onClose, onSave }: { account: ManagedUser; users: ManagedUser[]; units: Unit[]; protectedAccount: boolean; onClose: () => void; onSave: (draft: PersonDraft) => void }) => {
   const { state } = useStore({ includeHidden: true });
+  const dayoffYear = new Date().getFullYear();
+  const canEditDayoffs = hasPermission(state.user, 'entitlements.manage');
+  const [initialDayoffs] = useState(() => entitlementFor(state.entitlements, account.employeeId, dayoffYear, users).dayoffAccrued);
   const [draft, setDraft] = useState<PersonDraft>({
     fullName: account.fullName,
     position: account.position,
@@ -238,6 +256,7 @@ const EditUserDialog = ({ account, users, units, protectedAccount, onClose, onSa
     active: account.active,
     hidden: account.hidden ?? false,
     annualVacationDays: String(annualVacationDays(users, state.entitlements, account.employeeId)),
+    dayoffAccrued: String(initialDayoffs),
   });
   const [error, setError] = useState('');
   const set = <K extends keyof PersonDraft>(key: K, value: PersonDraft[K]) => {
@@ -247,11 +266,16 @@ const EditUserDialog = ({ account, users, units, protectedAccount, onClose, onSa
   const submit = () => {
     const problem = checkPerson(draft, users, account.employeeId);
     if (problem) return setError(problem);
-    onSave({ ...draft, fullName: draft.fullName.trim(), position: draft.position.trim(), email: draft.email.trim(), windowsLogin: draft.windowsLogin.trim() });
+    onSave({ ...draft, dayoffAccrued: canEditDayoffs && Number(draft.dayoffAccrued) !== initialDayoffs ? draft.dayoffAccrued : undefined, fullName: draft.fullName.trim(), position: draft.position.trim(), email: draft.email.trim(), windowsLogin: draft.windowsLogin.trim() });
   };
   return <Dialog title="Редактировать сотрудника" context={account.fullName} onClose={onClose} wide>
     <form className="form-stack edit-user-form" onSubmit={(event) => { event.preventDefault(); submit(); }} noValidate>
-      <PersonFields draft={draft} set={set} units={units} disabledRole={protectedAccount} />
+      <PersonFields draft={draft} set={set} units={units} disabledRole={protectedAccount} dayoffSlot={
+        <label className="field"><span className="caps">Отгулы, начисленные вручную</span>
+          <TextInput inputMode="numeric" maxLength={4} mono disabled={!canEditDayoffs} value={draft.dayoffAccrued} onChange={(e) => set('dayoffAccrued', e.target.value)} />
+          <span className="field-hint">За {dayoffYear} год. Общее ручное начисление, а не остаток. Отгулы за дежурства прибавляются автоматически; использованные вычитаются.{!canEditDayoffs && ' Для изменения нужно разрешение на управление нормами отпусков и отгулов.'}</span>
+        </label>
+      } />
       <Checkbox checked={draft.active} disabled={protectedAccount} onChange={(v) => set('active', v)}>{protectedAccount ? 'Основной администратор должен оставаться активным' : 'Разрешить вход в приложение'}</Checkbox>
       <Checkbox checked={draft.hidden} onChange={(v) => set('hidden', v)}>Скрыть сотрудника во всех рабочих разделах</Checkbox>
       <p className="field-hint">Сотрудник не отображается в списках, планировании, календаре, графике событий и показателях. Вход и назначенные права сохраняются. Учётная запись остаётся доступной здесь.</p>

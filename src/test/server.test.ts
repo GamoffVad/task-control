@@ -61,6 +61,25 @@ const withApi = async (options: Partial<Parameters<typeof createApi>[0]> & { rep
 };
 
 describe('API', () => {
+  it('атомарно сохраняет ручные отгулы с карточкой, проверяет ввод и отдельное право', async () => {
+    const token = await login('user');
+    const action = { type: 'saveManagedUser', employeeId: 3, role: 'executor', active: true, annualVacationDays: 42, dayoffAccrued: 5, now: '2000-01-01' };
+    const save = (body: unknown, as = token) => call('/api/action', { method: 'POST', token: as, body: { action: body } });
+    expect((await save(action)).status).toBe(200);
+    expect((await repo.read())!.entitlements.find((e) => e.employeeId === 3 && e.year === 2026)).toMatchObject({ vacationDays: 42, dayoffAccrued: 5 });
+    expect((await save({ ...action, dayoffAccrued: 0 })).status).toBe(200);
+    expect((await repo.read())!.entitlements.find((e) => e.employeeId === 3 && e.year === 2026)?.dayoffAccrued).toBe(0);
+    for (const dayoffAccrued of [-1, 1.5, 3001, '5', null]) expect((await save({ ...action, dayoffAccrued })).status).toBe(400);
+    expect((await save(action, await login('sidorov'))).status).toBe(403);
+    const data = (await repo.read())!;
+    data.roles = data.roles.map((r) => r.role === 'administrator' ? { ...r, permissions: r.permissions.filter((p) => p !== 'entitlements.manage') } : r);
+    repo = createMemoryRepo(undefined, data);
+    expect((await save(action)).status).toBe(403);
+    expect((await repo.read())!.users.find((u) => u.employeeId === 3)?.annualVacationDays).toBe(42);
+    const { dayoffAccrued: _dayoffs, ...detailsOnly } = action;
+    expect((await save({ ...detailsOnly, annualVacationDays: 36 })).status).toBe(200);
+    expect((await repo.read())!.entitlements.find((e) => e.employeeId === 3 && e.year === 2026)).toMatchObject({ vacationDays: 36, dayoffAccrued: 0 });
+  });
   it('сохраняет раздельные периоды, применяет их к отчёту и проверяет права и границы', async () => {
     const token = await login('user');
     const action = (body: unknown, as = token) => call('/api/action', { method: 'POST', token: as, body: { action: body } });

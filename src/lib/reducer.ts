@@ -10,7 +10,7 @@ import { toDateKey } from './dates';
 import { normalizePeriodSettings, validPeriodSettings, validReportRange, weeklyPeriodEnd } from './periods';
 import type { PeriodSettings } from './types';
 import { scopeOf, taskVisible, type Scope } from './visibility';
-import { entitlementFor, validateAbsence, type AbsenceDraft } from './absences';
+import { entitlementFor, validDayoffAccrued, validateAbsence, type AbsenceDraft } from './absences';
 import type { Absence, AbsenceStatus, AppearanceSettings, AppState, ChatRead, AuthenticationMode, Data, DictionaryEntry, DictionaryKind, Entitlement, ManagedUser, Message, Permission, PlanRow, Role, RoleDefinition, ScoringSettings, Task, TemplateScope, Unit, UnitKind, User } from './types';
 import { DEFAULT_UNIT_OF, DEFAULT_UNITS, PARENT_KIND } from './units';
 import { DEFAULT_TEMPLATES, parseTemplate, templateScope } from './templates';
@@ -59,7 +59,7 @@ export type Action =
   | { type: 'deleteDictionary'; id: string }
   | { type: 'savePlanRow'; draft: PlanRowDraft }
   | { type: 'deletePlanRow'; id: string }
-  | { type: 'saveManagedUser'; employeeId: number; role: Role; active: boolean; hidden?: boolean; annualVacationDays?: number; windowsLogin?: string; unitId?: string; fullName?: string; position?: string; email?: string; now?: Date }
+  | { type: 'saveManagedUser'; employeeId: number; role: Role; active: boolean; hidden?: boolean; annualVacationDays?: number; dayoffAccrued?: number; windowsLogin?: string; unitId?: string; fullName?: string; position?: string; email?: string; now?: Date }
   | { type: 'saveUnit'; draft: UnitDraft }
   | { type: 'saveTemplate'; draft: { id?: string; name: string; body: string; scope: TemplateScope } }
   | { type: 'deleteTemplate'; id: string }
@@ -340,6 +340,7 @@ export const reducer = (state: AppState, action: Action): AppState => {
       const current = state.users.find((item) => item.employeeId === action.employeeId);
       if (!current) return state;
       if (action.annualVacationDays !== undefined && !validVacationDays(action.annualVacationDays)) return state;
+      if (action.dayoffAccrued !== undefined && (!validDayoffAccrued(action.dayoffAccrued) || !hasPermission(state.user, 'entitlements.manage'))) return state;
       const windowsLogin = (action.windowsLogin ?? current.windowsLogin).trim().slice(0, 128);
       if (!windowsLogin || state.users.some((item) => item.employeeId !== action.employeeId && item.windowsLogin.toLowerCase() === windowsLogin.toLowerCase())) return state;
       if (action.unitId !== undefined && action.unitId !== '' && !state.units.some((u) => u.id === action.unitId)) return state;
@@ -355,12 +356,22 @@ export const reducer = (state: AppState, action: Action): AppState => {
       const hasAdmin = users.some((item) => item.active && ['admin.access', 'users.manage', 'roles.manage'].every((permission) => permissionsFor(item.role, state.roles).includes(permission as Permission)));
       if (!hasAdmin) return state;
       const user = effectiveUser(state.user, users, state.roles);
-      const year = vacationYear(action.now ?? new Date(), state.vacationSettings);
+      const now = action.now ?? new Date();
+      const year = vacationYear(now, state.vacationSettings);
       const currentEntitlement = entitlementFor(state.entitlements, action.employeeId, year, state.users);
-      const entitlements = action.annualVacationDays === undefined ? state.entitlements : [
+      let entitlements = action.annualVacationDays === undefined ? state.entitlements : [
         ...state.entitlements.filter((e) => !(e.employeeId === action.employeeId && e.year === year)),
         { ...currentEntitlement, vacationDays: action.annualVacationDays ?? currentEntitlement.vacationDays },
       ];
+      if (action.dayoffAccrued !== undefined) {
+        // Отгулы относятся к календарному году, даже если отпускной период начинается в другом году.
+        const calendarYear = now.getFullYear();
+        const calendarEntitlement = entitlementFor(entitlements, action.employeeId, calendarYear, users);
+        entitlements = [
+          ...entitlements.filter((e) => !(e.employeeId === action.employeeId && e.year === calendarYear)),
+          { ...calendarEntitlement, dayoffAccrued: action.dayoffAccrued },
+        ];
+      }
       return { ...state, users, user, entitlements };
     }
     case 'addManagedUser': {

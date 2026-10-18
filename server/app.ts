@@ -12,7 +12,7 @@
 // Изменения выполняет тот же редьюсер, что и в браузере, с пользователем из подписанного токена,
 // поэтому права проверяются на сервере независимо от интерфейса.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { validateAbsence, type AbsenceDraft } from '../src/lib/absences';
+import { validDayoffAccrued, validateAbsence, type AbsenceDraft } from '../src/lib/absences';
 import { ACCESS_VERSION, DEFAULT_ROLES, DEFAULT_USERS, effectiveUser, hasPermission, PERMISSIONS, sessionUser, withAddedPermissions } from '../src/lib/access';
 import { CATEGORIES, employeeById, planRows, syncCategories, syncStaff } from '../src/lib/data';
 import { DEFAULT_UNITS, MAIN_DEPARTMENT_ID } from '../src/lib/units';
@@ -246,6 +246,7 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
       if (typeof a.employeeId !== 'number' || !data.users.some((user) => user.employeeId === a.employeeId)) bad('пользователь');
       if (a.hidden !== undefined && typeof a.hidden !== 'boolean') bad('скрытие сотрудника');
       if (a.annualVacationDays !== undefined && !validVacationDays(a.annualVacationDays as number)) bad('ежегодную норму отпуска (целое число от 0 до 366)');
+      if (a.dayoffAccrued !== undefined && !validDayoffAccrued(a.dayoffAccrued as number)) bad('начисленные вручную отгулы (целое число от 0 до 3000)');
       if (!['administrator', 'manager', 'executor'].includes(a.role as string) || typeof a.active !== 'boolean' || (a.windowsLogin !== undefined && (!str(a.windowsLogin, 128) || !(a.windowsLogin as string).trim()))) bad('роль или Windows-логин пользователя');
       if (a.unitId !== undefined && (typeof a.unitId !== 'string' || (a.unitId !== '' && !(data.units ?? DEFAULT_UNITS).some((u) => u.id === a.unitId)))) bad('подразделение пользователя');
       if (a.fullName !== undefined && (!str(a.fullName, 200) || !String(a.fullName).trim())) bad('ФИО сотрудника');
@@ -258,6 +259,7 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
         active: a.active as boolean,
         ...(a.hidden !== undefined ? { hidden: a.hidden as boolean } : {}),
         ...(a.annualVacationDays !== undefined ? { annualVacationDays: a.annualVacationDays as number } : {}),
+        ...(a.dayoffAccrued !== undefined ? { dayoffAccrued: a.dayoffAccrued as number } : {}),
         now,
         ...(a.windowsLogin !== undefined ? { windowsLogin: a.windowsLogin as string } : {}),
         ...(a.unitId !== undefined ? { unitId: a.unitId as string } : {}),
