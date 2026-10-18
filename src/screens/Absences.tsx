@@ -186,7 +186,6 @@ export const Absences = () => {
           <span className="tt-sub">график событий отдела</span>
         </div>
         <div className="tt-tools" hidden={tab !== 'graph'}>
-          {brush.tools}
           <Stepper
             compact
             label="Месяц"
@@ -211,6 +210,7 @@ export const Absences = () => {
               onChange={(shown) => setHidden(new Set(ABSENCE_TYPES.map((t) => t.key).filter((k) => !shown.includes(k))))}
             />
           </div>
+          {brush.tools}
           <div className="tt-actions">
             <button type="button" className="icon-btn file-export" aria-label="Выгрузить в Excel" data-tip="Выгрузить в Excel" onClick={exportExcel}>
               <Icon.Excel size={22} />
