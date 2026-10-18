@@ -9,7 +9,7 @@ import { createMssqlRepo, mssqlSettingsFromEnv, odbcConnectionString, pickOdbcDr
 import { secretFromEnv } from '../../server/auth';
 import { storageKindFromEnv } from '../../server/storage';
 import type { Repo } from '../../server/repo';
-import { toData } from '../lib/reducer';
+import { fromData, reducer, toData } from '../lib/reducer';
 import { createSeed } from '../lib/seed';
 import type { Data } from '../lib/types';
 
@@ -138,7 +138,7 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
     expect(await repo.read()).toBeNull();
     const tables = await raw('select count(*) as n from sys.tables');
     expect((tables.recordset[0] as { n: number }).n).toBeGreaterThan(10);
-  });
+  }, 30_000);
 
   it('после заполнения данные читаются без искажений', async () => {
     const seed = toData(createSeed(NOW));
@@ -158,6 +158,20 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
     expect([...back.units!].sort((a, b) => a.id.localeCompare(b.id))).toEqual([...seed.units!].sort((a, b) => a.id.localeCompare(b.id)));
     expect([...back.templates!].sort((a, b) => a.id.localeCompare(b.id))).toEqual([...seed.templates!].sort((a, b) => a.id.localeCompare(b.id)));
     expect(back.planRows).toEqual(seed.planRows);
+  });
+
+  it('сохраняет рисунок через границу года и оба фрагмента после стирания в SQL Server', async () => {
+    const before = (await repo.read())!;
+    const stroke = { employeeId: 3, type: 'vacation', vacationType: 'annual', from: '2030-12-30', to: '2031-01-03', mode: 'paint' as const };
+    const admin = { employeeId: 1, email: before.users[0].email, role: 'administrator' as const };
+    try {
+      await repo.update((data) => toData(reducer(fromData(data!, admin), { type: 'paintAbsences', stroke, now: NOW })));
+      expect((await repo.read())!.absences.find((a) => a.from === stroke.from)).toMatchObject({ to: '2031-01-03', status: 'approved' });
+      await repo.update((data) => toData(reducer(fromData(data!, admin), { type: 'paintAbsences', stroke: { ...stroke, from: '2030-12-31', to: '2031-01-01', mode: 'erase' }, now: NOW })));
+      const fragments = (await repo.read())!.absences.filter((a) => a.from >= '2030-12-30');
+      expect(fragments.map((a) => [a.from, a.to]).sort()).toEqual([['2030-12-30', '2030-12-30'], ['2031-01-02', '2031-01-03']]);
+      expect(new Set(fragments.map((a) => a.id)).size).toBe(2);
+    } finally { await repo.update(() => before); }
   });
 
   it('обновляет старую таблицу отсутствий и сохраняет произвольные коды и виды дежурств', async () => {

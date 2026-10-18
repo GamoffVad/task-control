@@ -13,6 +13,7 @@
 // поэтому права проверяются на сервере независимо от интерфейса.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { validDayoffAccrued, validateAbsence, type AbsenceDraft } from '../src/lib/absences';
+import { applyAbsenceStroke, strokeError, type AbsenceStroke } from '../src/lib/absenceBrush';
 import { ACCESS_VERSION, DEFAULT_ROLES, DEFAULT_USERS, effectiveUser, hasPermission, PERMISSIONS, sessionUser, withAddedPermissions } from '../src/lib/access';
 import { CATEGORIES, employeeById, planRows, syncCategories, syncStaff } from '../src/lib/data';
 import { DEFAULT_UNITS, MAIN_DEPARTMENT_ID } from '../src/lib/units';
@@ -183,6 +184,16 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
     case 'deleteMessage':
       if (!str(a.id, 100)) bad('идентификатор сообщения');
       return { type: 'deleteMessage', id: a.id as string };
+    case 'paintAbsences': {
+      if (!isObj(a.stroke)) bad('движение кисти');
+      const s = a.stroke as unknown as AbsenceStroke;
+      const error = strokeError(s, data.dictionaries);
+      if (error) throw new HttpError(400, error);
+      return { type: 'paintAbsences', stroke: { employeeId: s.employeeId, type: s.type, from: s.from, to: s.to, mode: s.mode,
+        ...(s.type === 'vacation' ? { vacationType: vacationTypeCode(s, data.dictionaries) } : {}),
+        ...(s.type === 'duty' ? { dutyType: dutyTypeCode(s, data.dictionaries) } : {}),
+      }, now };
+    }
     case 'saveAbsence':
       return { type: 'saveAbsence', draft: checkAbsenceDraft(a.draft, data, now), now };
     case 'deleteAbsence':
@@ -410,7 +421,7 @@ const recoverAdministrativeAccess = (users: ManagedUser[], roles: Data['roles'],
 };
 
 /** Действия, о которых сообщают уведомлениями (восстановление демоданных и администрирование — нет). */
-const NOTIFYING = new Set(['saveTask', 'sendMessage', 'saveAbsence', 'decideAbsence', 'submitReport']);
+const NOTIFYING = new Set(['saveTask', 'sendMessage', 'saveAbsence', 'paintAbsences', 'decideAbsence', 'submitReport']);
 
 /** Уведомления хранятся неделю. */
 const NOTICE_TTL_MS = 7 * 24 * 3600 * 1000;
@@ -621,6 +632,10 @@ export const createApi = ({ repo, connection, secret, now = () => new Date(), wi
             const user = effectiveUser(tokenUser, current.users, current.roles);
             if (!user) throw sessionError('Учётная запись отключена.');
             const before = fromData(current, user);
+            if (action.type === 'paintAbsences') {
+              const result = applyAbsenceStroke(before, action.stroke, t);
+              if (result.error) throw new HttpError(result.forbidden ? 403 : 400, result.error);
+            }
             const after = reducer(before, action);
             // Редьюсер возвращает прежнее состояние, если у пользователя нет прав на действие.
             if (after === before) throw new HttpError(403, 'Изменение не сохранено: недостаточно прав для этого действия.');

@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { AbsenceModal } from '../components/AbsenceModal';
+import { useTetrisBrush } from '../components/useTetrisBrush';
 import { absColor } from '../components/absColor';
 import { Icon } from '../components/Icons';
 import { useTaskEditor } from '../components/taskEditor';
@@ -65,7 +66,6 @@ export const Absences = () => {
   const staffOrder = new Map(department.groups.flatMap((g) => g.employeeIds).map((id, index) => [id, index]));
   const staffGroup = new Map(department.groups.flatMap((g) => g.employeeIds.map((id) => [id, g.id] as const)));
   const people = [...groupMembers(group)].sort((a, b) => (staffOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (staffOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER));
-  const visible = state.absences.filter((a) => isActive(a) && !hidden.has(a.type));
   const clashes = useMemo(() => findClashes(state.tasks, state.absences), [state.tasks, state.absences]);
   // Исполнитель видит пересечения только по своим задачам.
   const myClashes = manager ? clashes : clashes.filter((c) => c.employeeId === me);
@@ -85,6 +85,8 @@ export const Absences = () => {
   // Легенда стоит под графиком — график оставляет под неё место, чтобы она была видна без прокрутки страницы.
   const board = useRef<HTMLDivElement>(null);
   const legend = useRef<HTMLDivElement>(null);
+  const brush = useTetrisBrush(board, month, setMonth, (type) => setHidden((prev) => new Set([...prev].filter((t) => t !== type))));
+  const visible = (brush.preview?.error ? state.absences : brush.preview?.absences ?? state.absences).filter((a) => isActive(a) && !hidden.has(a.type));
   useLayoutEffect(() => {
     const el = board.current;
     if (!el) return;
@@ -153,6 +155,7 @@ export const Absences = () => {
           <span className="tt-sub">график событий отдела</span>
         </div>
         <div className="tt-tools">
+          {brush.tools}
           <Stepper
             compact
             label="Месяц"
@@ -230,7 +233,9 @@ export const Absences = () => {
         </p>
       )}
 
-      <div className="tl-board" ref={board}>
+      {brush.hint}
+      {brush.menu}
+      <div className={`tl-board${brush.drawing ? ' tl-brush-mode' : ''}`} ref={board} {...brush.bindings}>
         <div className="tl" style={{ ['--days' as string]: daysInMonth, ['--rows' as string]: people.length }} role="grid" aria-label={`График событий: ${fmtMonthYear(month)}`}>
           <div className="tl-corner"><span className="caps">Сотрудник</span></div>
           {days.map((d) => (
@@ -258,7 +263,7 @@ export const Absences = () => {
                   <b>{shortName(e.id)}</b>
                   {!showBal && <span className="bal">{e.position}</span>}
                 </Link>
-                <div className={`tl-lane${groupStart ? ' tl-group-start' : ''}`}>
+                <div className={`tl-lane${groupStart ? ' tl-group-start' : ''}`} data-brush-employee={e.id}>
                   {days.map((d) => (
                     <button
                       key={d.getDate()}
@@ -271,6 +276,12 @@ export const Absences = () => {
                       onClick={() => create(e.id, d)}
                     />
                   ))}
+                  {brush.stroke?.employeeId === e.id && (() => {
+                    const from = new Date(`${brush.stroke.from}T00:00`), to = new Date(`${brush.stroke.to}T00:00`);
+                    if (to < monthStart || from > monthEnd) return null;
+                    const start = from < monthStart ? 1 : from.getDate(), end = to > monthEnd ? daysInMonth : to.getDate();
+                    return <div aria-hidden className={`tl-brush-preview${brush.stroke.mode === 'erase' ? ' erasing' : ''}${brush.preview?.error ? ' invalid' : ''}`} style={{ ...absColor(brush.stroke.type), gridColumn: `${start} / span ${end - start + 1}` }} />;
+                  })()}
                   {barsFor(e.id).map(({ a, from, span }) => {
                     const t = absenceType(a.type);
                     const hit = clashes.some((c) => c.absence.id === a.id);

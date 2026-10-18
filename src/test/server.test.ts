@@ -61,6 +61,21 @@ const withApi = async (options: Partial<Parameters<typeof createApi>[0]> & { rep
 };
 
 describe('API', () => {
+  it('сохраняет кисть одной транзакцией, разрезает период и проверяет права на сервере', async () => {
+    const token = await login('user');
+    const save = (stroke: unknown, as = token) => call('/api/action', { method: 'POST', token: as, body: { action: { type: 'paintAbsences', stroke } } });
+    const stroke = { employeeId: 3, type: 'vacation', vacationType: 'annual', from: '2030-12-30', to: '2031-01-03', mode: 'paint' };
+    expect((await save(stroke)).status).toBe(200);
+    expect((await save({ ...stroke, type: 'trip' })).status).toBe(400);
+    expect((await save({ ...stroke, mode: 'erase', from: '2030-12-31', to: '2031-01-01' })).status).toBe(200);
+    expect((await repo.read())!.absences.filter((a) => a.from >= '2030').map((a) => [a.from, a.to])).toEqual([['2030-12-30', '2030-12-30'], ['2031-01-02', '2031-01-03']]);
+    for (const invalid of [{ ...stroke, to: '2031-02-30' }, { ...stroke, type: 'unknown' }, { ...stroke, mode: 'toggle' }, null]) expect((await save(invalid)).status).toBe(400);
+    const executor = await login('sidorov');
+    expect((await save({ ...stroke, employeeId: 4, from: '2031-02-01', to: '2031-02-03' }, executor)).status).toBe(403);
+    expect((await save({ ...stroke, mode: 'erase' }, executor)).status).toBe(403);
+    expect((await save({ ...stroke, from: '2031-02-01', to: '2031-02-03' }, executor)).status).toBe(200);
+    expect((await repo.read())!.absences.find((a) => a.from === '2031-02-01')).toMatchObject({ employeeId: 3, status: 'request' });
+  });
   it('атомарно сохраняет ручные отгулы с карточкой, проверяет ввод и отдельное право', async () => {
     const token = await login('user');
     const action = { type: 'saveManagedUser', employeeId: 3, role: 'executor', active: true, annualVacationDays: 42, dayoffAccrued: 5, now: '2000-01-01' };

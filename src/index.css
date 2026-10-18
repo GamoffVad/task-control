@@ -1232,6 +1232,21 @@ a.label:hover { color: var(--accent); }
 .tl-cell.we { background: var(--weekend); }
 .tl-cell.today { box-shadow: inset 2px 0 0 var(--danger); }
 .tl-cell:not(:disabled):hover { background: var(--soft); }
+.tt-brush-tools { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem 1rem; min-width: 0; }
+.tt-brush-choice { max-width: min(25rem, 100%); white-space: normal; text-align: left; }
+.tt-brush-hint { padding: .4rem 0 .6rem; color: var(--ink-3); font-size: .8rem; min-height: 2rem; }
+.tl-brush-mode { user-select: none; touch-action: pan-y; }
+.tl-brush-mode .tl-lane, .tl-brush-mode .tl-cell:not(:disabled), .tl-brush-mode .tl-bar, .tl-brush-mode .tl-dl { cursor: crosshair; }
+.tl-brush-preview { grid-row: 1; align-self: stretch; z-index: 4; pointer-events: none; border: 2px solid var(--c); background: rgb(var(--c-rgb) / 16%); }
+.tl-brush-preview.erasing { border-style: dashed; background: repeating-linear-gradient(135deg, rgb(var(--c-rgb) / 22%) 0 2px, transparent 2px 7px); }
+.tl-brush-preview.invalid { border-color: var(--danger); background: var(--danger-bg); }
+.tt-brush-menu { position: fixed; z-index: 220; display: flex; flex-direction: column; width: min(22.5rem, calc(100vw - 1rem)); max-height: calc(100dvh - 1rem); overflow: auto; padding: .75rem; background: var(--paper); border: 1px solid var(--accent); box-shadow: 0 .5rem 2rem rgb(0 0 0 / 30%); }
+.tt-brush-menu .tt-brush-items { display: flex; flex-direction: column; min-height: 0; max-height: 20rem; flex: 1 1 auto; overflow-y: auto; margin: .5rem 0; }
+.tt-brush-items button { min-height: max(44px, 2.75rem); flex-shrink: 0; display: flex; align-items: center; gap: .6rem; padding: .5rem; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.tt-brush-items button:hover, .tt-brush-items button:focus-visible, .tt-brush-items button[aria-checked="true"] { background: var(--soft); outline-offset: -2px; }
+.tt-brush-items i { width: .7rem; height: .7rem; flex: none; background: var(--c); }
+.tt-brush-menu small { display: block; flex-shrink: 0; color: var(--ink-3); line-height: 1.4; }
+.tt-brush-menu input { flex-shrink: 0; }
 .tl-bar {
   /* Полоса события по вертикальному центру строки сотрудника. */
   grid-row: 1; align-self: center; height: 25px; margin: 0 2px; z-index: 1; min-width: 0; overflow: hidden; position: relative;

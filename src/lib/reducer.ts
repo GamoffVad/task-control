@@ -11,6 +11,7 @@ import { normalizePeriodSettings, validPeriodSettings, validReportRange, weeklyP
 import type { PeriodSettings } from './types';
 import { scopeOf, taskVisible, type Scope } from './visibility';
 import { entitlementFor, validDayoffAccrued, validateAbsence, type AbsenceDraft } from './absences';
+import { applyAbsenceStroke, type AbsenceStroke } from './absenceBrush';
 import type { Absence, AbsenceStatus, AppearanceSettings, AppState, ChatRead, AuthenticationMode, Data, DictionaryEntry, DictionaryKind, Entitlement, ManagedUser, Message, Permission, PlanRow, Role, RoleDefinition, ScoringSettings, Task, TemplateScope, Unit, UnitKind, User } from './types';
 import { DEFAULT_UNIT_OF, DEFAULT_UNITS, PARENT_KIND } from './units';
 import { DEFAULT_TEMPLATES, parseTemplate, templateScope } from './templates';
@@ -50,6 +51,7 @@ export type Action =
   | { type: 'deleteMessage'; id: string }
   | { type: 'markChatRead'; now?: Date }
   | { type: 'saveAbsence'; draft: AbsenceDraft; now?: Date }
+  | { type: 'paintAbsences'; stroke: AbsenceStroke; now?: Date }
   | { type: 'deleteAbsence'; id: string }
   | { type: 'decideAbsence'; id: string; status: Exclude<AbsenceStatus, 'request'> }
   | { type: 'saveEntitlement'; entitlement: Entitlement; dayoffYear?: number; now?: Date }
@@ -90,6 +92,7 @@ export const PERSISTED: Action['type'][] = [
   'deleteMessage',
   'markChatRead',
   'saveAbsence',
+  'paintAbsences',
   'deleteAbsence',
   'decideAbsence',
   'saveEntitlement',
@@ -219,6 +222,10 @@ export const reducer = (state: AppState, action: Action): AppState => {
       // Отметка «прочитано» только для себя; время — серверное, поэтому состояние всегда новое.
       if (!state.user) return state;
       return { ...state, chatReads: markRead(state.chatReads, state.user.employeeId, (action.now ?? new Date()).toISOString()) };
+    case 'paintAbsences': {
+      const result = applyAbsenceStroke(state, action.stroke, action.now ?? new Date(), () => newId('abs'));
+      return result.error ? state : { ...state, absences: result.absences };
+    }
     case 'saveAbsence': {
       const draft = action.draft;
       if (!eventTypeExists(draft.type, state.dictionaries)) return state;
