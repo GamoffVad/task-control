@@ -2,6 +2,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AbsenceModal } from '../components/AbsenceModal';
 import { useTetrisBrush } from '../components/useTetrisBrush';
 import { TetrisRow } from '../components/TetrisRow';
+import { TetrisCrosshair } from '../components/TetrisCrosshair';
 import { absColor } from '../components/absColor';
 import { Icon } from '../components/Icons';
 import { useTaskEditor } from '../components/taskEditor';
@@ -318,6 +319,7 @@ export const Absences = () => {
         </div>
       </div>
 
+      <TetrisCrosshair board={board} month={month} people={people} active={tab === 'graph' && editing === null} />
       <div className="tl-legend tt-legend" ref={legend}>
         <span><i className="lg-bar" />согласовано</span>
         <span><i className="lg-req" />заявка</span>

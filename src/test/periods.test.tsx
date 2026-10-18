@@ -117,7 +117,7 @@ describe('настраиваемые недельные периоды', () => {
     render(<StoreProvider initial={s}><MemoryRouter initialEntries={['/reports']}><AppRoutes /></MemoryRouter></StoreProvider>);
     const user = userEvent.setup();
     expect(document.querySelector('.stepper')).toHaveTextContent('8 – 14 сентября');
-    await user.click(screen.getByRole('button', { name: 'Направить в отчёт' }));
+    await user.click(screen.getByRole('button', { name: 'Сформировать отчёт' }));
     expect(loadState().reports.find((r) => r.weekStart === '2026-09-08')?.periodEnd).toBe('2026-09-14');
     await user.click(screen.getByRole('button', { name: /^Отправленные отчёты/ }));
     await user.click(screen.getByRole('option', { name: '04.09.2026 — 10.09.2026' }));

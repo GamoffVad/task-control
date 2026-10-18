@@ -213,10 +213,19 @@ describe('отчёт и показатели', () => {
     expect(screen.getByRole('cell', { name: 'Итого баллов' })).toBeInTheDocument();
   });
 
-  it('отчёт прошлой недели доступен сразу', () => {
+  it('отчёт прошлой недели доступен сразу; новый формируется, существующий обновляется', async () => {
+    const user = userEvent.setup();
     renderAt('/reports');
     expect(screen.getByRole('button', { name: /Выгрузить CSV/ })).toBeEnabled();
     expect(screen.getByText('Документы внесены, проверены и подписаны')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Обновить отчёт' })).toHaveAttribute('data-tip', 'Обновить отчёт');
+    await user.click(screen.getByRole('button', { name: 'Неделя: вперёд' }));
+    const createReport = screen.getByRole('button', { name: 'Сформировать отчёт' });
+    expect(createReport).toHaveAttribute('data-tip', 'Сформировать отчёт');
+    expect(screen.queryByRole('button', { name: 'Направить в отчёт' })).not.toBeInTheDocument();
+    await user.click(createReport);
+    expect(screen.getByRole('button', { name: 'Обновить отчёт' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Сформировать отчёт' })).not.toBeInTheDocument();
   });
 
   it('баллы за исполнение задаются в карточке задачи и попадают в отчёт', async () => {

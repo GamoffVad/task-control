@@ -58,7 +58,7 @@ export const Reports = () => {
         subtitle={<>{department.name} · Исполненные мероприятия за выбранный отчётный период.</>}
         actions={
           <>
-            {canSubmit && <button type="button" className="btn icon-btn btn--primary report-submit report-action" aria-label={report ? 'Обновить отчёт' : 'Направить в отчёт'} data-tip={report ? 'Обновить отчёт' : 'Направить в отчёт'} disabled={!doneCount} onClick={() => dispatch({ type: 'submitReport', weekStart, periodEnd: weekEnd })}>{report ? <Icon.Refresh size={21} /> : <Icon.ReportSend size={22} />}</button>}
+            {canSubmit && <button type="button" className="btn icon-btn btn--primary report-submit report-action" aria-label={report ? 'Обновить отчёт' : 'Сформировать отчёт'} data-tip={report ? 'Обновить отчёт' : 'Сформировать отчёт'} disabled={!doneCount} onClick={() => dispatch({ type: 'submitReport', weekStart, periodEnd: weekEnd })}>{report ? <Icon.Refresh size={21} /> : <Icon.ReportCreate size={22} />}</button>}
             <button type="button" className="btn icon-btn report-action" aria-label="Выгрузить CSV" data-tip="Выгрузить CSV" onClick={download} disabled={!report || entries.length === 0}>
               <Icon.Download size={22} />
             </button>
@@ -113,7 +113,7 @@ export const Reports = () => {
         <div className="card">
           <p className="empty" style={{ paddingBottom: 6 }}>{report ? 'Отчёт за этот период отправлен без исполненных задач.' : 'Отчёт за этот период ещё не отправлен.'}</p>
           <p className="help-note">
-            Отметьте исполнение задач и нажмите «Направить в отчёт» за нужный период здесь или в разделе <Link to="/planning">Планирование</Link>.
+            Отметьте исполнение задач и нажмите «{report ? 'Обновить отчёт' : 'Сформировать отчёт'}» за нужный период здесь. В разделе <Link to="/planning">Планирование</Link> то же действие называется «Направить в отчёт».
             {sent.length > 0 && (
               <>
                 {' '}Последний полученный отчёт — за{' '}
