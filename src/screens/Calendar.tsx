@@ -152,7 +152,7 @@ export const Calendar = () => {
               <span className="caps">Период</span>
               <Stepper label="Период" value={title} onPrev={() => step(-1)} onNext={() => step(1)} onToday={() => setCursor(startOfDay(new Date()))} />
             </div>
-            <div className="tool">
+            <div className="tool tool--calendar-view">
               <span className="caps">Вид</span>
               <Segmented label="Вид календаря" value={view} options={VIEWS} onChange={setView} />
             </div>
