@@ -796,6 +796,9 @@ td.name { color: var(--ink); font-weight: 600; }
 .calendar-dragging, .calendar-dragging * { cursor: grabbing !important; user-select: none; }
 .calendar-dragging .calendar-moving { opacity: 0.3; }
 .calendar-drag-ghost { position: fixed !important; z-index: 1000; pointer-events: none !important; margin: 0; opacity: 0.92; outline: 1px solid var(--accent); will-change: transform; transition: none; }
+.calendar-edge-hint { position: fixed; top: 50%; z-index: 1001; max-width: 11rem; padding: 10px 12px; background: var(--accent); color: var(--sheet); font-size: 12px; font-weight: 600; pointer-events: none; transform: translateY(-50%); }
+.calendar-edge-hint--left { left: 4px; }
+.calendar-edge-hint--right { right: 4px; }
 .cal-drop-preview { position: absolute; left: 3px; right: 3px; z-index: 3; pointer-events: none; border: 2px dashed var(--accent); background: var(--soft); color: var(--ink); padding: 6px; overflow: hidden; font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
 .cal-drop-preview { transition: top 100ms ease-out; }
 @media (prefers-reduced-motion: reduce) { .cal-drop-preview { transition: none; } }

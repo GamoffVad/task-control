@@ -89,7 +89,15 @@ export const Calendar = () => {
     dispatch({ type: 'saveTask', draft: { ...task, ...movedTaskDates(task, start) } });
     setMoveMessage(`Перенесено: ${task.title} — ${fmtDateTime(start)}`);
   };
-  const { root, draggingId, drop, onStart, ...dragEvents } = useCalendarDrag(state.tasks, canMove, moveTask);
+  const step = (dir: 1 | -1) => {
+    if (view === 'day') setCursor((c) => addDays(c, dir));
+    else if (view === 'month') setCursor((c) => addMonths(c, dir));
+    else setCursor((c) => addDays(c, 7 * dir));
+  };
+  const { root, draggingId, drop, edgeDirection, onStart, ...dragEvents } = useCalendarDrag(state.tasks, canMove, moveTask, {
+    onNavigate: view === 'day' ? undefined : step,
+    periodKey: `${view}:${cursor.toISOString()}`,
+  });
   const drag = { draggingId, drop, onStart, canMove };
 
   useEffect(() => {
@@ -111,12 +119,6 @@ export const Calendar = () => {
     const monday = startOfWeek(cursor);
     return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   }, [view, cursor]);
-
-  const step = (dir: 1 | -1) => {
-    if (view === 'day') setCursor((c) => addDays(c, dir));
-    else if (view === 'month') setCursor((c) => addMonths(c, dir));
-    else setCursor((c) => addDays(c, 7 * dir));
-  };
 
   const title =
     view === 'day'
@@ -141,7 +143,7 @@ export const Calendar = () => {
   };
 
   return (
-    <div className={`calendar-layout${draggingId ? ' calendar-dragging' : ''}`} ref={root} {...dragEvents}>
+    <div className={`calendar-layout${draggingId ? ' calendar-dragging' : ''}`} ref={root} tabIndex={-1} {...dragEvents}>
       {/* Заголовок и фильтры закреплены под шапкой приложения: при прокрутке они остаются на месте. */}
       <div className="sticky-head">
       <PageHeader
@@ -184,7 +186,10 @@ export const Calendar = () => {
         </FilterCard>
       </div>
       </div>
-      {manager && <p className="calendar-move-note" role="status">{moveMessage || 'Перетащите задачу в другой день или интервал. Alt+←/→ — день, Alt+↑/↓ — 30 минут. Escape — отмена переноса.'}</p>}
+      {manager && <p className="calendar-move-note" role="status">{moveMessage || 'Перетащите задачу в другой день или интервал. Удерживайте у края календаря для смены недели или месяца. Alt+←/→ — день, Alt+↑/↓ — 30 минут. Escape — отмена переноса.'}</p>}
+      {edgeDirection && <div className={`calendar-edge-hint calendar-edge-hint--${edgeDirection < 0 ? 'left' : 'right'}`} role="status">
+        {edgeDirection < 0 ? '← ' : ''}{view === 'month' ? (edgeDirection < 0 ? 'Предыдущий месяц' : 'Следующий месяц') : (edgeDirection < 0 ? 'Предыдущая неделя' : 'Следующая неделя')}{edgeDirection > 0 ? ' →' : ''}
+      </div>}
 
       {query.trim() && (
         <section className="search-results" aria-label="Результаты поиска">
@@ -216,7 +221,7 @@ export const Calendar = () => {
         <MonthView cursor={cursor} tasks={tasks} now={now} clashes={clashes} drag={drag} onCreate={(d) => { const s = new Date(d); s.setHours(10, 0, 0, 0); create(s); }} onOpen={(t) => openTask({ task: t })} />
       ) : (
         <div className="cal">
-          <div className="cal-scroll">
+          <div className="cal-scroll" data-calendar-surface>
             <div className="cal-grid" style={{ gridTemplateColumns: `56px repeat(${days.length}, minmax(${view === 'day' ? 240 : 110}px, 1fr))` }}>
               <div className="cal-corner" />
               {days.map((d) => (
@@ -362,7 +367,7 @@ const MonthView = ({ cursor, tasks, now, clashes, drag, onCreate, onOpen }: {
   }, [tasks]);
 
   return (
-    <div className="table-scroll cal cal--month">
+    <div className="table-scroll cal cal--month" data-calendar-surface>
       <div className="month-grid">
         {cells.slice(0, 7).map((d) => (
           <div key={`wd-${d.getDay()}`} className="wd caps">{fmtWeekday(d)}</div>

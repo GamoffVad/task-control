@@ -20,12 +20,14 @@ const originalHitTest = document.elementFromPoint;
 const frames = new Map<number, FrameRequestCallback>();
 let frameId = 0;
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+  vi.setSystemTime(new Date(2026, 8, 17, 12));
   frames.clear();
   vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => { frames.set(++frameId, callback); return frameId; }));
   vi.stubGlobal('cancelAnimationFrame', vi.fn((id: number) => frames.delete(id)));
 });
 const flushFrame = () => act(() => { const pending = [...frames.values()]; frames.clear(); pending.forEach((callback) => callback(performance.now())); });
-afterEach(() => { document.elementFromPoint = originalHitTest; vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.clearAllTimers(); document.elementFromPoint = originalHitTest; vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 const eventTask = (): Task => ({
   id: 'drag-task', rowId: '3.1.2', title: 'Переносимая задача', category: 'reportDept', assigneeIds: [3],
@@ -50,7 +52,108 @@ const setup = (view: CalendarView = 'week', executor = false, task = eventTask()
 };
 const pointer = (x: number, y: number, pointerType = 'mouse') => ({ button: 0, buttons: 1, isPrimary: true, pointerId: 1, pointerType, clientX: x, clientY: y });
 
+/** Геометрия обновляется вместе с DOM при смене периода, как в настоящем календаре. */
+const navigationGeometry = () => {
+  const root = document.querySelector<HTMLDivElement>('.calendar-layout')!;
+  const surface = root.querySelector<HTMLElement>('[data-calendar-surface]')!;
+  root.setPointerCapture = vi.fn();
+  const rectFor = (zone: HTMLElement) => {
+    const index = [...document.querySelectorAll('[data-calendar-day]')].indexOf(zone);
+    const month = zone.dataset.calendarMode === 'month';
+    const left = (month ? index % 7 : index) * 100, top = month ? Math.floor(index / 7) * 140 : 0;
+    const height = month ? 140 : 840;
+    return { x: left, y: top, left, top, right: left + 100, bottom: top + height, width: 100, height, toJSON: () => ({}) };
+  };
+  vi.spyOn(surface, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 700, bottom: 840, width: 700, height: 840, toJSON: () => ({}) });
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    return this.dataset.calendarDay ? rectFor(this) : { x: 0, y: 0, left: 0, top: 0, right: 100, bottom: 40, width: 100, height: 40, toJSON: () => ({}) };
+  });
+  document.querySelectorAll<HTMLElement>('[data-calendar-day]').forEach(zone => vi.spyOn(zone, 'getBoundingClientRect').mockImplementation(() => rectFor(zone)));
+  document.elementFromPoint = vi.fn((x, y) => [...document.querySelectorAll<HTMLElement>('[data-calendar-day]')].find(zone => {
+    const rect = rectFor(zone);
+    return x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom;
+  }) ?? null);
+  return { root, rectFor };
+};
+
 describe('перенос задач в календаре', () => {
+  it.each([
+    ['week', 1], ['week', -1], ['month', 1], ['month', -1],
+  ] as const)('продолжает перенос в виде %s после переключения у края %s', (view, direction) => {
+    setup(view);
+    const { root, rectFor } = navigationGeometry();
+    const before = savedTask(), source = eventButton();
+    const originalDay = document.querySelector<HTMLElement>('[data-calendar-day]')!.dataset.calendarDay;
+    fireEvent.pointerDown(source, pointer(350, 135));
+    fireEvent.pointerMove(source, pointer(direction > 0 ? 695 : 5, 135));
+    fireEvent.lostPointerCapture(source, pointer(350, 135)); // Передача захвата корню не отменяет перенос.
+    flushFrame();
+    expect(root.setPointerCapture).toHaveBeenCalledWith(1);
+    act(() => vi.advanceTimersByTime(700));
+    expect(document.querySelector<HTMLElement>('[data-calendar-day]')!.dataset.calendarDay).not.toBe(originalDay);
+    expect(source.isConnected).toBe(false);
+    expect(root).toHaveFocus();
+    expect(document.querySelector('.calendar-drag-ghost')).not.toBeNull();
+    expect(savedTask()).toEqual(before);
+    const destination = view === 'week' ? new Date(2026, 8, direction > 0 ? 23 : 9) : new Date(2026, direction > 0 ? 9 : 7, 1);
+    const zone = [...document.querySelectorAll<HTMLElement>('[data-calendar-day]')].find(el => el.dataset.calendarDay === destination.toISOString())!;
+    const rect = rectFor(zone), x = rect.left + 50, y = view === 'week' ? 375 : rect.top + 70;
+    fireEvent.pointerMove(root, pointer(x, y));
+    flushFrame();
+    fireEvent.pointerUp(root, pointer(x, y));
+    destination.setHours(view === 'week' ? 13 : 9);
+    expect(savedTask()).toEqual({ ...before, ...movedTaskDates(before, destination) });
+    expect(document.querySelector('.calendar-drag-ghost')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('уход от края отменяет ожидание переключения', () => {
+    setup();
+    const { root } = navigationGeometry(), source = eventButton();
+    const firstDay = document.querySelector<HTMLElement>('[data-calendar-day]')!.dataset.calendarDay;
+    fireEvent.pointerDown(source, pointer(350, 135));
+    fireEvent.pointerMove(source, pointer(695, 135));
+    act(() => vi.advanceTimersByTime(400));
+    fireEvent.pointerMove(root, pointer(450, 135));
+    act(() => vi.advanceTimersByTime(1000));
+    expect(document.querySelector<HTMLElement>('[data-calendar-day]')!.dataset.calendarDay).toBe(firstDay);
+    expect(document.querySelector('.calendar-edge-hint')).toBeNull();
+    fireEvent.keyDown(root, { key: 'Escape' });
+    expect(savedTask()).toEqual(eventTask());
+  });
+
+  it('удержание у края переключает несколько недель; Escape останавливает таймер после исчезновения исходной карточки', () => {
+    setup();
+    const { root } = navigationGeometry(), source = eventButton();
+    fireEvent.pointerDown(source, pointer(350, 135));
+    fireEvent.pointerMove(source, pointer(695, 135));
+    act(() => vi.advanceTimersByTime(700));
+    act(() => vi.advanceTimersByTime(1100));
+    expect(new Date(document.querySelector<HTMLElement>('[data-calendar-day]')!.dataset.calendarDay!).getDate()).toBe(28);
+    fireEvent.keyDown(root, { key: 'Escape' });
+    act(() => vi.advanceTimersByTime(2000));
+    expect(new Date(document.querySelector<HTMLElement>('[data-calendar-day]')!.dataset.calendarDay!).getDate()).toBe(28);
+    expect(savedTask()).toEqual(eventTask());
+    expect(document.querySelector('.calendar-drag-ghost')).toBeNull();
+    expect(document.querySelector('.calendar-edge-hint')).toBeNull();
+  });
+
+  it.each(['cancel', 'release', 'unmount'])('останавливает переключение у края при %s', reason => {
+    setup();
+    const { root } = navigationGeometry(), source = eventButton();
+    fireEvent.pointerDown(source, pointer(350, 135));
+    fireEvent.pointerMove(source, pointer(695, 135));
+    if (reason === 'unmount') cleanup();
+    else if (reason === 'cancel') fireEvent.pointerCancel(root, pointer(695, 135));
+    else fireEvent.pointerUp(root, pointer(-100, -100));
+    act(() => vi.advanceTimersByTime(2000));
+    expect(document.querySelector('.calendar-drag-ghost')).toBeNull();
+    if (reason !== 'unmount') {
+      expect(new Date(document.querySelector<HTMLElement>('[data-calendar-day]')!.dataset.calendarDay!).getDate()).toBe(14);
+      expect(savedTask()).toEqual(eventTask());
+    }
+  });
+
   it('переносит в другой день и время с шагом 30 минут, сохраняя длительность и остальные поля', () => {
     setup();
     const before = savedTask();

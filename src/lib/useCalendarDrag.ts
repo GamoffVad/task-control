@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type PointerEvent, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type PointerEvent, type KeyboardEvent } from 'react';
 import { FIRST_HOUR, LAST_HOUR } from './calendarLayout';
 import { addDays } from './dates';
 import type { Task } from './types';
@@ -12,26 +12,38 @@ type Session = {
   offset: number;
   moved: boolean;
   source: HTMLButtonElement;
+  capture: HTMLElement;
   ghost: HTMLButtonElement | null;
   point: { x: number; y: number };
 };
 
+type Navigation = { onNavigate?: (direction: 1 | -1) => void; periodKey?: string };
+const EDGE_WIDTH = 36;
+const EDGE_DELAY = 650;
+const EDGE_REPEAT = 1000;
+
 /** Указатель работает и с мышью, и с касанием; сохранение происходит только при отпускании в сетке. */
-export function useCalendarDrag(tasks: Task[], canMove: (task: Task) => boolean, onMove: (task: Task, start: Date) => void) {
+export function useCalendarDrag(tasks: Task[], canMove: (task: Task) => boolean, onMove: (task: Task, start: Date) => void, { onNavigate, periodKey }: Navigation = {}) {
   const root = useRef<HTMLDivElement>(null);
   const session = useRef<Session | null>(null);
   const blockedClick = useRef<{ id: string; until: number } | null>(null);
   const keyboardTask = useRef<string | null>(null);
   const frame = useRef<number | null>(null);
+  const navigate = useRef(onNavigate);
+  const edge = useRef<{ direction: 1 | -1 | null; timer: number | null }>({ direction: null, timer: null });
+  const [edgeDirection, setEdgeDirection] = useState<1 | -1 | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [drop, setDrop] = useState<CalendarDrop | null>(null);
 
+  useLayoutEffect(() => { navigate.current = onNavigate; }, [onNavigate]);
+
   useEffect(() => () => {
     if (frame.current !== null) cancelAnimationFrame(frame.current);
+    if (edge.current.timer !== null) window.clearTimeout(edge.current.timer);
     const current = session.current;
     session.current = null;
     current?.ghost?.remove();
-    if (current?.source.hasPointerCapture?.(current.pointerId)) current.source.releasePointerCapture(current.pointerId);
+    if (current?.capture.hasPointerCapture?.(current.pointerId)) current.capture.releasePointerCapture(current.pointerId);
   }, []);
 
   useLayoutEffect(() => {
@@ -50,7 +62,7 @@ export function useCalendarDrag(tasks: Task[], canMove: (task: Task) => boolean,
     return day.getTime();
   };
 
-  const target = (x: number, y: number): CalendarDrop | null => {
+  const target = useCallback((x: number, y: number): CalendarDrop | null => {
     const current = session.current;
     if (!current) return null;
     const task = tasks.find((item) => item.id === current.taskId);
@@ -70,6 +82,49 @@ export function useCalendarDrag(tasks: Task[], canMove: (task: Task) => boolean,
       }
     }
     return { taskId: task.id, day: zone.dataset.calendarDay!, start };
+  }, [tasks]);
+
+  const updateDrop = useCallback((next: CalendarDrop | null) => setDrop((before) =>
+    before?.taskId === next?.taskId && before?.day === next?.day && before?.start.getTime() === next?.start.getTime() ? before : next), []);
+
+  // После смены периода указатель может оставаться неподвижным: подсвечиваем уже новую ячейку.
+  useLayoutEffect(() => {
+    const current = session.current;
+    if (current?.moved) updateDrop(target(current.point.x, current.point.y));
+  }, [periodKey, target, updateDrop]);
+
+  const clearEdge = () => {
+    if (edge.current.timer !== null) window.clearTimeout(edge.current.timer);
+    edge.current = { direction: null, timer: null };
+    setEdgeDirection(null);
+  };
+
+  const edgeAt = ({ x, y }: { x: number; y: number }): 1 | -1 | null => {
+    if (!navigate.current) return null;
+    const surface = root.current?.querySelector<HTMLElement>('[data-calendar-surface]');
+    if (!surface) return null;
+    const rect = surface.getBoundingClientRect();
+    const left = Math.max(0, rect.left), right = Math.min(window.innerWidth, rect.right);
+    if (right <= left || y < Math.max(0, rect.top) || y > Math.min(window.innerHeight, rect.bottom) || x < 0 || x > window.innerWidth) return null;
+    if (x <= left + EDGE_WIDTH) return -1;
+    if (x >= right - EDGE_WIDTH) return 1;
+    return null;
+  };
+
+  const updateEdge = (current: Session) => {
+    const direction = edgeAt(current.point);
+    if (edge.current.direction === direction) return;
+    clearEdge();
+    if (!direction) return;
+    edge.current.direction = direction;
+    setEdgeDirection(direction);
+    const advance = () => {
+      if (session.current !== current || edge.current.direction !== direction || edgeAt(current.point) !== direction) { clearEdge(); return; }
+      setDrop(null);
+      navigate.current?.(direction);
+      edge.current.timer = window.setTimeout(advance, EDGE_REPEAT);
+    };
+    edge.current.timer = window.setTimeout(advance, EDGE_DELAY);
   };
 
   const reset = () => {
@@ -77,11 +132,12 @@ export function useCalendarDrag(tasks: Task[], canMove: (task: Task) => boolean,
     session.current = null;
     if (frame.current !== null) cancelAnimationFrame(frame.current);
     frame.current = null;
+    clearEdge();
     current?.ghost?.remove();
     setDraggingId(null);
     setDrop(null);
     if (current?.moved) blockedClick.current = { id: current.taskId, until: performance.now() + 400 };
-    if (current?.source.hasPointerCapture?.(current.pointerId)) current.source.releasePointerCapture(current.pointerId);
+    if (current?.capture.hasPointerCapture?.(current.pointerId)) current.capture.releasePointerCapture(current.pointerId);
   };
 
   const onStart = (event: PointerEvent<HTMLButtonElement>, task: Task) => {
@@ -90,7 +146,7 @@ export function useCalendarDrag(tasks: Task[], canMove: (task: Task) => boolean,
     const zone = source.closest<HTMLElement>('[data-calendar-day]');
     if (!zone) return;
     const offset = zone.dataset.calendarMode === 'time' ? timeAt(zone, event.clientY) - new Date(task.start).getTime() : 0;
-    session.current = { taskId: task.id, pointerId: event.pointerId, x: event.clientX, y: event.clientY, offset, source, moved: false, ghost: null, point: { x: event.clientX, y: event.clientY } };
+    session.current = { taskId: task.id, pointerId: event.pointerId, x: event.clientX, y: event.clientY, offset, source, capture: source, moved: false, ghost: null, point: { x: event.clientX, y: event.clientY } };
     source.setPointerCapture?.(event.pointerId);
   };
 
@@ -114,9 +170,16 @@ export function useCalendarDrag(tasks: Task[], canMove: (task: Task) => boolean,
       Object.assign(ghost.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`, right: 'auto' });
       document.body.append(ghost);
       current.ghost = ghost;
+      // Корень сохраняется при смене недели/месяца, в отличие от исходной карточки.
+      if (root.current) {
+        current.capture = root.current;
+        root.current.setPointerCapture?.(current.pointerId);
+        root.current.focus({ preventScroll: true });
+      }
       setDraggingId(current.taskId);
     }
     current.point = { x: event.clientX, y: event.clientY };
+    updateEdge(current);
     // Координаты обновляются раз за кадр, а React — только при смене целевой ячейки.
     if (frame.current !== null) return;
     frame.current = requestAnimationFrame(() => {
@@ -125,7 +188,7 @@ export function useCalendarDrag(tasks: Task[], canMove: (task: Task) => boolean,
       const { x, y } = current.point;
       if (current.ghost) current.ghost.style.transform = `translate3d(${x - current.x}px, ${y - current.y}px, 0)`;
       const next = target(x, y);
-      setDrop((before) => before?.taskId === next?.taskId && before?.day === next?.day && before?.start.getTime() === next?.start.getTime() ? before : next);
+      updateDrop(next);
     });
   };
 
@@ -171,5 +234,11 @@ export function useCalendarDrag(tasks: Task[], canMove: (task: Task) => boolean,
     else { start.setMinutes(start.getMinutes() + (event.key === 'ArrowUp' ? -30 : 30)); onMove(task, start); }
   };
 
-  return { root, draggingId, drop, onStart, onPointerMove, onPointerUp, onPointerCancel: reset, onLostPointerCapture: reset, onClickCapture, onKeyDownCapture };
+  const onLostPointerCapture = (event: PointerEvent) => {
+    const current = session.current;
+    // Передача захвата с карточки на корень — нормальная часть начала переноса.
+    if (current && event.pointerId === current.pointerId && event.target === current.capture) reset();
+  };
+
+  return { root, draggingId, drop, edgeDirection, onStart, onPointerMove, onPointerUp, onPointerCancel: reset, onLostPointerCapture, onClickCapture, onKeyDownCapture };
 }
