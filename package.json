@@ -1,7 +1,7 @@
 {
   "name": "task-control",
   "private": true,
-  "version": "6.10.0",
+  "version": "6.11.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

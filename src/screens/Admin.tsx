@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { Icon } from '../components/Icons';
 import { DirectoryUserAutocomplete } from '../components/DirectoryUserAutocomplete';
 import { DatabaseSettings } from '../components/DatabaseSettings';
+import { NavOrderEditor } from '../components/NavOrderEditor';
 import { Button, Checkbox, ColorPicker, DateField, Dialog, PageHeader, Segmented, Select, Slider, TextArea, TextInput } from '../kit';
 import { DEFAULT_TEMPLATES, TEMPLATE_SCOPES, placeholdersFor, renderTemplate } from '../lib/templates';
 import { reportDocContext } from '../lib/reportExport';
@@ -595,15 +596,17 @@ const AppearanceTab = ({ state, dispatch }: TabProps) => {
     <div className="card-head admin-content-head">
       <div>
         <h2>Редактирование UI</h2>
-        <p className="subtitle">Цвета, шрифты и размеры текста. Настройки личные: хранятся в вашем браузере и других сотрудников не касаются. Сохраняются только отличия от оформления по умолчанию.</p>
+        <p className="subtitle">Порядок меню, цвета, шрифты и размеры текста. Настройки личные: хранятся в вашем браузере и других сотрудников не касаются. Сохраняются только отличия от оформления по умолчанию.</p>
       </div>
       <Button
         onClick={() => dispatch({ type: 'saveAppearance', appearance: { ...DEFAULT_APPEARANCE, light: {}, dark: {}, sizes: { ...DEFAULT_APPEARANCE.sizes } } })}
-        disabled={changed === 0 && appearance.fontBody === DEFAULT_APPEARANCE.fontBody && appearance.fontMono === DEFAULT_APPEARANCE.fontMono && SIZE_TOKENS.every((i) => appearance.sizes[i.name] === i.base)}
+        disabled={changed === 0 && appearance.navOrder.every((to, index) => to === DEFAULT_APPEARANCE.navOrder[index]) && appearance.fontBody === DEFAULT_APPEARANCE.fontBody && appearance.fontMono === DEFAULT_APPEARANCE.fontMono && SIZE_TOKENS.every((i) => appearance.sizes[i.name] === i.base)}
       >
         Вернуть всё по умолчанию
       </Button>
     </div>
+
+    <NavOrderEditor user={state.user} order={appearance.navOrder} onChange={(navOrder) => save({ navOrder })} />
 
     <h3 className="admin-subhead">Шрифты</h3>
     <p className="subtitle">Только те, что есть в системе: приложение ничего не загружает из интернета.</p>

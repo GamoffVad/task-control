@@ -127,7 +127,7 @@ export const Shell = () => {
           <header className="topbar" ref={topbar}>
             <Logo context={`${managedUnitName} · ${managedShortName} · ${roleLabel(user.role, state.roles).toLowerCase()}`} />
             <nav className="topnav" aria-label="Разделы" ref={nav}>
-              {navFor(user).map((n) => (
+              {navFor(user, state.appearance.navOrder).map((n) => (
                 <NavLink key={n.to} to={n.to}>
                   {n.label}
                   {n.to === '/control' && overdue > 0 && (

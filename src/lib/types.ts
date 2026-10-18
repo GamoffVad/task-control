@@ -132,6 +132,8 @@ export type AppearanceSettings = {
   fontBody: string;
   fontMono: string;
   sizes: { base: number; heading: number; caps: number; subtitle: number };
+  /** Личный порядок разделов навбара в этом браузере. */
+  navOrder: string[];
 };
 
 /** Категория мероприятия — определяет цвет в календаре. */

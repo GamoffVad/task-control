@@ -4,6 +4,7 @@
 
 import type { Theme } from './theme';
 import type { AppearancePreset, AppearanceSettings } from './types';
+import { normalizeNavOrder } from './navigation';
 
 export type TokenKind = 'color' | 'size';
 
@@ -233,6 +234,7 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
   fontBody: FONT_STACKS[0].value,
   fontMono: MONO_STACKS[0].value,
   sizes: { base: 14, heading: 16, caps: 11, subtitle: 14 },
+  navOrder: normalizeNavOrder(undefined),
 };
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -288,6 +290,7 @@ export const normalizeAppearance = (raw: Partial<AppearanceSettings> | undefined
     fontBody: font(raw?.fontBody, FONT_STACKS, DEFAULT_APPEARANCE.fontBody),
     fontMono: font(raw?.fontMono, MONO_STACKS, DEFAULT_APPEARANCE.fontMono),
     sizes,
+    navOrder: normalizeNavOrder(raw?.navOrder),
   };
 };
 

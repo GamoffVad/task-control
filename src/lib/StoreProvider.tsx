@@ -33,10 +33,13 @@ const LocalStore = ({ children, initial }: { children: ReactNode; initial?: AppS
     return { ...start, appearance: loadAppearance(start.user?.employeeId) };
   });
   useEffect(() => saveState(state), [state]);
+  useEffect(() => { storeAppearance(state.appearance, state.user?.employeeId); }, [state.appearance, state.user?.employeeId]);
   const signIn = useCallback(async (email: string, password: string) => {
     const a = authenticate(email, password, state.users, state.roles);
     if (!a) return BAD_LOGIN;
+    const appearance = loadAppearance(a.employeeId);
     dispatch({ type: 'login', ...a });
+    dispatch({ type: 'saveAppearance', appearance });
     return null;
   }, [state.users, state.roles]);
   const signInWindows = useCallback(async () => 'Windows-аутентификация доступна только при работе через настроенный сервер.', []);
