@@ -96,8 +96,8 @@ export const Control = () => {
         title="Контроль исполнения"
         subtitle="Задачи по срокам. Фильтры отбирают сотрудника, категории, сроки и исполнение; исполненные задачи показаны бледными."
         actions={
-          <button type="button" className="btn" onClick={exportWord}>
-            <Icon.Download size={15} /> Выгрузить в Word
+          <button type="button" className="icon-btn file-export" aria-label="Выгрузить в Word" data-tip="Выгрузить в Word" onClick={exportWord}>
+            <Icon.Word size={22} />
           </button>
         }
       />

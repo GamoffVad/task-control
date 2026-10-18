@@ -1234,7 +1234,7 @@ a.label:hover { color: var(--accent); }
 .tl-cell:not(:disabled):hover { background: var(--soft); }
 .tt-brush-tools { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem 1rem; min-width: 0; }
 .tt-brush-tools .check { flex-shrink: 0; font-weight: 600; white-space: nowrap; }
-.tt-brush-choice { width: 22rem; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.tt-brush-choice { display: block; width: 22rem; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
 .tt-brush-choice.inactive, .tt-brush-hint.inactive { visibility: hidden; pointer-events: none; }
 .tt-brush-hint { display: grid; padding: .4rem 0 .6rem; color: var(--ink-3); font-size: .8rem; min-height: 2rem; }
 .tt-brush-hint-reserve, .tt-brush-hint-text { grid-area: 1 / 1; }
@@ -1509,23 +1509,40 @@ a.label:hover { color: var(--accent); }
 .tl-lane { grid-column: 2 / -1; }
 
 /* ——— Тетрис: компактная шапка, чтобы графику оставалось больше высоты ——— */
-.tt-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 24px; padding: 16px 0 10px; }
+.tt-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 10px 0; }
 .tt-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
 .tt-title h1 { font-size: clamp(22px, 1rem + 1vw, 26px); }
 .tt-sub { font-size: 13px; font-weight: 400; letter-spacing: 0; color: var(--ink-3); }
 .tetris-page { min-width: 0; }
-.tt-tabs { flex-wrap: wrap; }
+.tt-tabs { flex-wrap: wrap; margin-left: auto; flex: none; }
 .tt-tabs button { min-height: 44px; }
 .tt-tabs button[aria-selected="true"] { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
 .tetris-page [role="tabpanel"][hidden] { display: none; }
-.tt-graph-controls > .tt-tools { padding-bottom: 10px; }
-.tt-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 24px; }
+.tt-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; order: 1; width: 100%; min-width: 0; }
+.tt-tools[hidden] { display: none; }
+.tt-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.tt-actions .icon-btn, .file-export { width: 44px; height: 44px; flex: none; padding: 0; }
+.tt-actions .btn--primary { background: var(--accent); color: var(--sheet); border-color: var(--accent); }
+.tt-actions .btn--primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 /* Постоянная ширина месяца удерживает стрелки на месте в выровненной вправо панели. */
 .tt-tools .stepper { flex: none; flex-wrap: nowrap; }
 .tt-tools .stepper .icon-btn { flex: none; }
 .tt-tools .stepper .value { white-space: nowrap; }
 .tt-group { display: flex; align-items: center; gap: 10px; flex: 0 0 210px; width: 210px; min-width: 0; }
 .tt-group .dd { flex: 1 1 auto; }
+@media (min-width: 1280px) {
+  .tt-head { flex-wrap: nowrap; gap: 12px; }
+  .tt-title { flex: none; }
+  .tt-sub { display: none; }
+  .tt-tools { order: 0; width: auto; flex: 1 1 auto; flex-wrap: nowrap; gap: 12px; }
+  .tt-brush-tools { flex-wrap: nowrap; gap: 8px; flex: none; }
+  .tt-brush-choice { width: clamp(10rem, 12vw, 16rem); }
+  .tt-group { flex: 1 1 9rem; width: auto; max-width: 210px; gap: 6px; }
+  .tt-group > .caps { display: none; }
+  .tt-tabs { gap: 12px; }
+  .tt-tabs button { font-size: 13px; }
+}
+@media (min-width: 1440px) { .tt-group > .caps { display: inline; } }
 .tt-stats { display: flex; flex-wrap: wrap; gap: 6px 0; padding: 8px 0; border-top: 1px dashed var(--dash); border-bottom: 1px dashed var(--dash); }
 .tt-stat { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding-right: 18px; margin-right: 18px; border-right: 1px dashed var(--dash); }
 .tt-stat:last-child { border-right: none; margin-right: 0; padding-right: 0; }
@@ -1536,7 +1553,6 @@ a.label:hover { color: var(--accent); }
 .tt-bar .abs-types { padding-top: 0; }
 @media (max-width: 767px) {
   .tt-tools { width: 100%; }
-  .tt-tools > .btn { flex: 1 1 100%; }
   .tt-group { flex: 1 1 100%; }
   /* На телефоне сводка — сетка 2×2 без пояснений: подробности видны на графике. */
   .tt-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }

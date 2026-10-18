@@ -427,6 +427,56 @@ describe('планирование: поиск разделов', () => {
 });
 
 describe('планирование: фильтр по группе', () => {
+  it('выбирает нескольких сотрудников, сохраняет отметки при поиске и позволяет снять все', async () => {
+    renderAt('/planning');
+    const user = userEvent.setup();
+    const columns = () => screen.getAllByRole('columnheader').slice(1);
+    await user.click(screen.getByRole('button', { name: 'Сотрудник: Все сотрудники' }));
+    expect(screen.getByRole('listbox', { name: 'Сотрудник' })).toHaveAttribute('aria-multiselectable', 'true');
+    await user.click(screen.getByRole('option', { name: 'Все сотрудники' }));
+    expect(columns()).toHaveLength(0);
+    expect(screen.getByRole('status')).toHaveTextContent('Выберите сотрудников');
+    await user.type(screen.getByRole('combobox', { name: 'Поиск: Сотрудник' }), 'Петров');
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('option', { name: 'Петров В.С.' })).toHaveAttribute('aria-selected', 'true');
+    await user.clear(screen.getByRole('combobox', { name: 'Поиск: Сотрудник' }));
+    await user.type(screen.getByRole('combobox', { name: 'Поиск: Сотрудник' }), 'Сидоров');
+    await user.click(screen.getByRole('option', { name: 'Сидоров Д.Е.' }));
+    expect(columns().map((head) => head.textContent)).toEqual([expect.stringContaining('Петров В.С.'), expect.stringContaining('Сидоров Д.Е.')]);
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'Сотрудник: Петров В.С., Сидоров Д.Е.' }));
+    expect(screen.getByRole('option', { name: 'Петров В.С.' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('option', { name: 'Сидоров Д.Е.' })).toHaveAttribute('aria-selected', 'true');
+    await user.click(screen.getByRole('option', { name: 'Все сотрудники' }));
+    expect(columns()).toHaveLength(7);
+    await user.click(screen.getByRole('option', { name: 'Все сотрудники' }));
+    expect(columns()).toHaveLength(0);
+  });
+
+  it('документ содержит задачи только отмеченных сотрудников, общая задача не дублируется', async () => {
+    const state = loggedIn();
+    const task = { ...state.tasks[0], rowId: '3.1.1', start: new Date(2026, 8, 17, 9).toISOString(), end: new Date(2026, 8, 17, 10).toISOString() };
+    state.tasks = [
+      { ...task, id: 'selected-a', title: 'Первый выбранный', assigneeIds: [2] },
+      { ...task, id: 'selected-b', title: 'Второй выбранный', assigneeIds: [3] },
+      { ...task, id: 'selected-shared', title: 'Общая выбранная', assigneeIds: [2, 3] },
+      { ...task, id: 'excluded', title: 'Исключённое мероприятие', assigneeIds: [4] },
+    ];
+    renderAt('/planning', state);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Сотрудник: Все сотрудники' }));
+    await user.click(screen.getByRole('option', { name: 'Все сотрудники' }));
+    await user.click(screen.getByRole('option', { name: 'Петров В.С.' }));
+    await user.click(screen.getByRole('option', { name: 'Сидоров Д.Е.' }));
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'Документ' }));
+    const text = within(screen.getByRole('dialog')).getByLabelText('Текст документа').textContent!;
+    expect(text).toContain('Первый выбранный');
+    expect(text).toContain('Второй выбранный');
+    expect(text.match(/Общая выбранная/g)).toHaveLength(1);
+    expect(text).not.toContain('Исключённое мероприятие');
+  });
+
   it('сужает матрицу до группы и сбрасывает сотрудника из другой группы', async () => {
     const user = userEvent.setup();
     renderAt('/planning');
@@ -440,7 +490,7 @@ describe('планирование: фильтр по группе', () => {
     // В списке сотрудников — только группа.
     await user.click(screen.getByRole('button', { name: /^Сотрудник: Вся группа/ }));
     expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Вся группа', 'Сидоров Д.Е.', 'Кузнецов М.П.']);
-    await user.click(screen.getByRole('option', { name: 'Кузнецов М.П.' }));
+    await user.click(screen.getByRole('option', { name: 'Сидоров Д.Е.' }));
     expect(heads()).toEqual(['Кузнецов М.П.']);
 
     await user.click(screen.getByRole('button', { name: /^Группа: Проектная группа 1/ }));

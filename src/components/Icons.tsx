@@ -18,6 +18,8 @@ export const Icon = {
   Trash: (p: P) => <svg {...base(p.size)}><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>,
   Edit: (p: P) => <svg {...base(p.size)}><path d="M4 20h4l11-11a2.8 2.8 0 00-4-4L4 16v4z" /><path d="M13.5 6.5l4 4" /></svg>,
   Download: (p: P) => <svg {...base(p.size)}><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>,
+  Excel: (p: P) => <svg {...base(p.size)} stroke="none"><rect x="7" y="2" width="15" height="20" rx="1.5" fill="#21a366" /><path d="M14 6h5M14 10h5M14 14h5M14 18h5" stroke="#fff" strokeWidth="1.2" opacity=".75" /><rect x="1" y="6" width="13" height="13" rx="1" fill="#107c41" /><path d="m5 9 5 7m0-7-5 7" stroke="#fff" strokeWidth="1.8" /></svg>,
+  Word: (p: P) => <svg {...base(p.size)} stroke="none"><rect x="7" y="2" width="15" height="20" rx="1.5" fill="#2b7cd3" /><path d="M14 6h5M14 10h5M14 14h5M14 18h5" stroke="#fff" strokeWidth="1.2" opacity=".75" /><rect x="1" y="6" width="13" height="13" rx="1" fill="#185abd" /><path d="m3.5 10 1.8 6 2.2-5 2.2 5 1.8-6" stroke="#fff" strokeWidth="1.4" /></svg>,
   Send: (p: P) => <svg {...base(p.size)}><path d="M4 12l16-8-6 16-3-7z" /><path d="M11 13l9-9" /></svg>,
   Save: (p: P) => <svg {...base(p.size)}><path d="M5 4h11l3 3v13H5z" /><path d="M8 4v5h7V4M8 20v-6h8v6" /></svg>,
   Refresh: (p: P) => <svg {...base(p.size)}><path d="M20 11a8 8 0 10-2.3 5.7M20 4v7h-7" /></svg>,

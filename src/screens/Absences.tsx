@@ -110,6 +110,8 @@ export const Absences = () => {
     if (legend.current) observer?.observe(legend.current);
     const header = document.querySelector('.topbar');
     if (header) observer?.observe(header);
+    const toolbar = document.querySelector('.tt-head');
+    if (toolbar) observer?.observe(toolbar);
     return () => { window.removeEventListener('resize', fit); observer?.disconnect(); };
   });
 
@@ -179,21 +181,7 @@ export const Absences = () => {
           <h1>Тетрис</h1>
           <span className="tt-sub">график событий отдела</span>
         </div>
-        <div className="seg tt-tabs" role="tablist" aria-label="Раздел Тетриса" onKeyDown={(e) => {
-          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
-          e.preventDefault();
-          const index = e.key === 'Home' ? 0 : e.key === 'End' ? 1 : tab === 'graph' ? 1 : 0;
-          const next = TETRIS_TABS[index].id;
-          selectTab(next);
-          document.getElementById(`tt-tab-${next}`)?.focus();
-        }}>
-          {TETRIS_TABS.map((item) => <button key={item.id} type="button" role="tab" id={`tt-tab-${item.id}`} data-label={item.label} aria-controls={`tt-panel-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} onClick={() => selectTab(item.id)}><span className="seg-label">{item.label}</span></button>)}
-        </div>
-      </div>
-
-      <div id="tt-panel-graph" role="tabpanel" aria-labelledby="tt-tab-graph" hidden={tab !== 'graph'}>
-      <div className="tt-graph-controls" ref={controls}>
-        <div className="tt-tools">
+        <div className="tt-tools" hidden={tab !== 'graph'}>
           {brush.tools}
           <Stepper
             compact
@@ -219,13 +207,29 @@ export const Absences = () => {
               onChange={(shown) => setHidden(new Set(ABSENCE_TYPES.map((t) => t.key).filter((k) => !shown.includes(k))))}
             />
           </div>
-          <button type="button" className="btn" onClick={exportExcel}>
-            <Icon.Download size={15} /> Выгрузить в Excel
-          </button>
-          <button type="button" className="btn btn--primary" onClick={() => create(me)}>
-            <Icon.Plus size={15} /> {manager ? 'Событие' : 'Заявка на событие'}
-          </button>
+          <div className="tt-actions">
+            <button type="button" className="icon-btn file-export" aria-label="Выгрузить в Excel" data-tip="Выгрузить в Excel" onClick={exportExcel}>
+              <Icon.Excel size={22} />
+            </button>
+            <button type="button" className="icon-btn btn--primary" aria-label={manager ? 'Событие' : 'Заявка на событие'} data-tip={manager ? 'Создать событие' : 'Подать заявку на событие'} onClick={() => create(me)}>
+              <Icon.Plus size={20} />
+            </button>
+          </div>
         </div>
+        <div className="seg tt-tabs" role="tablist" aria-label="Раздел Тетриса" onKeyDown={(e) => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+          e.preventDefault();
+          const index = e.key === 'Home' ? 0 : e.key === 'End' ? 1 : tab === 'graph' ? 1 : 0;
+          const next = TETRIS_TABS[index].id;
+          selectTab(next);
+          document.getElementById(`tt-tab-${next}`)?.focus();
+        }}>
+          {TETRIS_TABS.map((item) => <button key={item.id} type="button" role="tab" id={`tt-tab-${item.id}`} data-label={item.label} aria-controls={`tt-panel-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} onClick={() => selectTab(item.id)}><span className="seg-label">{item.label}</span></button>)}
+        </div>
+      </div>
+
+      <div id="tt-panel-graph" role="tabpanel" aria-labelledby="tt-tab-graph" hidden={tab !== 'graph'}>
+      <div className="tt-graph-controls" ref={controls}>
 
       <section className="tt-stats" aria-label="Сводка">
         <div className="tt-stat">

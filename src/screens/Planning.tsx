@@ -1,7 +1,7 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTaskEditor } from '../components/taskEditor';
-import { EmployeeFilter, GroupFilter } from '../components/ui';
-import { FilterCard, PageHeader, SearchField, Stepper } from '../kit';
+import { GroupFilter } from '../components/ui';
+import { FilterCard, MultiSelect, PageHeader, SearchField, Stepper } from '../kit';
 import { Icon } from '../components/Icons';
 import { absenceType, categoryLabel, department, employees, groupMembers, shortName } from '../lib/data';
 import { addDays, fmtDate, fmtDateTime, fmtRange, plural, startOfDay, toDateKey } from '../lib/dates';
@@ -32,7 +32,7 @@ export const Planning = () => {
   const reportStart = useMemo(() => weeklyPeriodStart(weekStart, periods.reporting), [weekStart, periods.reporting]);
   const reportingEnd = useMemo(() => weeklyPeriodEnd(reportStart, periods.reporting), [reportStart, periods.reporting]);
   const [group, setGroup] = useState('all');
-  const [employee, setEmployee] = useState<number | null>(null);
+  const [employeeIds, setEmployeeIds] = useState<number[] | null>(null);
   const [rowQuery, setRowQuery] = useState('');
   const shownRows = useMemo(() => {
     const normalize = (text: string) => text.toLocaleLowerCase('ru').replace(/ё/g, 'е').replace(/\s+/g, ' ').trim();
@@ -75,20 +75,24 @@ export const Planning = () => {
   const weekTasks = useMemo(() => tasksInWeek(state.tasks, weekStart, weekEnd), [state.tasks, weekStart, weekEnd]);
   const cells = useMemo(() => groupByCell(weekTasks), [weekTasks]);
   // Исполнитель видит и планирует только свой столбец.
-  // Руководитель сужает матрицу до группы отдела, а внутри неё — до одного сотрудника.
+  // Руководитель сужает матрицу до группы отдела и отмеченных сотрудников.
   // Руководитель видит столбцы только тех, чьи задачи ему видны (его подразделение, а у начальника отдела — все).
   const scope = useScope();
   const people = groupMembers(group).filter((e) => inScope(scope, e.id));
-  const shownId = manager ? employee : me;
-  const columns = shownId ? employees.filter((e) => e.id === shownId) : people;
+  const selectedIds = people.filter((e) => employeeIds === null || employeeIds.includes(e.id)).map((e) => e.id);
+  const columns = manager ? people.filter((e) => selectedIds.includes(e.id)) : employees.filter((e) => e.id === me);
   const [docOpen, setDocOpen] = useState(false);
-  const items = useMemo(() => planItems(state.tasks, state.planRows, weekStart, columns.map((e) => e.id), weekEnd), [state.tasks, state.planRows, weekStart, weekEnd, columns]);
+  const items = planItems(state.tasks, state.planRows, weekStart, columns.map((e) => e.id), weekEnd);
   const exportCsv = () => saveFile(`plan-${toDateKey(weekStart)}.csv`, planToCsv(items, state.planRows), 'text/csv;charset=utf-8');
 
   const changeGroup = (g: string) => {
     setGroup(g);
-    // Сотрудник из другой группы сбрасывается, иначе матрица показала бы человека вне выбранной группы.
-    if (employee && !groupMembers(g).some((e) => e.id === employee && inScope(scope, e.id))) setEmployee(null);
+    // Сохраняем выбранных из новой группы; если никто не остался — показываем всю группу.
+    if (employeeIds !== null) {
+      const allowed = new Set(groupMembers(g).filter((e) => inScope(scope, e.id)).map((e) => e.id));
+      const next = employeeIds.filter((id) => allowed.has(id));
+      setEmployeeIds(employeeIds.length > 0 && next.length === 0 ? null : next);
+    }
   };
   const report = findReport(state.reports, reportStart);
   const doneCount = useMemo(() => buildReportEntries(state, reportStart, reportingEnd).length, [state, reportStart, reportingEnd]);
@@ -162,7 +166,10 @@ export const Planning = () => {
         )}
         <FilterCard label="Сотрудник">
           {manager ? (
-            <EmployeeFilter value={employee} onChange={setEmployee} people={people} allLabel={group === 'all' ? 'Все сотрудники' : 'Вся группа'} />
+            <MultiSelect label="Сотрудник" allLabel={group === 'all' ? 'Все сотрудники' : 'Вся группа'}
+              options={people.map((e) => ({ value: String(e.id), label: shortName(e.id) }))}
+              value={selectedIds.map(String)}
+              onChange={(ids) => setEmployeeIds(ids.length === people.length ? null : ids.map(Number))} />
           ) : (
             <div style={{ minHeight: 34, display: 'flex', alignItems: 'center', fontSize: 15, fontWeight: 700 }}>{state.users.some((account) => account.employeeId === me) ? shortName(me) : 'Не отображается в составе отдела'}</div>
           )}
@@ -186,6 +193,7 @@ export const Planning = () => {
       )}
 
       <div className="plan-wrap" ref={wrap}>
+        {manager && columns.length === 0 && <p className="empty" role="status">Выберите сотрудников в фильтре «Сотрудник».</p>}
         {/* Один столбец сотрудника (он сам или выбранный в фильтре) делается шире столбца разделов. */}
         <table className={`plan-table${columns.length === 1 ? ' plan-table--single' : ''}`}>
           <thead>
