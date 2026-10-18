@@ -21,6 +21,7 @@ export const Icon = {
   Excel: (p: P) => <svg {...base(p.size)}><rect x="8" y="2" width="14" height="20" rx="1.5" /><path d="M15 6h4M15 10h4M15 14h4M15 18h4" strokeWidth="1.2" /><rect x="1" y="6" width="13" height="13" rx="1" fill="currentColor" stroke="none" /><path d="m5 9 5 7m0-7-5 7" stroke="var(--paper)" strokeWidth="1.8" /></svg>,
   Word: (p: P) => <svg {...base(p.size)}><rect x="8" y="2" width="14" height="20" rx="1.5" /><path d="M15 6h4M15 10h4M15 14h4M15 18h4" strokeWidth="1.2" /><rect x="1" y="6" width="13" height="13" rx="1" fill="currentColor" stroke="none" /><path d="m3.5 10 1.8 6 2.2-5 2.2 5 1.8-6" stroke="var(--paper)" strokeWidth="1.4" /></svg>,
   Send: (p: P) => <svg {...base(p.size)}><path d="M4 12l16-8-6 16-3-7z" /><path d="M11 13l9-9" /></svg>,
+  ReportSend: (p: P) => <svg {...base(p.size)}><path d="M11 21H4V3h10l4 4v4M14 3v5h4M7 11h5M7 15h3M13 17h9m-3-3 3 3-3 3" /></svg>,
   Save: (p: P) => <svg {...base(p.size)}><path d="M5 4h11l3 3v13H5z" /><path d="M8 4v5h7V4M8 20v-6h8v6" /></svg>,
   Refresh: (p: P) => <svg {...base(p.size)}><path d="M20 11a8 8 0 10-2.3 5.7M20 4v7h-7" /></svg>,
   Print: (p: P) => <svg {...base(p.size)}><path d="M7 9V4h10v5M7 17H5v-7h14v7h-2M7 14h10v6H7z" /></svg>,

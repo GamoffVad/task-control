@@ -148,8 +148,8 @@ export const Planning = () => {
               Документ
             </button>
             {manager && (
-              <button type="button" className="btn btn--primary report-submit" onClick={submit}>
-                <Icon.Send size={15} /> {report ? 'Обновить отчёт' : 'Направить в отчёт'}
+              <button type="button" className="icon-btn btn--primary report-submit" aria-label={report ? 'Обновить отчёт' : 'Направить в отчёт'} data-tip={report ? 'Обновить отчёт' : 'Направить в отчёт'} onClick={submit}>
+                {report ? <Icon.Refresh size={21} /> : <Icon.ReportSend size={22} />}
               </button>
             )}
           </>
