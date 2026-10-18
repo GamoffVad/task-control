@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Icon } from '../components/Icons';
 import { DirectoryUserAutocomplete } from '../components/DirectoryUserAutocomplete';
+import { DatabaseSettings } from '../components/DatabaseSettings';
 import { Button, Checkbox, ColorPicker, DateField, Dialog, PageHeader, Segmented, Select, Slider, TextArea, TextInput } from '../kit';
 import { DEFAULT_TEMPLATES, TEMPLATE_SCOPES, placeholdersFor, renderTemplate } from '../lib/templates';
 import { reportDocContext } from '../lib/reportExport';
@@ -20,12 +21,13 @@ import { unitOf } from '../lib/data';
 import { dutyDictionaryInUse, eventColorKey, systemEvent } from '../lib/eventTypes';
 import { annualVacationDays, normalizeVacationSettings, validVacationDays, vacationPeriodLabel, vacationTypeCode, vacationYear } from '../lib/vacations';
 
-type Tab = 'users' | 'units' | 'roles' | 'authentication' | 'scoring' | 'appearance' | 'dictionaries' | 'planRows' | 'templates' | 'vacations' | 'periods';
+type Tab = 'users' | 'units' | 'roles' | 'authentication' | 'database' | 'scoring' | 'appearance' | 'dictionaries' | 'planRows' | 'templates' | 'vacations' | 'periods';
 const ALL_TABS: { value: Tab; label: string; permission: Permission }[] = [
   { value: 'users', label: 'Пользователи', permission: 'users.manage' },
   { value: 'units', label: 'Подразделения', permission: 'units.manage' },
   { value: 'roles', label: 'Роли и разрешения', permission: 'roles.manage' },
   { value: 'authentication', label: 'Аутентификация', permission: 'authentication.manage' },
+  { value: 'database', label: 'База данных', permission: 'database.manage' },
   { value: 'scoring', label: 'Оценка', permission: 'scoring.manage' },
   { value: 'periods', label: 'Периоды', permission: 'periods.manage' },
   { value: 'vacations', label: 'Отпуска', permission: 'entitlements.manage' },
@@ -58,19 +60,22 @@ export const Admin = () => {
   const activeTab = tabs.some((item) => item.value === tab) ? tab : tabs[0]?.value;
   return (
     <section className="admin-page">
-      <PageHeader
-        title="Администрирование"
-        subtitle={
-          tabs.length > 1
-            ? 'Пользователи и подразделения, доступ, вход через Windows, правила оценки, разделы планирования, справочники и шаблоны документов.'
-            : 'Оформление интерфейса: цвета, шрифты и размеры текста. Настройки личные — действуют только у вас.'
-        }
-      />
-      {tabs.length > 0 && <Segmented value={activeTab!} options={tabs} onChange={setTab} label="Раздел администрирования" />}
+      <div className="admin-header">
+        <PageHeader
+          title="Администрирование"
+          subtitle={
+            tabs.length > 1
+              ? 'Пользователи и подразделения, доступ, вход через Windows, правила оценки, разделы планирования, справочники и шаблоны документов.'
+              : 'Оформление интерфейса: цвета, шрифты и размеры текста. Настройки личные — действуют только у вас.'
+          }
+        />
+        {tabs.length > 0 && <Segmented value={activeTab!} options={tabs} onChange={setTab} label="Раздел администрирования" />}
+      </div>
       {activeTab === 'users' && <UsersTab state={state} dispatch={dispatch} />}
       {activeTab === 'units' && <UnitsTab state={state} dispatch={dispatch} />}
       {activeTab === 'roles' && <RolesTab state={state} dispatch={dispatch} />}
       {activeTab === 'authentication' && <AuthenticationTab />}
+      {activeTab === 'database' && <DatabaseSettings />}
       {activeTab === 'scoring' && <ScoringTab state={state} dispatch={dispatch} />}
       {activeTab === 'periods' && <PeriodsTab state={state} dispatch={dispatch} />}
       {activeTab === 'vacations' && <VacationsTab state={state} dispatch={dispatch} />}
@@ -520,8 +525,6 @@ const ResetScores = ({ state, dispatch }: TabProps) => {
       >
         {confirm === 'before' ? `Точно удалить: ${older.length} ${plural(older.length, 'неделя', 'недели', 'недель')}?` : older.length || !before ? `Обнулить до ${before ? fmtDate(fromDateKey(before)) : 'даты'}` : 'До этой даты отчётов нет'}
       </Button>
-    </div>
-    <div className="reset-row">
       <Button variant="danger" disabled={reports.length === 0} onClick={() => run('all')} onBlur={() => setConfirm(null)} icon={<Icon.Trash size={15} />}>
         {confirm === 'all' ? 'Точно обнулить все показатели?' : 'Обнулить все показатели'}
       </Button>

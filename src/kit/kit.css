@@ -160,7 +160,8 @@ input[type='search']::-webkit-search-cancel-button, input[type='search']::-webki
 }
 
 /* Вкладки администрирования — зона нажатия не меньше 34 px, как у остальных переключателей. */
-.admin-page > .seg button { min-height: 34px; }
+.admin-header > .seg button { min-height: 44px; }
+@media (min-width: 1024px) { .admin-header > .seg button { min-height: 34px; } }
 
 /* Категории Календаря в строке заголовка: компактные метки рядом с кнопкой «Новая задача». */
 .page-actions:has(.cat-filter--compact) { align-items: center; }

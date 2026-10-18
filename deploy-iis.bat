@@ -202,6 +202,10 @@ if errorlevel 1 (
   goto :fail
 )
 icacls "%TARGET%\iisnode" /grant "%ME%:(OI)(CI)(M)" /T /C >nul
+rem Настройки подключения и ключ шифрования — только у учётной записи пула и администраторов.
+if not exist "%TARGET%\data" mkdir "%TARGET%\data"
+icacls "%TARGET%\data" /inheritance:r /grant:r "%ME%:(OI)(CI)(F)" "*S-1-5-18:(OI)(CI)(F)" "*S-1-5-32-544:(OI)(CI)(F)" /T /C >nul
+icacls "%TARGET%\data" /remove:g "IIS_IUSRS" /T /C >nul
 
 rem --- Сайт ----------------------------------------------------
 echo [5/7] Сайт и привязка...

@@ -18,7 +18,7 @@ describe('разрешения вкладок администрирования
     const catalogue = new Set(PERMISSIONS.map((item) => item.key));
     for (const permission of ADMIN_TAB_PERMISSIONS) expect(catalogue.has(permission), permission).toBe(true);
     // Каждой вкладке, включая настройки отпусков, соответствует разрешение.
-    expect(new Set(ADMIN_TAB_PERMISSIONS).size).toBe(11);
+    expect(new Set(ADMIN_TAB_PERMISSIONS).size).toBe(12);
     expect(PERMISSIONS.find((item) => item.key === 'appearance.manage')!.label).toContain('Редактирование UI');
   });
 

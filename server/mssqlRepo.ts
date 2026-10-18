@@ -739,6 +739,22 @@ const openPool = async (s: MssqlSettings, database: string): Promise<sql.Connect
   } as unknown as sql.config);
 };
 
+/** Проверка без создания базы и изменения схемы. */
+export const inspectMssql = async (settings: MssqlSettings) => {
+  const pool = await openPool(settings, 'master');
+  try {
+    await pool.connect();
+    const result = await rows(pool, `select cast(serverproperty('ProductVersion') as nvarchar(100)) as version,
+      cast(serverproperty('Edition') as nvarchar(200)) as edition, db_id(@v1) as database_id`, [S(settings.database, 128)]);
+    const row = result[0];
+    if (row?.database_id != null) {
+      const target = await openPool(settings, settings.database);
+      try { await target.connect(); await target.request().query('select 1'); } finally { await target.close(); }
+    }
+    return { version: String(row?.version ?? ''), edition: String(row?.edition ?? ''), databaseExists: row?.database_id != null };
+  } finally { await pool.close(); }
+};
+
 /** Создаёт базу, если её ещё нет: приложение разворачивается на пустом сервере. */
 export const ensureDatabase = async (settings: MssqlSettings): Promise<void> => {
   // Имя базы нельзя передать параметром, поэтому оно проверяется и экранируется (и в строке подключения).

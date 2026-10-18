@@ -7,7 +7,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import path from 'node:path';
 import { createApi } from './app';
 import { secretFromEnv } from './auth';
-import { createRepoFromEnv } from './storage';
+import { createConfiguredStorage } from './databaseConnection';
 import { inspectWindowsRequest, windowsIdentityFromEnv } from './windowsAuth';
 import { activeDirectoryFromEnv } from './activeDirectory';
 
@@ -16,10 +16,11 @@ import { activeDirectoryFromEnv } from './activeDirectory';
 process.env.WINDOWS_AUTH_HEADER ||= 'x-iisnode-logon_user';
 
 const root = path.resolve(process.env.TC_STATIC_DIR ?? path.join(__dirname, 'public'));
-const repo = createRepoFromEnv(process.env);
+const { repo, connection } = createConfiguredStorage(process.env, path.resolve(process.env.TC_CONNECTION_FILE ?? path.join(__dirname, 'data', 'sqlserver-connection.json')));
 
 const api = createApi({
   repo,
+  connection,
   secret: secretFromEnv(process.env),
   windowsIdentity: windowsIdentityFromEnv(process.env),
   windowsCheck: (req) => inspectWindowsRequest(req, process.env),

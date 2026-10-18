@@ -26,6 +26,7 @@ import { normalizePeriodSettings, validPeriodSettings, validReportRange } from '
 import type { Data, DictionaryKind, Entitlement, ManagedUser, Permission, Role, ScoringSettings, UnitKind, User } from '../src/lib/types';
 import { signToken, verifyToken } from './auth';
 import type { Repo } from './repo';
+import { DatabaseConnectionError, type DatabaseConnectionControl } from './databaseConnection';
 import type { ActiveDirectory } from './activeDirectory';
 import type { WindowsAuthCheck } from './windowsAuth';
 import { dayKey, detectEvents, hourOf, overdueNotice, type NoticeEvent } from '../src/lib/notify';
@@ -48,6 +49,7 @@ const sessionError = (message: string) => new HttpError(403, message, { relogin:
 
 type Options = {
   repo: Repo;
+  connection?: DatabaseConnectionControl;
   secret: string;
   now?: () => Date;
   /** Returns an identity only after a trusted proxy has completed Windows authentication. */
@@ -429,7 +431,7 @@ const forUser = (data: Data, user: User): Data => {
   };
 };
 
-export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentity, windowsCheck, directory, administratorLogin }: Options) => {
+export const createApi = ({ repo, connection, secret, now = () => new Date(), windowsIdentity, windowsCheck, directory, administratorLogin }: Options) => {
   const fallbackAdministrator = bootstrapAdministrator(administratorLogin);
   // Сеансы подписываются отдельным ключом: токены, выданные прежним входом по паролю, недействительны.
   const tokenSecret = `${secret}|windows`;
@@ -478,6 +480,24 @@ export const createApi = ({ repo, secret, now = () => new Date(), windowsIdentit
       const url = new URL(req.url ?? '/', 'http://localhost');
       const route = `${req.method} ${url.pathname.replace(/\/+$/, '')}`;
       switch (route) {
+        case 'GET /api/database-connection':
+        case 'POST /api/database-connection/test':
+        case 'POST /api/database-connection': {
+          const tokenUser = authed(req);
+          const current = await load();
+          const user = effectiveUser(tokenUser, current.users, current.roles);
+          if (!user) throw sessionError('Учётная запись отключена.');
+          if (!hasPermission(user, 'database.manage')) throw new HttpError(403, 'Недостаточно прав для настройки базы данных.');
+          if (!connection) throw new HttpError(503, 'Настройки SQL Server доступны только в серверной версии приложения.');
+          try {
+            if (route.startsWith('GET ')) return send(res, 200, connection.get());
+            const draft = await readBody(req);
+            return send(res, 200, route.endsWith('/test') ? await connection.test(draft) : await connection.save(draft));
+          } catch (error) {
+            if (error instanceof DatabaseConnectionError) throw new HttpError(400, error.message);
+            throw error;
+          }
+        }
         case 'GET /api/health': {
           // Проверяем само соединение: настроенная, но недоступная база — частая причина «белого экрана».
           try {

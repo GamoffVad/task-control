@@ -62,6 +62,35 @@ describe('вход', () => {
 });
 
 describe('разделы', () => {
+  it('в демонстрационной версии настройки SQL недоступны и указано хранение в браузере', async () => {
+    renderAt('/admin');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'База данных' }));
+    expect(screen.getByText(/При публикации на Vercel SQL Server не используется/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Сохранить и подключиться' })).toBeNull();
+  });
+  it.each([false, true])('шапка следует за подразделением пользователя и его названием (скрыт: %s)', async (hidden) => {
+    const state = loggedIn();
+    state.users = state.users.map((account) => account.employeeId === 1 ? { ...account, unitId: 'u-org', hidden } : account);
+    renderAt('/admin', state);
+    const context = () => document.querySelector('.logo-context');
+    expect(context()).toHaveTextContent(/^Ведомство ·/);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Редактировать пользователя Иванов Алексей Борисович' }));
+    await user.click(screen.getByRole('button', { name: /^Подразделение сотрудника:/ }));
+    await user.click(screen.getByRole('option', { name: 'Управление информационных технологий' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Сохранить' }));
+    expect(context()).toHaveTextContent(/^Управление информационных технологий ·/);
+
+    await user.click(screen.getByRole('button', { name: 'Подразделения' }));
+    await user.click(screen.getByRole('button', { name: 'Изменить подразделение Управление информационных технологий' }));
+    const dialog = within(screen.getByRole('dialog'));
+    await user.clear(dialog.getByLabelText('Название'));
+    await user.type(dialog.getByLabelText('Название'), 'Управление аналитики');
+    await user.click(dialog.getByRole('button', { name: 'Сохранить' }));
+    expect(context()).toHaveTextContent(/^Управление аналитики ·/);
+  });
+
   it('название отдела из администрирования видно в отчётности, печатной форме и документе', async () => {
     const state = loggedIn();
     const name = 'Отдел аналитики и планирования';

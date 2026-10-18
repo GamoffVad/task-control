@@ -36,3 +36,4 @@ dist-iis
 .agents
 .claude/settings.local.json
 release
+tmp/pdfs/

@@ -10,7 +10,7 @@ import { department } from '../lib/data';
 import { STAFF_USERS } from '../lib/staff';
 import type { AppState } from '../lib/types';
 
-// Большой отдел: 7 демосотрудников и 40 тестовых.
+// Большой отдел: 50 тестовых сотрудников, включая семь основных.
 beforeAll(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(2026, 8, 17, 12, 0));
@@ -28,10 +28,10 @@ const renderAt = (path: string, initial = state()) =>
   );
 
 describe('большой отдел', () => {
-  it('40 сотрудников отдела — пользователи в четырёх отделениях, у каждого есть отсутствия', () => {
-    expect(STAFF_USERS).toHaveLength(40);
-    expect(employees).toHaveLength(47);
-    // Все 40 — в отделениях основного отдела, группы строятся из подразделений.
+  it('50 тестовых пользователей распределены по подразделениям, у каждого есть отсутствия', () => {
+    expect(STAFF_USERS).toHaveLength(43);
+    expect(employees).toHaveLength(50);
+    // Дополнительные сотрудники — в отделениях основного отдела.
     const staffIds = STAFF_USERS.map((u) => u.employeeId).sort();
     const newGroups = department.groups.filter((g) => g.id.startsWith('s-'));
     expect(newGroups.map((g) => g.name)).toEqual(['Отделение разработки', 'Отделение сопровождения', 'Отделение аналитики', 'Отделение тестирования']);
@@ -43,14 +43,14 @@ describe('большой отдел', () => {
   it('«Тетрис» показывает всех и сужается до группы', async () => {
     const user = userEvent.setup();
     renderAt('/tetris');
-    expect(document.querySelectorAll('.tl-who')).toHaveLength(47);
+    expect(document.querySelectorAll('.tl-who')).toHaveLength(50);
     expect(document.querySelectorAll('.tl-who.tl-group-start')).toHaveLength(7);
     expect(document.querySelectorAll('.tl-lane.tl-group-start')).toHaveLength(7);
     expect(document.querySelector('.tl-who')).not.toHaveClass('tl-group-start');
-    expect(screen.getByRole('region', { name: 'Сводка' })).toHaveTextContent(/из 47/);
+    expect(screen.getByRole('region', { name: 'Сводка' })).toHaveTextContent(/из 50/);
     await user.click(screen.getByRole('button', { name: /^Группа: Весь отдел/ }));
     await user.click(screen.getByRole('option', { name: 'Отделение тестирования' }));
-    expect(document.querySelectorAll('.tl-who')).toHaveLength(10);
+    expect(document.querySelectorAll('.tl-who')).toHaveLength(11);
     expect(document.querySelector('.tl-group-start')).toBeNull();
   });
 

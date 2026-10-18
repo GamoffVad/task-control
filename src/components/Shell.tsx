@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
-import { department, initials, shortName } from '../lib/data';
+import { initials, shortName, unitOf } from '../lib/data';
 import { hasPermission, roleLabel } from '../lib/access';
 import { overdueTasks } from '../lib/logic';
 import { countLabel, unreadMessages } from '../lib/chat';
@@ -40,6 +40,9 @@ export const Shell = () => {
   // Раздел администрирования виден, если доступна хоть одна его вкладка (по умолчанию — «Редактирование UI»).
   const canAdmin = canOpenAdmin(user);
   const managedAccount = accountState.users.find((account) => account.employeeId === user.employeeId);
+  // Берём живую карточку, включая скрытых сотрудников: перевод и переименование видны сразу.
+  const managedUnitId = managedAccount ? unitOf(managedAccount) : undefined;
+  const managedUnitName = accountState.units.find((unit) => unit.id === managedUnitId)?.name ?? 'Подразделение не указано';
   const managedParts = managedAccount?.fullName.trim().split(/\s+/) ?? [];
   const managedShortName = managedAccount && managedParts.length > 1 ? `${managedParts[0]} ${managedParts.slice(1, 3).map((part) => `${part[0]}.`).join('')}` : shortName(user.employeeId);
   const managedInitials = managedAccount && managedParts.length > 1 ? `${managedParts[0]?.[0] ?? ''}${managedParts[1]?.[0] ?? ''}` : initials(user.employeeId);
@@ -122,7 +125,7 @@ export const Shell = () => {
       <div className="app-shell">
         <div className="app-card">
           <header className="topbar" ref={topbar}>
-            <Logo context={`${department.name} · ${managedShortName} · ${roleLabel(user.role, state.roles).toLowerCase()}`} />
+            <Logo context={`${managedUnitName} · ${managedShortName} · ${roleLabel(user.role, state.roles).toLowerCase()}`} />
             <nav className="topnav" aria-label="Разделы" ref={nav}>
               {navFor(user).map((n) => (
                 <NavLink key={n.to} to={n.to}>

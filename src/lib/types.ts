@@ -6,6 +6,7 @@ export type Role = 'administrator' | 'manager' | 'executor';
 export type Permission =
   | 'admin.access'
   | 'authentication.manage'
+  | 'database.manage'
   | 'scoring.manage'
   | 'periods.manage'
   | 'users.manage'

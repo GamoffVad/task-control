@@ -24,6 +24,8 @@ export default defineConfig(({ mode }) => {
   for (const [key, value] of Object.entries(env)) if (/^(MSSQL_|TC_)/.test(key) && !process.env[key] && value) process.env[key] = value
   return {
     plugins: [react(), api()],
+    // Настройки SQL и локальные снимки базы не должны отдаваться сервером разработки.
+    server: { fs: { deny: ['.env', '.env.*', '**/*.{crt,pem}', '**/.git/**', '**/.data/**'] } },
     // Приложение должно открываться в последнем Chrome для Windows 7 (109) и в Edge 109.
     build: { target: ['chrome109', 'edge109', 'firefox115', 'safari15.6'] },
     // Vite 8 использует oxc: прежний параметр esbuild.target он игнорировал с предупреждением.

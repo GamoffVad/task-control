@@ -1,6 +1,6 @@
 import type { DirectoryUser, ManagedUser } from './types';
 
-// Сотрудники отдела разработки — 40 человек в четырёх отделениях.
+// Тестовые сотрудники отделений; вместе с семью основными — 50 пользователей.
 // Хранятся в базе как пользователи (Администрирование → Пользователи); здесь — начальное заполнение.
 // Входят через Windows-логин; вход по паролю — только у демонстрационных учётных записей.
 
@@ -45,6 +45,9 @@ export const STAFF_USERS: ManagedUser[] = [
   { employeeId: 138, fullName: 'Лукина Валерия Сергеевна', position: 'Инженер по тестированию', email: 'lukina.vs@example.com', windowsLogin: 'lukina.vs', role: 'executor', active: true, unitId: 's-qa' },
   { employeeId: 139, fullName: 'Морозов Фёдор Николаевич', position: 'Специалист', email: 'morozov.fn@example.com', windowsLogin: 'morozov.fn', role: 'executor', active: true, unitId: 's-qa' },
   { employeeId: 140, fullName: 'Назарова Алина Романовна', position: 'Специалист', email: 'nazarova.ar@example.com', windowsLogin: 'nazarova.ar', role: 'executor', active: true, unitId: 's-qa' },
+  { employeeId: 141, fullName: 'Орлов Тимур Алексеевич', position: 'Программист', email: 'orlov.ta@example.com', windowsLogin: 'orlov.ta', role: 'executor', active: true, unitId: 's-dev' },
+  { employeeId: 142, fullName: 'Павлова Елизавета Сергеевна', position: 'Аналитик', email: 'pavlova.es@example.com', windowsLogin: 'pavlova.es', role: 'executor', active: true, unitId: 's-analytics' },
+  { employeeId: 143, fullName: 'Романов Арсений Павлович', position: 'Тестировщик', email: 'romanov.ap@example.com', windowsLogin: 'romanov.ap', role: 'executor', active: true, unitId: 's-qa' },
 ];
 
 /**

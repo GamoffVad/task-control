@@ -2,6 +2,7 @@ import { STAFF_USERS } from './staff';
 import type { ManagedUser, Permission, Role, RoleDefinition, ScoringSettings, User } from './types';
 
 export const PERMISSIONS: { key: Permission; label: string; group: string }[] = [
+  { key: 'database.manage', label: 'База данных: настраивать подключение SQL Server', group: 'Администрирование' },
   // По разрешению на каждую вкладку администрирования, чтобы доступ настраивался точно.
   { key: 'admin.access', label: 'Открывать администрирование', group: 'Администрирование' },
   { key: 'users.manage', label: 'Пользователи: вести и назначать роли', group: 'Администрирование' },
@@ -56,9 +57,9 @@ export const DEFAULT_AUTHENTICATION = { mode: 'form', allowEmergencyForm: true }
  * Версия набора прав. Права, добавленные после выпуска базы, дописываются один раз при обновлении:
  * иначе новый раздел администрирования остался бы недоступен.
  */
-export const ACCESS_VERSION = '9';
+export const ACCESS_VERSION = '10';
 /** Дописываются администратору: доступ к этим вкладкам выдаётся осознанно. */
-const ADDED_ADMIN_PERMISSIONS: Permission[] = ['authentication.manage', 'scoring.manage', 'units.manage', 'planRows.manage', 'templates.manage', 'tasks.viewAll', 'chat.moderate', 'periods.manage'];
+const ADDED_ADMIN_PERMISSIONS: Permission[] = ['authentication.manage', 'database.manage', 'scoring.manage', 'units.manage', 'planRows.manage', 'templates.manage', 'tasks.viewAll', 'chat.moderate', 'periods.manage'];
 /** Дописываются всем ролям: оформление личное и по умолчанию доступно каждому. */
 const ADDED_FOR_ALL_PERMISSIONS: Permission[] = ['appearance.manage'];
 
@@ -75,6 +76,7 @@ export const ADMIN_TAB_PERMISSIONS: Permission[] = [
   'units.manage',
   'roles.manage',
   'authentication.manage',
+  'database.manage',
   'scoring.manage',
   'periods.manage',
   'entitlements.manage',

@@ -1230,8 +1230,8 @@ a.label:hover { color: var(--accent); }
 .tl-cell.today { box-shadow: inset 2px 0 0 var(--danger); }
 .tl-cell:not(:disabled):hover { background: var(--soft); }
 .tl-bar {
-  /* Полоса у верха строки, ромбы сроков — у низа: в строке 40 px они не перекрываются. */
-  grid-row: 1; align-self: start; height: 25px; margin: 3px 2px 0; z-index: 1; min-width: 0; overflow: hidden; position: relative;
+  /* Полоса события по вертикальному центру строки сотрудника. */
+  grid-row: 1; align-self: center; height: 25px; margin: 0 2px; z-index: 1; min-width: 0; overflow: hidden; position: relative;
   border: none; border-left: 3px solid var(--c); background: rgb(var(--c-rgb) / var(--abs-mix));
   border-radius: 0 2px 2px 0; padding: 2px 6px; font-size: 10.5px; line-height: 1.15; color: var(--ink); cursor: pointer; text-align: left; white-space: nowrap;
 }
@@ -1310,7 +1310,10 @@ a.label:hover { color: var(--accent); }
 .loading-screen { padding: 60px 0; color: var(--ink-3); }
 
 /* ——— Администрирование ——— */
-.admin-page > .seg { margin: 0 0 14px; border-bottom: 1px dashed var(--dash); }
+.admin-header { position: sticky; top: var(--topbar-h, 64px); z-index: 20; background: var(--paper); padding-bottom: 14px; }
+.admin-header > .seg { margin: 0; border-bottom: 1px dashed var(--dash); flex-wrap: nowrap; overflow-x: auto; }
+.admin-header > .seg button { flex: none; white-space: nowrap; }
+@media print { .admin-header { position: static; } }
 .admin-grid { display: grid; gap: 20px; border-top: 1px dashed var(--dash); }
 .admin-directory { padding: 14px 0; }
 .admin-directory > .caps { display: block; margin-bottom: 8px; }
@@ -1330,6 +1333,7 @@ a.label:hover { color: var(--accent); }
 .admin-row-actions { width: 1%; white-space: nowrap; display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
 .admin-empty { padding: 22px 0; color: var(--ink-3); text-align: center; }
 .admin-section { padding-top: 14px; border-top: 1px dashed var(--dash); }
+.database-settings-form { max-width: 960px; }
 .admin-users-table { min-width: 900px !important; }
 .admin-plan-table { min-width: 780px !important; }
 .admin-plan-table th:first-child { width: 10%; min-width: 92px; }

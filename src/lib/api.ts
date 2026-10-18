@@ -1,6 +1,7 @@
 // Запросы к серверу (server/app.ts).
 import type { Action } from './reducer';
 import type { AuthenticationSettings, Data, DirectoryUser, User } from './types';
+import type { DatabaseConnectionDraft, DatabaseConnectionView, DatabaseProbe } from './databaseConnection';
 
 export class ApiError extends Error {
   status: number;
@@ -54,6 +55,9 @@ export type WindowsCheck = {
 };
 
 export const api = {
+  databaseConnection: (token: string) => call<DatabaseConnectionView>('database-connection', { token }),
+  testDatabaseConnection: (token: string, draft: DatabaseConnectionDraft) => call<DatabaseProbe>('database-connection/test', { method: 'POST', token, body: draft }),
+  saveDatabaseConnection: (token: string, draft: DatabaseConnectionDraft) => call<DatabaseConnectionView & DatabaseProbe>('database-connection', { method: 'POST', token, body: draft }),
   windowsCheck: (token: string) => call<WindowsCheck>('windows-check', { token, accept401: true }),
   windowsLogin: () => call<{ token: string; user: User }>('windows-login', { method: 'POST' }),
   authentication: () => call<{ authentication: AuthenticationSettings; windowsAvailable: boolean; directoryAvailable: boolean }>('authentication'),
