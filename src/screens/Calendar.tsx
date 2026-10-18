@@ -162,8 +162,8 @@ export const Calendar = () => {
         }
         actions={
           <>
-            <button type="button" className="btn btn--primary" onClick={() => create(nextQuarter())}>
-              <Icon.Plus size={15} /> Новая задача
+            <button type="button" className="btn icon-btn btn--primary page-icon-action" aria-label="Новая задача" data-tip="Новая задача" onClick={() => create(nextQuarter())}>
+              <Icon.Plus size={22} />
             </button>
           </>
         }
