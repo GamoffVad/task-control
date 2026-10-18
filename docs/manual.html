@@ -25,8 +25,9 @@
 
   /* Обложка */
   .cover { page: cover; position: relative; width: 210mm; height: 297mm; overflow: hidden; break-after: page; background: var(--paper); }
-  .cover img { position: absolute; right: -34mm; top: 34mm; width: 200mm; }
-  .cover .fade { position: absolute; right: -34mm; top: 34mm; width: 200mm; height: 137mm; background: linear-gradient(90deg, #F7F5F0 0, rgba(247,245,240,0) 32%), linear-gradient(180deg, #F7F5F0 0, rgba(247,245,240,0) 14%, rgba(247,245,240,0) 70%, #F7F5F0 93%); }
+  .cover .art { position: absolute; right: -34mm; top: 34mm; width: 200mm; height: 137mm; overflow: hidden; background: var(--paper); }
+  .cover .art img { display: block; width: 100%; }
+  .cover .fade { position: absolute; inset: 0; background: linear-gradient(90deg, #F7F5F0 0, rgba(247,245,240,0) 32%), linear-gradient(180deg, #F7F5F0 0, rgba(247,245,240,0) 14%, rgba(247,245,240,0) 70%, #F7F5F0 93%); }
   .cover .inner { position: absolute; left: 18mm; top: 22mm; right: 18mm; bottom: 20mm; display: flex; flex-direction: column; }
   .logo { display: flex; align-items: center; gap: 10px; }
   .mark { position: relative; width: 40px; height: 40px; flex: none; }
@@ -117,7 +118,7 @@
 
 <!-- Обложка -->
 <section class="cover">
-  <img src="assets/cover.png" alt="" /><div class="fade"></div>
+  <div class="art"><img src="assets/cover.png" alt="" /><div class="fade"></div></div>
   <div class="inner">
     <div class="logo"><svg class="mk" viewBox="-33.69 0.89 59.60 59.60" width="40" height="40"><g transform="rotate(45)"><rect x="22.0" y="33.0" width="10.4" height="10.4" rx="0.6" fill="#1F3A5F"/><rect x="11.0" y="33.0" width="10.4" height="10.4" rx="0.6" fill="#1F3A5F"/><rect x="0.0" y="33.0" width="10.4" height="10.4" rx="0.6" fill="#1F2B3A"/><rect x="22.0" y="22.0" width="10.4" height="10.4" rx="0.6" fill="#1F3A5F"/><rect x="11.0" y="22.0" width="10.4" height="10.4" rx="0.6" fill="#1F2B3A"/><rect x="22.0" y="11.0" width="10.4" height="10.4" rx="0.6" fill="#1F3A5F"/><rect x="11.0" y="11.0" width="10.4" height="10.4" rx="0.6" fill="#1F2B3A"/><rect x="22.0" y="0.0" width="10.4" height="10.4" rx="0.6" fill="#1F2B3A"/><rect x="11.0" y="0.0" width="10.4" height="10.4" rx="0.6" fill="#1F3A5F"/></g></svg><div><b>Контроль задач</b><small>планирование и контроль исполнения</small></div></div>
     <div class="kicker">Документация · версия {{VERSION}}</div>

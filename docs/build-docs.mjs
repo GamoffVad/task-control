@@ -46,8 +46,25 @@ writeFileSync(tmp, html);
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: true });
 try {
   const page = await browser.newPage();
+  await page.setViewport({ width: 1200, height: 1200, deviceScaleFactor: 3 });
   await page.goto(pathToFileURL(tmp).href, { waitUntil: 'networkidle0' });
   await page.evaluate(() => document.fonts.ready);
+  // Chrome экспортирует составной прозрачный градиент как ShadingType 1.
+  // PDF.js показывает такую заливку розовым. Запекаем только фон обложки
+  // примерно в 288 dpi: заголовки, текст и остальные страницы остаются векторными.
+  const art = await page.$('.cover .art');
+  const artRect = await art?.boundingBox();
+  if (!artRect) throw new Error('Не найден фон обложки руководства.');
+  await page.evaluate(() => { document.querySelector('.cover .inner').style.visibility = 'hidden'; });
+  const artPng = await page.screenshot({ type: 'png', clip: artRect, omitBackground: false, captureBeyondViewport: true });
+  await page.evaluate(async (png) => {
+    const image = new Image();
+    image.alt = '';
+    image.src = `data:image/png;base64,${png}`;
+    await image.decode();
+    document.querySelector('.cover .art').replaceChildren(image);
+    document.querySelector('.cover .inner').style.removeProperty('visibility');
+  }, Buffer.from(artPng).toString('base64'));
   const out = path.join(docs, `Контроль-задач-руководство-v${version}.pdf`);
   await page.pdf({
     path: out,
