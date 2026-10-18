@@ -1,7 +1,7 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AbsenceModal } from '../components/AbsenceModal';
 import { useTetrisBrush } from '../components/useTetrisBrush';
+import { TetrisRow } from '../components/TetrisRow';
 import { absColor } from '../components/absColor';
 import { Icon } from '../components/Icons';
 import { useTaskEditor } from '../components/taskEditor';
@@ -19,7 +19,6 @@ import {
   isActive,
   shareIfApproved,
   vacationLoad,
-  travelNote,
   VACATION_LIMIT,
   type AbsenceDraft,
   type Clash,
@@ -44,13 +43,15 @@ const SEVERITY: Record<Clash['severity'], [string, string]> = {
 type Editing = { absence?: Absence; defaults?: Partial<AbsenceDraft> } | null;
 type TetrisTab = 'graph' | 'review';
 const TETRIS_TABS = [{ id: 'graph', label: 'График' }, { id: 'review', label: 'Пересечения и заявки' }] as const;
+const NO_ABSENCES: Absence[] = [], NO_TASKS: Task[] = [];
 
 export const Absences = () => {
   const { state, dispatch } = useStore();
   const { openTask } = useTaskEditor();
   const manager = isManager(state.user);
   const me = state.user?.employeeId ?? 0;
-  const today = startOfDay(new Date());
+  const todayKey = toDateKey(new Date());
+  const today = useMemo(() => startOfDay(new Date(`${todayKey}T00:00`)), [todayKey]);
   const [month, setMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [group, setGroup] = useState('all');
   const [hidden, setHidden] = useState<Set<AbsenceType>>(new Set());
@@ -60,29 +61,33 @@ export const Absences = () => {
   const pendingReveal = useRef<string | null>(null);
 
   const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-  const days = Array.from({ length: daysInMonth }, (_, i) => new Date(month.getFullYear(), month.getMonth(), i + 1));
+  const days = useMemo(() => Array.from({ length: new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate() }, (_, i) => new Date(month.getFullYear(), month.getMonth(), i + 1)), [month]);
   const monthStart = days[0];
   const monthEnd = days[days.length - 1];
   const year = month.getFullYear();
   const balanceDate = today >= monthStart && today <= monthEnd ? today : month;
 
   // Тот же порядок, что в дереве «Сотрудники»: группы, затем сотрудники каждой группы.
-  const staffOrder = new Map(department.groups.flatMap((g) => g.employeeIds).map((id, index) => [id, index]));
-  const staffGroup = new Map(department.groups.flatMap((g) => g.employeeIds.map((id) => [id, g.id] as const)));
-  const people = [...groupMembers(group)].sort((a, b) => (staffOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (staffOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER));
+  const { people, staffGroup, allPeople } = useMemo(() => {
+    const staffOrder = new Map(department.groups.flatMap((g) => g.employeeIds).map((id, index) => [id, index]));
+    return { allPeople: [...employees], staffGroup: new Map(department.groups.flatMap((g) => g.employeeIds.map((id) => [id, g.id] as const))),
+      people: [...groupMembers(group)].sort((a, b) => (staffOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (staffOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER)) };
+    // syncStaff обновляет живые employees/department при изменении этих двух наборов.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [group, state.users, state.units]);
   const clashes = useMemo(() => findClashes(state.tasks, state.absences), [state.tasks, state.absences]);
   // Исполнитель видит пересечения только по своим задачам.
   const myClashes = manager ? clashes : clashes.filter((c) => c.employeeId === me);
-  const requests = state.absences.filter((a) => a.status === 'request').sort((a, b) => a.from.localeCompare(b.from));
+  const requests = useMemo(() => state.absences.filter((a) => a.status === 'request').sort((a, b) => a.from.localeCompare(b.from)), [state.absences]);
 
-  const absentToday = employees.filter((e) => state.absences.some((a) => a.type !== 'duty' && a.employeeId === e.id && a.status === 'approved' && today >= new Date(`${a.from}T00:00`) && today <= absenceEnd(a)));
+  const absentToday = useMemo(() => allPeople.filter((e) => state.absences.some((a) => a.type !== 'duty' && a.employeeId === e.id && a.status === 'approved' && today >= new Date(`${a.from}T00:00`) && today <= absenceEnd(a))), [state.absences, allPeople, today]);
   // Сколько сотрудников группы одновременно в отпуске: при доле выше порога — предупреждение.
-  const load = vacationLoad(state.absences, people.map((e) => e.id), days, today);
+  const load = useMemo(() => vacationLoad(state.absences, people.map((e) => e.id), days, today), [state.absences, people, days, today]);
   const overDays = new Set(load.over.map((d) => d.getDate()));
   const overReqDays = new Set(load.overWithRequests.map((d) => d.getDate()));
-  const allIds = employees.map((e) => e.id);
+  const allIds = useMemo(() => allPeople.map((e) => e.id), [allPeople]);
   // Итоговая строка графика: сколько сотрудников отсутствует в каждый день (согласованные отсутствия любого вида).
-  const absentByDay = days.map((d) => people.filter((e) => state.absences.some((a) => a.type !== 'duty' && a.employeeId === e.id && a.status === 'approved' && covers(a, d, today))));
+  const absentByDay = useMemo(() => days.map((d) => people.filter((e) => state.absences.some((a) => a.type !== 'duty' && a.employeeId === e.id && a.status === 'approved' && covers(a, d, today)))), [state.absences, days, people, today]);
 
   // График занимает высоту окна под шапкой раздела и прокручивается внутри себя:
   // строка дней закреплена сверху, итоговая строка «Отсутствуют, %» — снизу.
@@ -90,8 +95,24 @@ export const Absences = () => {
   const board = useRef<HTMLDivElement>(null);
   const legend = useRef<HTMLDivElement>(null);
   const controls = useRef<HTMLDivElement>(null);
-  const brush = useTetrisBrush(board, month, setMonth, (type) => setHidden((prev) => new Set([...prev].filter((t) => t !== type))));
-  const visible = (brush.preview?.error ? state.absences : brush.preview?.absences ?? state.absences).filter((a) => isActive(a) && !hidden.has(a.type));
+  const brush = useTetrisBrush(board, month, setMonth, (type) => setHidden((prev) => prev.has(type) ? new Set([...prev].filter((t) => t !== type)) : prev));
+  const visibleByEmployee = useMemo(() => {
+    const byEmployee = new Map<number, Absence[]>();
+    for (const a of state.absences) if (isActive(a) && !hidden.has(a.type)) {
+      const list = byEmployee.get(a.employeeId) ?? [];
+      list.push(a); byEmployee.set(a.employeeId, list);
+    }
+    return byEmployee;
+  }, [state.absences, hidden]);
+  const previewAbsences = useMemo(() => brush.preview && !brush.preview.error ? brush.preview.absences.filter((a) => isActive(a) && !hidden.has(a.type)) : null, [brush.preview, hidden]);
+  const tasksByEmployee = useMemo(() => {
+    const byEmployee = new Map<number, Task[]>(), end = addDays(monthEnd, 1);
+    for (const t of state.tasks) if (new Date(t.end) >= monthStart && new Date(t.end) < end) for (const employeeId of new Set(t.assigneeIds)) {
+      const list = byEmployee.get(employeeId) ?? [];
+      list.push(t); byEmployee.set(employeeId, list);
+    }
+    return byEmployee;
+  }, [state.tasks, monthStart, monthEnd]);
   useLayoutEffect(() => {
     const el = board.current;
     if (!el || tab !== 'graph') return;
@@ -113,7 +134,7 @@ export const Absences = () => {
     const toolbar = document.querySelector('.tt-head');
     if (toolbar) observer?.observe(toolbar);
     return () => { window.removeEventListener('resize', fit); observer?.disconnect(); };
-  });
+  }, [tab]);
 
   useLayoutEffect(() => {
     if (tab !== 'graph' || !pendingReveal.current) return;
@@ -151,28 +172,10 @@ export const Absences = () => {
     saveBlob(`tetris-${toDateKey(month).slice(0, 7)}.xlsx`, file);
   };
 
-  const canCreateFor = (employeeId: number) => manager || employeeId === me;
-  const create = (employeeId: number, day?: Date) =>
-    setEditing({ defaults: { employeeId, from: toDateKey(day ?? today), to: toDateKey(day ?? today) } });
+  const create = useCallback((employeeId: number, day?: Date) =>
+    setEditing({ defaults: { employeeId, from: toDateKey(day ?? today), to: toDateKey(day ?? today) } }), [today]);
+  const edit = useCallback((absence: Absence) => setEditing({ absence }), []);
 
-
-  const barsFor = (employeeId: number) =>
-    visible
-      .filter((a) => a.employeeId === employeeId)
-      .map((a) => {
-        const s = new Date(`${a.from}T00:00`);
-        const e = absenceEnd(a);
-        if (e < monthStart || s > monthEnd) return null;
-        const from = s < monthStart ? 1 : s.getDate();
-        const to = e > monthEnd ? daysInMonth : e.getDate();
-        return { a, from, span: to - from + 1 };
-      })
-      .filter(Boolean) as { a: Absence; from: number; span: number }[];
-
-  const deadlinesFor = (employeeId: number) =>
-    state.tasks.filter((t) => t.assigneeIds.includes(employeeId) && new Date(t.end) >= monthStart && new Date(t.end) < addDays(monthEnd, 1));
-
-  const clashOf = (t: Task, employeeId: number) => clashes.find((c) => c.task.id === t.id && c.employeeId === employeeId);
 
   return (
     <div className="tetris-page">
@@ -291,88 +294,12 @@ export const Absences = () => {
               {fmtWeekday(d)}
             </div>
           ))}
-          {people.map((e, index) => {
-            const groupStart = index > 0 && staffGroup.get(e.id) !== staffGroup.get(people[index - 1].id);
-            const bal = balanceFor(state.absences, state.entitlements, e.id, year, today, { users: state.users, settings: state.vacationSettings, referenceDate: balanceDate });
-            const showBal = manager || e.id === me;
-            const canAdd = canCreateFor(e.id);
-            return (
-              <div key={e.id} style={{ display: 'contents' }}>
-                <Link
-                  className={`tl-who${groupStart ? ' tl-group-start' : ''}`}
-                  to={`/employees/${e.id}`}
-                  data-tip={showBal ? `Осталось отпуска: ${bal.vacation.left} дн. Отпускной период: ${vacationPeriodLabel(vacationYear(balanceDate, state.vacationSettings), state.vacationSettings)}. Осталось отгулов: ${bal.dayoff.left} дн. (${year} год).` : undefined}
-                >
-                  <b>{shortName(e.id)}</b>
-                  {!showBal && <span className="bal">{e.position}</span>}
-                </Link>
-                <div className={`tl-lane${groupStart ? ' tl-group-start' : ''}`} data-brush-employee={e.id}>
-                  {days.map((d) => (
-                    <button
-                      key={d.getDate()}
-                      type="button"
-                      className={`tl-cell${[0, 6].includes(d.getDay()) ? ' we' : ''}${isSameDay(d, today) ? ' today' : ''}`}
-                      style={{ gridColumn: d.getDate() }}
-                      disabled={!canAdd}
-                      tabIndex={-1}
-                      aria-label={canAdd ? `Новое событие: ${shortName(e.id)}, ${fmtDate(d)}` : undefined}
-                      onClick={() => create(e.id, d)}
-                    />
-                  ))}
-                  {brush.stroke?.employeeId === e.id && (() => {
-                    const from = new Date(`${brush.stroke.from}T00:00`), to = new Date(`${brush.stroke.to}T00:00`);
-                    if (to < monthStart || from > monthEnd) return null;
-                    const start = from < monthStart ? 1 : from.getDate(), end = to > monthEnd ? daysInMonth : to.getDate();
-                    return <div aria-hidden className={`tl-brush-preview${brush.stroke.mode === 'erase' ? ' erasing' : ''}${brush.preview?.error ? ' invalid' : ''}`} style={{ ...absColor(brush.stroke.type), gridColumn: `${start} / span ${end - start + 1}` }} />;
-                  })()}
-                  {barsFor(e.id).map(({ a, from, span }) => {
-                    const t = absenceType(a.type);
-                    const hit = clashes.some((c) => c.absence.id === a.id);
-                    return (
-                      <button
-                        key={a.id}
-                        type="button"
-                        id={`abs-${a.id}`}
-                        className={`tl-bar${a.status === 'request' ? ' request' : ''}${a.to === null ? ' open' : ''}${hit ? ' clash' : ''}${flash === a.id ? ' flash' : ''}`}
-                        style={{ ...absColor(a.type), gridColumn: `${from} / span ${span}` }}
-                        onClick={() => setEditing({ absence: a })}
-                        data-tip={`${a.type === 'vacation' ? vacationTypeTitle(a, state.dictionaries) : a.type === 'duty' ? dutyTypeTitle(a, state.dictionaries) : t.full}${a.status === 'request' ? ' — заявка' : ''}: ${shortName(a.employeeId)}, ${fmtSpan(a)}${travelNote(a) ? `. ${travelNote(a)}` : ''}${a.note ? `. ${a.note}` : ''}${hit ? '. Есть задачи со сроком в этот период' : ''}`}
-                      >
-                        {span >= 3 ? (
-                          <>
-                            {t.label}
-                            {a.status === 'request' && ' · заявка'}
-                            <small>
-                              {fmtSpan(a)} · {absenceDays(a)} дн.
-                            </small>
-                          </>
-                        ) : (
-                          <>
-                            {t.label.slice(0, 3)}.<small>{absenceDays(a)} дн.</small>
-                          </>
-                        )}
-                      </button>
-                    );
-                  })}
-                  {deadlinesFor(e.id).map((t) => {
-                    const c = clashOf(t, e.id);
-                    const end = new Date(t.end);
-                    return (
-                      <button
-                        key={t.id}
-                        type="button"
-                        className={`tl-dl${c ? ' bad' : ''}${t.done ? ' done' : ''}`}
-                        style={{ gridColumn: end.getDate() }}
-                        aria-label={`Срок ${fmtDate(end)}: ${t.title}${t.done ? ', исполнено' : c ? ', исполнитель отсутствует' : ''}`}
-                        data-tip={`${t.title} — срок ${fmtDate(end)}${t.done ? ', исполнено' : c ? ', исполнитель отсутствует' : ''}`}
-                        onClick={() => openTask({ task: t })}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
+          {people.map((e, index) => <TetrisRow key={e.id} employee={e}
+            groupStart={index > 0 && staffGroup.get(e.id) !== staffGroup.get(people[index - 1].id)}
+            days={days} today={today} balanceDate={balanceDate} tasks={tasksByEmployee.get(e.id) ?? NO_TASKS}
+            absences={brush.stroke?.employeeId === e.id && previewAbsences ? previewAbsences : visibleByEmployee.get(e.id) ?? NO_ABSENCES}
+            clashes={clashes} flash={flash} stroke={brush.stroke?.employeeId === e.id ? brush.stroke : null}
+            invalid={brush.stroke?.employeeId === e.id && !!brush.preview?.error} onCreate={create} onEdit={edit} />)}
           <div className="tl-foot-label" data-tip="Доля сотрудников с согласованным событием любого вида">
             <span className="caps">Отсутствуют, %</span>
           </div>
@@ -403,7 +330,7 @@ export const Absences = () => {
       </div>
 
       <div id="tt-panel-review" role="tabpanel" aria-labelledby="tt-tab-review" hidden={tab !== 'review'}>
-      <div className="split split--half">
+      {tab === 'review' && <div className="split split--half">
         <section className="card" aria-label="Пересечения со сроками задач">
           <div className="card-head">
             <h2>Пересечения со сроками задач</h2>
@@ -486,7 +413,7 @@ export const Absences = () => {
             })}
           </ul>
         </section>
-      </div>
+      </div>}
       </div>
 
       {editing && <AbsenceModal key={editing.absence?.id ?? 'new'} absence={editing.absence} defaults={editing.defaults} onClose={() => setEditing(null)} />}

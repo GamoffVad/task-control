@@ -23,6 +23,7 @@ export const useTetrisBrush = (board: RefObject<HTMLDivElement | null>, month: D
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [query, setQuery] = useState('');
   const [stroke, setStroke] = useState<AbsenceStroke | null>(null);
+  const renderedStroke = useRef<AbsenceStroke | null>(null);
   const [message, setMessage] = useState('');
   const choices = useMemo<Choice[]>(() => eventTypes(state.dictionaries).flatMap((t) =>
     t.key === 'vacation' ? vacationTypes(state.dictionaries).map((v) => ({ key: `vacation:${v.code}`, type: t.key, vacationType: v.code, label: `${t.label} · ${v.title}` }))
@@ -36,11 +37,17 @@ export const useTetrisBrush = (board: RefObject<HTMLDivElement | null>, month: D
   const frame = useRef<number | null>(null);
   const pendingScroll = useRef(0);
   const menuEl = useRef<HTMLDivElement>(null);
-  const preview = useMemo(() => stroke ? applyAbsenceStroke(state, stroke) : null, [state, stroke]);
+  const preview = useMemo(() => stroke ? applyAbsenceStroke({ ...state, absences: state.absences.filter((a) => a.employeeId === stroke.employeeId) }, stroke) : null, [state, stroke]);
   const clearTimer = () => { if (timer.current !== null) clearTimeout(timer.current); timer.current = null; };
   const range = (g: Gesture): AbsenceStroke => ({ employeeId: g.employeeId, type: g.brush.type, vacationType: g.brush.vacationType, dutyType: g.brush.dutyType,
     from: g.anchor < g.end ? g.anchor : g.end, to: g.anchor > g.end ? g.anchor : g.end, mode: g.mode });
-  const drawPreview = () => { if (active.current) setStroke(range(active.current)); };
+  const drawPreview = () => {
+    if (!active.current) return;
+    const next = range(active.current), prev = renderedStroke.current;
+    if (prev && prev.employeeId === next.employeeId && prev.from === next.from && prev.to === next.to && prev.mode === next.mode && prev.type === next.type) return;
+    renderedStroke.current = next;
+    setStroke(next);
+  };
   const release = () => {
     const g = active.current;
     active.current = null;
@@ -48,6 +55,7 @@ export const useTetrisBrush = (board: RefObject<HTMLDivElement | null>, month: D
     if (frame.current !== null) cancelAnimationFrame(frame.current);
     frame.current = null;
     if (g && board.current?.hasPointerCapture?.(g.pointerId)) board.current.releasePointerCapture(g.pointerId);
+    renderedStroke.current = null;
     setStroke(null);
     return g;
   };
