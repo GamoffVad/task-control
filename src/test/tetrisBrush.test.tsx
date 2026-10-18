@@ -120,6 +120,16 @@ const drag = (day: number) => { fireEvent.pointerMove(board(), p(x(day))); flush
 const finish = (day: number) => fireEvent.pointerUp(board(), p(x(day)));
 
 describe('два режима Тетриса', () => {
+  it('уход на вкладку заявок отменяет незавершённое рисование и перелистывание', () => {
+    setup(); enable(); begin(30); fireEvent.pointerMove(board(), p(1149)); flush();
+    fireEvent.click(screen.getByRole('tab', { name: 'Пересечения и заявки' }));
+    act(() => vi.advanceTimersByTime(2000));
+    expect(loadState().absences).toEqual([]);
+    fireEvent.click(screen.getByRole('tab', { name: 'График' }));
+    expect(screen.getByRole('grid')).toHaveAccessibleName('График событий: Октябрь 2026');
+    expect(document.querySelector('.tl-brush-preview')).not.toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Рисование периодов' })).toBeChecked();
+  });
   it('по умолчанию открывает прежнюю форму, чекбокс переключает и запоминает режим', () => {
     const view = setup();
     expect(screen.getByRole('checkbox', { name: 'Рисование периодов' })).not.toBeChecked();

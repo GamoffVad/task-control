@@ -42,6 +42,8 @@ const SEVERITY: Record<Clash['severity'], [string, string]> = {
 };
 
 type Editing = { absence?: Absence; defaults?: Partial<AbsenceDraft> } | null;
+type TetrisTab = 'graph' | 'review';
+const TETRIS_TABS = [{ id: 'graph', label: 'График' }, { id: 'review', label: 'Пересечения и заявки' }] as const;
 
 export const Absences = () => {
   const { state, dispatch } = useStore();
@@ -54,6 +56,8 @@ export const Absences = () => {
   const [hidden, setHidden] = useState<Set<AbsenceType>>(new Set());
   const [editing, setEditing] = useState<Editing>(null);
   const [flash, setFlash] = useState<string | null>(null);
+  const [tab, setTab] = useState<TetrisTab>('graph');
+  const pendingReveal = useRef<string | null>(null);
 
   const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
   const days = Array.from({ length: daysInMonth }, (_, i) => new Date(month.getFullYear(), month.getMonth(), i + 1));
@@ -85,20 +89,42 @@ export const Absences = () => {
   // Легенда стоит под графиком — график оставляет под неё место, чтобы она была видна без прокрутки страницы.
   const board = useRef<HTMLDivElement>(null);
   const legend = useRef<HTMLDivElement>(null);
+  const controls = useRef<HTMLDivElement>(null);
   const brush = useTetrisBrush(board, month, setMonth, (type) => setHidden((prev) => new Set([...prev].filter((t) => t !== type))));
   const visible = (brush.preview?.error ? state.absences : brush.preview?.absences ?? state.absences).filter((a) => isActive(a) && !hidden.has(a.type));
   useLayoutEffect(() => {
     const el = board.current;
-    if (!el) return;
+    if (!el || tab !== 'graph') return;
     const fit = () => {
       const top = el.getBoundingClientRect().top + window.scrollY;
-      const below = legend.current ? legend.current.offsetHeight + 8 : 0;
-      el.style.setProperty('--tl-max', `${Math.max(320, Math.floor(visibleBottom() - top - 12 - below))}px`);
+      const below = legend.current?.offsetHeight ?? 0;
+      const available = Math.floor(visibleBottom() - top - 16 - below);
+      // Если шапка занимает почти всё окно (телефон, сильный масштаб), оставляем
+      // только прокрутку страницы, а не вторую вертикальную прокрутку матрицы.
+      el.style.setProperty('--tl-max', window.innerWidth >= 768 && available >= 144 ? `${available}px` : 'none');
     };
     fit();
     window.addEventListener('resize', fit);
-    return () => window.removeEventListener('resize', fit);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(fit);
+    if (controls.current) observer?.observe(controls.current);
+    if (legend.current) observer?.observe(legend.current);
+    const header = document.querySelector('.topbar');
+    if (header) observer?.observe(header);
+    return () => { window.removeEventListener('resize', fit); observer?.disconnect(); };
   });
+
+  useLayoutEffect(() => {
+    if (tab !== 'graph' || !pendingReveal.current) return;
+    const target = document.getElementById(`abs-${pendingReveal.current}`);
+    target?.scrollIntoView?.({ block: 'nearest', inline: 'center' });
+    target?.focus({ preventScroll: true });
+    pendingReveal.current = null;
+  });
+
+  const selectTab = (next: TetrisTab) => {
+    if (next !== tab) brush.suspend();
+    setTab(next);
+  };
 
 
   // Выгрузка матрицы месяца: те же сотрудники, дни и цвета видов, что на графике.
@@ -147,13 +173,26 @@ export const Absences = () => {
   const clashOf = (t: Task, employeeId: number) => clashes.find((c) => c.task.id === t.id && c.employeeId === employeeId);
 
   return (
-    <>
-      {/* Компактная шапка: заголовок, месяц, группа, виды и кнопки в одной строке — больше места графику. */}
+    <div className="tetris-page">
       <div className="tt-head">
         <div className="tt-title">
           <h1>Тетрис</h1>
           <span className="tt-sub">график событий отдела</span>
         </div>
+        <div className="seg tt-tabs" role="tablist" aria-label="Раздел Тетриса" onKeyDown={(e) => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+          e.preventDefault();
+          const index = e.key === 'Home' ? 0 : e.key === 'End' ? 1 : tab === 'graph' ? 1 : 0;
+          const next = TETRIS_TABS[index].id;
+          selectTab(next);
+          document.getElementById(`tt-tab-${next}`)?.focus();
+        }}>
+          {TETRIS_TABS.map((item) => <button key={item.id} type="button" role="tab" id={`tt-tab-${item.id}`} data-label={item.label} aria-controls={`tt-panel-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} onClick={() => selectTab(item.id)}><span className="seg-label">{item.label}</span></button>)}
+        </div>
+      </div>
+
+      <div id="tt-panel-graph" role="tabpanel" aria-labelledby="tt-tab-graph" hidden={tab !== 'graph'}>
+      <div className="tt-graph-controls" ref={controls}>
         <div className="tt-tools">
           {brush.tools}
           <Stepper
@@ -187,7 +226,6 @@ export const Absences = () => {
             <Icon.Plus size={15} /> {manager ? 'Событие' : 'Заявка на событие'}
           </button>
         </div>
-      </div>
 
       <section className="tt-stats" aria-label="Сводка">
         <div className="tt-stat">
@@ -235,6 +273,7 @@ export const Absences = () => {
 
       {brush.hint}
       {brush.menu}
+      </div>
       <div className={`tl-board${brush.drawing ? ' tl-brush-mode' : ''}`} ref={board} {...brush.bindings}>
         <div className="tl" style={{ ['--days' as string]: daysInMonth, ['--rows' as string]: people.length }} role="grid" aria-label={`График событий: ${fmtMonthYear(month)}`}>
           <div className="tl-corner"><span className="caps">Сотрудник</span></div>
@@ -357,7 +396,9 @@ export const Absences = () => {
         <span><i className="lg-dl bad" />во время события</span>
         {manager && <span>остаток отпуска и отгулов — в подсказке у фамилии</span>}
       </div>
+      </div>
 
+      <div id="tt-panel-review" role="tabpanel" aria-labelledby="tt-tab-review" hidden={tab !== 'review'}>
       <div className="split split--half">
         <section className="card" aria-label="Пересечения со сроками задач">
           <div className="card-head">
@@ -388,8 +429,11 @@ export const Absences = () => {
                       onClick={() => {
                         const d = new Date(`${c.absence.from}T00:00`);
                         setMonth(new Date(d.getFullYear(), d.getMonth(), 1));
+                        setGroup('all');
+                        setHidden((prev) => new Set([...prev].filter((type) => type !== c.absence.type)));
                         setFlash(c.absence.id);
-                        requestAnimationFrame(() => document.getElementById(`abs-${c.absence.id}`)?.scrollIntoView({ block: 'nearest', inline: 'center' }));
+                        pendingReveal.current = c.absence.id;
+                        selectTab('graph');
                       }}
                     >
                       Показать на графике
@@ -439,8 +483,9 @@ export const Absences = () => {
           </ul>
         </section>
       </div>
+      </div>
 
       {editing && <AbsenceModal key={editing.absence?.id ?? 'new'} absence={editing.absence} defaults={editing.defaults} onClose={() => setEditing(null)} />}
-    </>
+    </div>
   );
 };

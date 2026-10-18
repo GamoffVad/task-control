@@ -936,9 +936,14 @@ describe('баллы', () => {
 });
 
 describe('отсутствия', () => {
-  it('показывает график, пересечения и заявки руководителю', () => {
+  it('отделяет график от пересечений и заявок руководителя', async () => {
     renderAt('/tetris');
     expect(screen.getByRole('heading', { level: 1, name: 'Тетрис' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'График' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('grid')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Заявки' })).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole('tab', { name: 'Пересечения и заявки' }));
+    expect(screen.queryByRole('grid')).not.toBeInTheDocument();
     const clashes = screen.getByRole('region', { name: 'Пересечения со сроками задач' });
     expect(within(clashes).getByRole('button', { name: 'Согласовать бюджет и обновить смету' })).toBeInTheDocument();
     expect(within(clashes).getByRole('button', { name: 'Закрыть журнал регистрации за неделю' })).toBeInTheDocument();
@@ -1008,11 +1013,62 @@ describe('отсутствия', () => {
   it('согласует заявку', async () => {
     const user = userEvent.setup();
     renderAt('/tetris');
+    await user.click(screen.getByRole('tab', { name: 'Пересечения и заявки' }));
     const requests = screen.getByRole('region', { name: 'Заявки' });
     const before = within(requests).getAllByRole('button', { name: 'Согласовать' }).length;
     await user.click(within(requests).getAllByRole('button', { name: 'Согласовать' })[0]);
     expect(within(requests).queryAllByRole('button', { name: 'Согласовать' })).toHaveLength(before - 1);
     expect(loadState().absences.filter((a) => a.status === 'request')).toHaveLength(before - 1);
+  });
+
+  it('сохраняет месяц, фильтр видов, положение матрицы и режим рисования при смене вкладки', async () => {
+    const user = userEvent.setup();
+    renderAt('/tetris');
+    await user.click(screen.getByRole('button', { name: 'Месяц: вперёд' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Рисование периодов' }));
+    await user.click(screen.getByRole('button', { name: 'Виды событий: все виды' }));
+    await user.click(screen.getByRole('option', { name: 'Командировка' }));
+    await user.keyboard('{Escape}');
+    const board = document.querySelector('.tl-board')!;
+    board.scrollTop = 240;
+    board.scrollLeft = 90;
+    await user.click(screen.getByRole('tab', { name: 'Пересечения и заявки' }));
+    await user.click(screen.getByRole('tab', { name: 'График' }));
+    expect(screen.getByRole('grid')).toHaveAccessibleName('График событий: Октябрь 2026');
+    expect(screen.getByRole('checkbox', { name: 'Рисование периодов' })).toBeChecked();
+    expect(screen.getByRole('button', { name: /^Виды событий: .*5 из 6/ })).toBeInTheDocument();
+    expect(document.querySelector('.tl-board')).toBe(board);
+    expect([board.scrollTop, board.scrollLeft]).toEqual([240, 90]);
+  });
+
+  it('переходит из пересечения к нужному месяцу и показывает даже скрытый вид события', async () => {
+    const user = userEvent.setup();
+    const state = loggedIn();
+    const clash = state.absences.find((a) => a.employeeId === 2 && a.type === 'vacation')!;
+    const { container } = renderAt('/tetris', state);
+    await user.click(screen.getByRole('button', { name: 'Виды событий: все виды' }));
+    await user.click(screen.getByRole('option', { name: 'Отпуск' }));
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'Месяц: вперёд' }));
+    await user.click(screen.getByRole('tab', { name: 'Пересечения и заявки' }));
+    const task = screen.getByRole('button', { name: 'Согласовать бюджет и обновить смету' }).closest('li')!;
+    await user.click(within(task).getByRole('button', { name: 'Показать на графике' }));
+    expect(screen.getByRole('tab', { name: 'График' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('grid')).toHaveAccessibleName('График событий: Сентябрь 2026');
+    expect(container.querySelector(`#abs-${clash.id}`)).toBeVisible();
+    expect(container.querySelector(`#abs-${clash.id}`)).toHaveFocus();
+  });
+
+  it('переключает вкладки стрелками с клавиатуры', async () => {
+    renderAt('/tetris');
+    const user = userEvent.setup();
+    screen.getByRole('tab', { name: 'График' }).focus();
+    await user.keyboard('{ArrowRight}');
+    expect(screen.getByRole('tabpanel', { name: 'Пересечения и заявки' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Пересечения и заявки' })).toHaveFocus();
+    await user.keyboard('{Home}');
+    expect(screen.getByRole('tabpanel', { name: 'График' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'График' })).toHaveFocus();
   });
 
   it('создаёт отсутствие и предупреждает о задачах в этот период', async () => {

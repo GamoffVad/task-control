@@ -148,6 +148,7 @@ export const useTetrisBrush = (board: RefObject<HTMLDivElement | null>, month: D
   const filtered = choices.filter((c) => c.label.toLocaleLowerCase().replaceAll('ё', 'е').includes(search));
   return {
     drawing, stroke, preview,
+    suspend: () => { cancel(); setMenu(null); },
     tools: <div className="tt-brush-tools">
       <Checkbox checked={drawing} disabled={!absenceAccess(state.user, null).edit} onChange={(value) => { cancel(); setDrawing(value); setMenu(null); setMessage(''); if (value && choice) revealType(choice.type); try { localStorage.setItem(preference, value ? '1' : '0'); } catch { /* Режим действует до перезагрузки. */ } }}>Рисование периодов</Checkbox>
       <button type="button" className={`btn tt-brush-choice${drawing ? '' : ' inactive'}`} disabled={!drawing} aria-hidden={!drawing} aria-haspopup="menu" aria-expanded={!!menu} data-tip={drawing ? choice?.label : undefined} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); openMenu(r.left, r.bottom + 4); }}>Кисть: {choice?.label}</button>
