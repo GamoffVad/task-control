@@ -144,11 +144,11 @@ export const Planning = () => {
         actions={
           <>
             {/* Выгрузка перечня мероприятий недели и документ по шаблону — по выбранным сотрудникам. */}
-            <button type="button" className="btn" onClick={() => setDocOpen(true)}>
-              Документ
+            <button type="button" className="btn icon-btn report-action" aria-label="Документ" data-tip="Документ" onClick={() => setDocOpen(true)}>
+              <Icon.Word size={22} />
             </button>
             {manager && (
-              <button type="button" className="icon-btn btn--primary report-submit" aria-label={report ? 'Обновить отчёт' : 'Направить в отчёт'} data-tip={report ? 'Обновить отчёт' : 'Направить в отчёт'} onClick={submit}>
+              <button type="button" className="btn icon-btn btn--primary report-submit report-action" aria-label={report ? 'Обновить отчёт' : 'Направить в отчёт'} data-tip={report ? 'Обновить отчёт' : 'Направить в отчёт'} onClick={submit}>
                 {report ? <Icon.Refresh size={21} /> : <Icon.ReportSend size={22} />}
               </button>
             )}
