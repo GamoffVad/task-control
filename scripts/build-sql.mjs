@@ -21,8 +21,10 @@ await build({
   logLevel: 'warning',
 });
 
-const { databaseScript } = await import(`${pathToFileURL(bundle).href}?t=${Date.now()}`);
+const { databaseScript, schemaUpdateScript } = await import(`${pathToFileURL(bundle).href}?t=${Date.now()}`);
 const out = path.join(root, 'scripts', 'create-database.sql');
 writeFileSync(out, databaseScript(), 'utf8');
+writeFileSync(path.join(root, 'scripts', 'update-database.sql'), schemaUpdateScript(), 'utf8');
 rmSync(bundle);
 console.log(`Готово: ${path.relative(root, out)}`);
+console.log('Готово: scripts/update-database.sql (обновление существующей базы без тестовых данных)');

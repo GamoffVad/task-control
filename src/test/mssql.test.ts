@@ -5,7 +5,8 @@
 // Без MSSQL_TEST_USER — вход Windows под текущей учётной записью (ODBC, msnodesqlv8).
 import sql from 'mssql';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createMssqlRepo, mssqlSettingsFromEnv, odbcConnectionString, pickOdbcDriver, SCHEMA, usesWindowsLogin } from '../../server/mssqlRepo';
+import { applySchema, createMssqlRepo, mssqlSettingsFromEnv, odbcConnectionString, pickOdbcDriver, SCHEMA, TABLES, usesWindowsLogin } from '../../server/mssqlRepo';
+import { schemaUpdateScript } from '../../server/databaseScript';
 import { secretFromEnv } from '../../server/auth';
 import { storageKindFromEnv } from '../../server/storage';
 import type { Repo } from '../../server/repo';
@@ -216,6 +217,57 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
     expect((await repo.read())!.users.find((account) => account.employeeId === 3)?.hidden).toBeFalsy();
   });
 
+  it('обновляет старую схему без потери записей, неизвестных столбцов и настроек; повторный запуск допустим', async () => {
+    // Имитируем базу старой версии без служебных отметок, с дополнительными объектами организации.
+    await raw(`delete from dbo.tc_meta where [key] in ('seeded', 'access-ready', 'access-version', 'dictionaries-ready', 'plan-rows-ready', 'units-ready', 'templates-ready');
+      alter table dbo.tc_tasks add [corporate_reference] nvarchar(100) null;
+      create table dbo.corporate_settings ([id] int primary key, [value] nvarchar(100));
+      insert into dbo.corporate_settings values (1, N'Сохранить настройку');`);
+    await raw("update dbo.tc_tasks set corporate_reference = N'Рабочий номер документа';");
+    const removed: Record<string, string[]> = {
+      tc_users: ['hidden', 'annual_vacation_days'], tc_absences: ['duty_type', 'vacation_type', 'travel_days_before', 'travel_days_after'], tc_reports: ['period_end'],
+    };
+    const snapshot = async () => {
+      const result: Record<string, unknown> = {};
+      for (const table of TABLES) {
+        const columns = table.columns.filter((c) => !removed[table.name]?.includes(c.name)).map((c) => `[${c.name}]`).join(',');
+        result[table.name] = (await raw(`select ${columns} from dbo.${table.name} order by ${table.primaryKey.map((c) => `[${c}]`).join(',')}`)).recordset;
+      }
+      result.extra = (await raw('select id, corporate_reference from dbo.tc_tasks order by id;')).recordset;
+      result.settings = (await raw('select * from dbo.corporate_settings;')).recordset;
+      return result;
+    };
+    const before = await snapshot();
+    await raw('alter table dbo.tc_users drop constraint df_tc_users_hidden; drop table dbo.tc_chat_reads;');
+    for (const [table, columns] of Object.entries(removed)) for (const column of columns) await raw(`alter table dbo.${table} drop column [${column}];`);
+    const again = createMssqlRepo({ server: server!, database, ...(user ? { user } : {}), ...(password ? { password } : {}), encrypt: false, trustServerCertificate: true });
+    try {
+      await again.ping!();
+      expect(await snapshot()).toEqual(before);
+      expect((await raw("select [hidden], [annual_vacation_days] from dbo.tc_users;")).recordset.every((row) => row.hidden === false && row.annual_vacation_days === null)).toBe(true);
+      // Ручной скрипт и два одновременно запускаемых процесса используют ту же схему и блокировку.
+      await raw(schemaUpdateScript().replace(/^\ufeff/, ''));
+      await Promise.all([applySchema(await poolFor(database)), applySchema(await poolFor(database))]);
+      expect(await snapshot()).toEqual(before);
+    } finally {
+      await again.close?.();
+    }
+  }, 120_000);
+
+  it('ошибка миграции откатывает уже добавленные объекты и не меняет данные', async () => {
+    const before = (await repo.read())!;
+    await expect(applySchema(await poolFor(database), [
+      'create table dbo.tc_upgrade_probe ([id] int);',
+      "throw 50003, N'Контрольная ошибка обновления', 1;",
+    ])).rejects.toThrow();
+    expect((await raw("select object_id('dbo.tc_upgrade_probe') as probe;")).recordset[0].probe).toBeNull();
+    expect(await repo.read()).toEqual(before);
+  });
+
+  it('ручной скрипт отказывается обновлять системную базу', async () => {
+    await expect(raw(schemaUpdateScript().replace(/^\ufeff/, ''), 'master')).rejects.toThrow();
+  });
+
   it('недостающие столбцы дописываются при подключении, данные остаются', async () => {
     const before = (await repo.read())!;
     // Как в базе старой версии или правленной вручную: столбцов нет.
@@ -329,6 +381,7 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
     const defaults = (await repo.read())!;
     // Сотрудники — только из таблицы: очищенная tc_users остаётся пустой.
     expect(defaults.users).toEqual([]);
+    expect(defaults.units!.map((unit) => unit.kind).sort()).toEqual(['department', 'directorate', 'organization']);
     await repo.update((d) => ({ ...d!, messages: [...d!.messages, { id: 'm-migr', authorId: 1, text: 'после переноса', sentAt: NOW.toISOString() }] }) as Data);
     const after = (await repo.read())!;
     expect(after.users).toEqual([]);
@@ -337,5 +390,16 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
     expect(after.dictionaries!.length).toBe(defaults.dictionaries!.length);
     expect(after.units!.length).toBe(defaults.units!.length);
     expect(after.templates!.map((t) => t.name)).toEqual(defaults.templates!.map((t) => t.name));
+  });
+
+  it('частично заполненная база только с нормами не считается новой и не получает тестовых сотрудников', async () => {
+    for (const table of TABLES) await raw(`delete from dbo.${table.name};`);
+    await raw('insert into dbo.tc_entitlements (employee_id, [year], vacation_days, carried_over, dayoff_accrued) values (901, 2026, 42, 3, 7);');
+    const data = await repo.read();
+    expect(data).not.toBeNull();
+    expect(data!.users).toEqual([]);
+    expect(data!.tasks).toEqual([]);
+    expect(data!.reports).toEqual([]);
+    expect(data!.entitlements).toEqual([{ employeeId: 901, year: 2026, vacationDays: 42, carriedOver: 3, dayoffAccrued: 7 }]);
   });
 });

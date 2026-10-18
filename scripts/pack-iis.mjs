@@ -27,7 +27,7 @@ copyFileSync(path.join(root, 'deploy-iis.bat'), path.join(stage, 'deploy-iis.bat
 // Публикация с другого компьютера сети и скрипт базы данных — в тех же папках, что и в репозитории.
 copyFileSync(path.join(root, 'deploy-iis-remote.bat'), path.join(stage, 'deploy-iis-remote.bat'));
 mkdirSync(path.join(stage, 'scripts'), { recursive: true });
-for (const file of ['deploy-remote.ps1', 'create-database.sql', 'clear-test-data.sql']) copyFileSync(path.join(root, 'scripts', file), path.join(stage, 'scripts', file));
+for (const file of ['deploy-remote.ps1', 'create-database.sql', 'update-database.sql', 'clear-test-data.sql']) copyFileSync(path.join(root, 'scripts', file), path.join(stage, 'scripts', file));
 copyFileSync(path.join(root, 'docs', 'corporate-offline.md'), path.join(stage, 'corporate-offline.md'));
 // Папка для установщиков: deploy-iis.bat ставит из неё Node.js, URL Rewrite и iisnode, если их нет на сервере.
 // Сами установщики в архив не входят (это чужие программы со своими лицензиями) — их кладут сюда перед переносом.
@@ -63,6 +63,11 @@ const steps = [
   '3. Запустите deploy-iis.bat от имени администратора.',
   '4. Откройте http://<адрес>:<порт>/api/health — должно быть {"ok":true,"storage":"sqlserver"}.',
   '5. Способ входа (форма или Windows) переключается в приложении: Администрирование > Аутентификация.',
+  '',
+  'Обновление действующего сайта: сохраните резервную копию базы SQL Server и запускайте тот же',
+  'deploy-iis.bat. Существующие подключения, web.config и data сохраняются. Схема обновляется',
+  'в одной транзакции без замены записей и без тестовых данных. Для ручного обновления:',
+  'scripts\\update-database.sql — выполнить в SSMS, выбрав действующую базу приложения.',
   '',
   'Публикация с другого компьютера сети (на сервере запускать ничего не нужно):',
   '   deploy-iis-remote.bat -Server ИМЯ_СЕРВЕРА            (проверка сервера: добавьте -Check)',

@@ -247,7 +247,7 @@ if not exist "%SQLSETUP%" (
 )
 rem Скрипт создаёт базу (если её нет) от имени текущего пользователя и вписывает настройки в web.config:
 rem вход Windows учётной записью пула, без учётной записи SQL Server. Таблицы приложение создаёт само.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%SQLSETUP%" -Server "%SQLSERVER%" -Database "%SQLDB%" -Login "%SQLLOGIN%" -WindowsAccount "%ME%" -ConfigPath "%TARGET%\web.config" %SQLMODE%
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SQLSETUP%" -Server "%SQLSERVER%" -Database "%SQLDB%" -Login "%SQLLOGIN%" -WindowsAccount "%ME%" -ConfigPath "%TARGET%\web.config" -PreserveExisting %SQLMODE%
 if errorlevel 1 (
   echo.
   echo   ВНИМАНИЕ: настроить SQL Server не удалось — смотрите сообщение выше.

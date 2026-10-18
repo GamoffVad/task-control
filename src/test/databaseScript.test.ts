@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { databaseScript, DATABASE_NAME, LOGIN_NAME, PASSWORD_PLACEHOLDER } from '../../server/databaseScript';
+import { databaseScript, schemaUpdateScript, DATABASE_NAME, LOGIN_NAME, PASSWORD_PLACEHOLDER } from '../../server/databaseScript';
 import { SCHEMA } from '../../server/mssqlRepo';
 
 describe('скрипт создания базы данных', () => {
@@ -36,5 +36,17 @@ describe('скрипт создания базы данных', () => {
     expect(text).not.toMatch(/[^\r]\n/);
     // Все таблицы приложения перечислены в схеме.
     for (const table of ['tc_tasks', 'tc_users', 'tc_roles', 'tc_notices', 'tc_meta']) expect(text).toContain(`dbo.${table}`);
+  });
+});
+
+describe('обновление существующей базы', () => {
+  it('поставляется отдельно, без создания базы, логинов и загрузки данных', () => {
+    const text = schemaUpdateScript();
+    expect(readFileSync(path.resolve('scripts/update-database.sql'), 'utf8')).toBe(text);
+    expect(text).not.toMatch(/\b(?:CREATE DATABASE|CREATE LOGIN|CREATE USER|INSERT INTO|DELETE FROM|TRUNCATE TABLE|DROP TABLE)\b/i);
+    expect(text).toContain('BEGIN TRANSACTION');
+    expect(text).toContain('ROLLBACK TRANSACTION');
+    expect(text).toContain("@Resource = N'task-control'");
+    expect(text).toContain("DB_NAME() IN (N'master'");
   });
 });

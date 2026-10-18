@@ -14,12 +14,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { validDayoffAccrued, validateAbsence, type AbsenceDraft } from '../src/lib/absences';
 import { applyAbsenceStroke, strokeError, type AbsenceStroke } from '../src/lib/absenceBrush';
-import { ACCESS_VERSION, DEFAULT_ROLES, DEFAULT_USERS, effectiveUser, hasPermission, PERMISSIONS, sessionUser, withAddedPermissions } from '../src/lib/access';
+import { ACCESS_VERSION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS, effectiveUser, hasPermission, PERMISSIONS, sessionUser, withAddedPermissions } from '../src/lib/access';
 import { CATEGORIES, employeeById, planRows, syncCategories, syncStaff } from '../src/lib/data';
 import { DEFAULT_UNITS, MAIN_DEPARTMENT_ID } from '../src/lib/units';
 import { validateTask, type TaskDraft } from '../src/lib/logic';
 import { fromData, PERSISTED, reducer, toData, type Action } from '../src/lib/reducer';
-import { createSeed, DEFAULT_DICTIONARIES } from '../src/lib/seed';
+import { DEFAULT_DICTIONARIES } from '../src/lib/seed';
+import { DEFAULT_TEMPLATES } from '../src/lib/templates';
 import { validVacationDays, validVacationSettings, vacationTypeCode, vacationTypes } from '../src/lib/vacations';
 import { dutyTypeCode, dutyTypes, eventTypeExists, withDutyTypes } from '../src/lib/eventTypes';
 import type { VacationSettings } from '../src/lib/types';
@@ -463,19 +464,22 @@ export const createApi = ({ repo, connection, secret, now = () => new Date(), wi
    * по умолчанию, из подразделений — только ведомство, управление и отдел. Сотрудников нет: администратором
    * становится учётная запись из TC_ADMIN_LOGIN (тот, кто публиковал), остальных заводят в администрировании.
    */
-  const initialData = (t: Date): Data => {
-    const seed = toData(createSeed(t));
+  const initialData = (): Data => {
     const structure = new Set(['u-org', 'u-dir-it', MAIN_DEPARTMENT_ID]);
     return {
-      ...seed,
       tasks: [], absences: [], entitlements: [], reports: [], messages: [], chatReads: [], notices: [], users: [],
-      units: (seed.units ?? DEFAULT_UNITS).filter((unit) => structure.has(unit.id)),
+      dictionaries: DEFAULT_DICTIONARIES.map((entry) => ({ ...entry })),
+      roles: DEFAULT_ROLES.map((role) => ({ ...role, permissions: [...role.permissions] })),
+      planRows: planRows.map((row) => ({ ...row })),
+      templates: DEFAULT_TEMPLATES.map((template) => ({ ...template })),
+      scoring: { ...DEFAULT_SCORING },
+      units: DEFAULT_UNITS.filter((unit) => structure.has(unit.id)).map((unit) => ({ ...unit })),
       authentication: { mode: 'windows', allowEmergencyForm: false },
     };
   };
   /** Данные; пустая база получает справочники по умолчанию, без тестовых данных. */
   const load = async (): Promise<Data> => {
-    const data = (await repo.read()) ?? await repo.update((cur) => cur ?? initialData(now()));
+    const data = (await repo.read()) ?? await repo.update((cur) => cur ?? initialData());
     // Проверки сотрудников (исполнители, отсутствия, нормы) — по актуальному составу из базы.
     syncStaff(data.users ?? DEFAULT_USERS, data.units ?? DEFAULT_UNITS);
     syncCategories(data.dictionaries ?? DEFAULT_DICTIONARIES);
@@ -626,7 +630,7 @@ export const createApi = ({ repo, connection, secret, now = () => new Date(), wi
           const body = await readBody(req);
           const t = now();
           const data = await repo.update((cur) => {
-            const raw = cur ?? initialData(t);
+            const raw = cur ?? initialData();
             const current = normalizeData(raw);
             const action = parseAction(isObj(body) ? body.action : undefined, current, t);
             const user = effectiveUser(tokenUser, current.users, current.roles);

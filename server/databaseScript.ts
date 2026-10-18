@@ -8,6 +8,40 @@ export const LOGIN_NAME = 'tc_app';
 /** Пока пароль не заменён этой строкой, скрипт учётную запись не создаёт. */
 export const PASSWORD_PLACEHOLDER = 'ЗАМЕНИТЕ_НА_СВОЙ_ПАРОЛЬ';
 
+/** Только обновление выбранной в SSMS существующей базы, без создания базы, логинов и данных. */
+export const schemaUpdateScript = (schema: readonly string[] = SCHEMA): string => {
+  const statements = schema.map((statement) => `  EXEC(N'${statement.trim().replaceAll("'", "''")}');`).join('\n\n');
+  const text = `-- Контроль задач — обновление схемы существующей рабочей базы.
+-- В SSMS выберите ВАШУ действующую базу в списке баз и выполните файл целиком.
+-- Перед обновлением сделайте резервную копию базы штатными средствами SQL Server.
+-- Скрипт не создаёт и не выбирает другую базу, не меняет подключение, логины или записи.
+-- Добавляет недостающие таблицы, столбцы и индексы; повторный запуск допустим.
+-- Совместимость старых отсутствий: расширяет код типа и снимает прежнее ограничение списка типов.
+-- Все изменения схемы выполняются в одной транзакции. Тестовых данных нет.
+SET XACT_ABORT ON;
+SET QUOTED_IDENTIFIER ON;
+IF DB_NAME() IN (N'master', N'model', N'msdb', N'tempdb')
+  OR NOT EXISTS (SELECT 1 FROM sys.tables WHERE schema_id = SCHEMA_ID(N'dbo') AND name LIKE N'tc[_]%')
+  THROW 50001, N'Выберите существующую базу приложения с таблицами tc_. Создание новой базы этим скриптом запрещено.', 1;
+BEGIN TRY
+  BEGIN TRANSACTION;
+  DECLARE @rc int;
+  EXEC @rc = sp_getapplock @Resource = N'task-control', @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 15000;
+  IF @rc < 0 THROW 50002, N'База занята. Повторите обновление позже.', 1;
+
+${statements}
+
+  COMMIT TRANSACTION;
+  SELECT DB_NAME() AS [Обновлена база], N'Схема обновлена. Существующие записи сохранены.' AS [Результат];
+END TRY
+BEGIN CATCH
+  IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+  THROW;
+END CATCH;
+`;
+  return '\ufeff' + text.replaceAll('\r\n', '\n').replaceAll('\n', '\r\n');
+};
+
 const LF = String.fromCharCode(10);
 const CRLF = String.fromCharCode(13, 10);
 

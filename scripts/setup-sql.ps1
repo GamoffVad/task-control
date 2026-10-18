@@ -16,7 +16,9 @@ param(
   [switch]$SqlLogin,
   [string]$Login = 'tc_app',
   # Только с -SqlLogin: задать учётной записи новый пароль, если она уже существует, а пароль неизвестен.
-  [switch]$Reset
+  [switch]$Reset,
+  # При публикации действующего сайта подключение уже настроено: не заменять его параметрами установщика.
+  [switch]$PreserveExisting
 )
 
 $ErrorActionPreference = 'Stop'
@@ -27,6 +29,17 @@ function Fail([string]$text, [int]$code) {
 }
 
 if (-not (Test-Path $ConfigPath)) { Fail "не найден файл $ConfigPath." 2 }
+
+[xml]$xml = Get-Content -Raw -Encoding UTF8 $ConfigPath
+function Get-Setting([string]$key) { ($xml.configuration.appSettings.add | Where-Object { $_.key -eq $key }) }
+# Подключение из администрирования хранится отдельно и имеет приоритет над web.config.
+$connectionFile = Join-Path (Split-Path -Parent $ConfigPath) 'data\sqlserver-connection.json'
+$existingServer = Get-Setting 'MSSQL_SERVER'
+if ($PreserveExisting -and -not $Reset -and ((Test-Path -LiteralPath $connectionFile) -or ($existingServer -and -not [string]::IsNullOrWhiteSpace($existingServer.value)))) {
+  Write-Output '  Сохранено действующее подключение к базе. Настройки SQL Server и данные не заменяются.'
+  Write-Output '  Недостающие таблицы, столбцы и индексы приложение добавит при подключении; тестовые записи не загружаются.'
+  exit 0
+}
 if ($Database -notmatch '^[A-Za-z_][A-Za-z0-9_]{0,120}$') { Fail "недопустимое имя базы данных: $Database." 2 }
 
 # sqlcmd ставится вместе с SQL Server и с Command Line Utilities.
@@ -58,8 +71,6 @@ $securityadmin = $parts[1] -eq '1'
 $dbcreator = $parts[2] -eq '1'
 
 # Настройки из web.config.
-[xml]$xml = Get-Content -Raw -Encoding UTF8 $ConfigPath
-function Get-Setting([string]$key) { ($xml.configuration.appSettings.add | Where-Object { $_.key -eq $key }) }
 function Set-Setting([string]$key, [string]$value) {
   $node = Get-Setting $key
   if (-not $node) {

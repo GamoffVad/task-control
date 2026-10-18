@@ -7,16 +7,18 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import sql from 'mssql';
 import { DEFAULT_DICTIONARIES } from '../src/lib/seed';
-import { ACCESS_VERSION, DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS, withAddedPermissions } from '../src/lib/access';
+import { ACCESS_VERSION, DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, withAddedPermissions } from '../src/lib/access';
 import { planRows as DEFAULT_PLAN_ROWS, sortedPlanRows } from '../src/lib/data';
 import type { Absence, ChatRead, Data, Notice, DictionaryEntry, DocumentTemplate, Entitlement, ManagedUser, Message, Permission, PlanRow, Report, RoleDefinition, Task, Unit } from '../src/lib/types';
-import { DEFAULT_UNITS } from '../src/lib/units';
+import { DEFAULT_UNITS, MAIN_DEPARTMENT_ID } from '../src/lib/units';
 import { DEFAULT_TEMPLATES, templateScope } from '../src/lib/templates';
 import type { Repo } from './repo';
 
 /** Имя блокировки: одновременные правки разных пользователей выстраиваются в очередь. */
 const LOCK = 'task-control';
 const LOCK_TIMEOUT_MS = 15_000;
+/** Только базовая структура; демонстрационные группы не попадают в старую базу без tc_units. */
+const INITIAL_UNITS = DEFAULT_UNITS.filter((unit) => ['u-org', 'u-dir-it', MAIN_DEPARTMENT_ID].includes(unit.id));
 
 /**
  * Описание таблиц: по нему схема и создаётся, и сверяется. При каждом подключении (а значит, при каждой
@@ -312,7 +314,7 @@ const meta = async (q: Q, key: string): Promise<string | null> => {
 };
 
 /** Таблицы, по которым видно, что в базе уже есть данные приложения. */
-const DATA_TABLES = ['tc_users', 'tc_tasks', 'tc_absences', 'tc_reports', 'tc_messages', 'tc_dictionaries', 'tc_plan_rows', 'tc_units', 'tc_templates', 'tc_roles'] as const;
+const DATA_TABLES = ['tc_users', 'tc_tasks', 'tc_absences', 'tc_reports', 'tc_messages', 'tc_dictionaries', 'tc_plan_rows', 'tc_units', 'tc_templates', 'tc_roles', 'tc_entitlements', 'tc_chat_reads', 'tc_notices', 'tc_meta'] as const;
 /** Отметка готовности раздела и таблица, в которой лежат его строки. */
 const READY_TABLE: Record<string, (typeof DATA_TABLES)[number]> = {
   'dictionaries-ready': 'tc_dictionaries',
@@ -332,7 +334,7 @@ const hasRows = async (q: Q, table: (typeof DATA_TABLES)[number]): Promise<boole
  */
 const isReady = async (q: Q, key: string): Promise<boolean> => (await meta(q, key)) != null || hasRows(q, READY_TABLE[key]);
 
-/** Демоданные пишутся только в действительно пустую базу. */
+/** Начальная настройка допустима только для действительно пустой базы, включая нормы и настройки. */
 const isSeeded = async (q: Q): Promise<boolean> => {
   if ((await meta(q, 'seeded')) != null) return true;
   for (const table of DATA_TABLES) if (await hasRows(q, table)) return true;
@@ -450,7 +452,7 @@ const readAll = async (q: Q): Promise<Data | null> => {
           const u = x as unknown as { id: string; parent_id: string | null; kind: Unit['kind']; name: string };
           return { id: u.id, parentId: u.parent_id, kind: u.kind, name: u.name } as Unit;
         })
-      : DEFAULT_UNITS.map((u) => ({ ...u })),
+      : INITIAL_UNITS.map((u) => ({ ...u })),
     roles: migratedRoles,
     authentication: authentication ? JSON.parse(authentication) : { ...DEFAULT_AUTHENTICATION },
     ...(vacationSettings ? { vacationSettings: JSON.parse(vacationSettings) } : {}),
@@ -768,6 +770,23 @@ export const ensureDatabase = async (settings: MssqlSettings): Promise<void> => 
   }
 };
 
+/** Схема обновляется целиком или откатывается; та же блокировка защищает обычные записи приложения. */
+export const applySchema = async (pool: sql.ConnectionPool, statements: readonly string[] = SCHEMA): Promise<void> => {
+  const tx = pool.transaction();
+  await tx.begin();
+  try {
+    const locked = await rows(tx, `declare @rc int;
+      exec @rc = sp_getapplock @Resource = @v1, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = @v2;
+      select @rc as [rc];`, [S(LOCK, 255), I(LOCK_TIMEOUT_MS)]);
+    if (Number(locked[0]?.rc ?? -999) < 0) throw new Error('Не удалось заблокировать базу для обновления схемы. Повторите запуск.');
+    for (const statement of statements) await tx.request().query(statement);
+    await tx.commit();
+  } catch (error) {
+    await tx.rollback().catch(() => undefined);
+    throw error;
+  }
+};
+
 export const createMssqlRepo = (settings: MssqlSettings): Repo => {
   let pool: sql.ConnectionPool | null = null;
   let ready: Promise<sql.ConnectionPool> | null = null;
@@ -779,7 +798,7 @@ export const createMssqlRepo = (settings: MssqlSettings): Repo => {
       await pool.connect();
       // Сверка схемы при каждом запуске (то есть при каждой публикации): недостающие таблицы, столбцы
       // и индексы создаются, существующие строки и данные не меняются и не удаляются.
-      for (const statement of SCHEMA) await pool.request().query(statement);
+      await applySchema(pool);
       return pool;
     })().catch((e) => ((ready = null), Promise.reject(e))));
 
@@ -825,9 +844,9 @@ export const createMssqlRepo = (settings: MssqlSettings): Repo => {
           chatReads: [],
           planRows: DEFAULT_PLAN_ROWS.map((row) => ({ ...row })),
           dictionaries: DEFAULT_DICTIONARIES,
-          users: DEFAULT_USERS,
+          users: [],
           roles: DEFAULT_ROLES,
-          units: DEFAULT_UNITS,
+          units: INITIAL_UNITS,
           templates: DEFAULT_TEMPLATES,
           authentication: { ...DEFAULT_AUTHENTICATION },
           scoring: { ...DEFAULT_SCORING },
@@ -857,7 +876,7 @@ export const createMssqlRepo = (settings: MssqlSettings): Repo => {
         await sync(tx, PLAN_ROWS, baseline.planRows ?? [], next.planRows ?? DEFAULT_PLAN_ROWS);
         await sync(tx, USERS, baseline.users, next.users);
         await sync(tx, ROLES, baseline.roles, next.roles);
-        await sync(tx, UNITS, baseline.units ?? [], next.units ?? DEFAULT_UNITS);
+        await sync(tx, UNITS, baseline.units ?? [], next.units ?? INITIAL_UNITS);
         await sync(tx, TEMPLATES, baseline.templates ?? [], next.templates ?? DEFAULT_TEMPLATES);
 
         if (accessVersion !== ACCESS_VERSION) {

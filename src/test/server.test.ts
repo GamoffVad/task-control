@@ -443,6 +443,8 @@ describe('API', () => {
     expect(json.data!.tasks).toEqual([]);
     expect(json.data!.messages).toEqual([]);
     expect(json.data!.absences).toEqual([]);
+    expect(json.data!.entitlements).toEqual([]);
+    expect(json.data!.reports).toEqual([]);
     expect(json.data!.users.map((u) => u.email)).toEqual(['user@example.com']);
     // Справочники и роли нужны для работы и записываются.
     expect(json.data!.dictionaries.length).toBeGreaterThan(0);
