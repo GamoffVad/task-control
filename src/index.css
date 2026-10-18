@@ -1233,8 +1233,12 @@ a.label:hover { color: var(--accent); }
 .tl-cell.today { box-shadow: inset 2px 0 0 var(--danger); }
 .tl-cell:not(:disabled):hover { background: var(--soft); }
 .tt-brush-tools { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem 1rem; min-width: 0; }
-.tt-brush-choice { max-width: min(25rem, 100%); white-space: normal; text-align: left; }
-.tt-brush-hint { padding: .4rem 0 .6rem; color: var(--ink-3); font-size: .8rem; min-height: 2rem; }
+.tt-brush-tools .check { flex-shrink: 0; font-weight: 600; white-space: nowrap; }
+.tt-brush-choice { width: 22rem; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.tt-brush-choice.inactive, .tt-brush-hint.inactive { visibility: hidden; pointer-events: none; }
+.tt-brush-hint { display: grid; padding: .4rem 0 .6rem; color: var(--ink-3); font-size: .8rem; min-height: 2rem; }
+.tt-brush-hint-reserve, .tt-brush-hint-text { grid-area: 1 / 1; }
+.tt-brush-hint-reserve { visibility: hidden; pointer-events: none; }
 .tl-brush-mode { user-select: none; touch-action: pan-y; }
 .tl-brush-mode .tl-lane, .tl-brush-mode .tl-cell:not(:disabled), .tl-brush-mode .tl-bar, .tl-brush-mode .tl-dl { cursor: crosshair; }
 .tl-brush-preview { grid-row: 1; align-self: stretch; z-index: 4; pointer-events: none; border: 2px solid var(--c); background: rgb(var(--c-rgb) / 16%); }

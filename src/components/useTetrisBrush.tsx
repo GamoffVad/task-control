@@ -13,6 +13,7 @@ import { absColor } from './absColor';
 type Choice = AbsenceBrush & { key: string; label: string };
 type Gesture = { pointerId: number; employeeId: number; anchor: string; end: string; mode: 'paint' | 'erase'; brush: Choice; startMonth: Date; scrollLeft: number; x: number; y: number; edge: number; held: boolean };
 const FIRST_DELAY = 650, REPEAT_DELAY = 900, EDGE = 18;
+const BRUSH_HINT = 'Правая кнопка — выбор кисти. Левой протяните по дням одной строки. Начните на том же виде события, чтобы стереть. У края месяца удерживайте курсор для перелистывания.';
 
 export const useTetrisBrush = (board: RefObject<HTMLDivElement | null>, month: Date, setMonth: Dispatch<SetStateAction<Date>>, revealType: (type: string) => void) => {
   const { state, dispatch } = useStore();
@@ -149,10 +150,11 @@ export const useTetrisBrush = (board: RefObject<HTMLDivElement | null>, month: D
     drawing, stroke, preview,
     tools: <div className="tt-brush-tools">
       <Checkbox checked={drawing} disabled={!absenceAccess(state.user, null).edit} onChange={(value) => { cancel(); setDrawing(value); setMenu(null); setMessage(''); if (value && choice) revealType(choice.type); try { localStorage.setItem(preference, value ? '1' : '0'); } catch { /* Режим действует до перезагрузки. */ } }}>Рисование периодов</Checkbox>
-      {drawing && <button type="button" className="btn tt-brush-choice" aria-haspopup="menu" aria-expanded={!!menu} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); openMenu(r.left, r.bottom + 4); }}>Кисть: {choice?.label}</button>}
+      <button type="button" className={`btn tt-brush-choice${drawing ? '' : ' inactive'}`} disabled={!drawing} aria-hidden={!drawing} aria-haspopup="menu" aria-expanded={!!menu} data-tip={drawing ? choice?.label : undefined} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); openMenu(r.left, r.bottom + 4); }}>Кисть: {choice?.label}</button>
     </div>,
-    hint: drawing && <div className={`tt-brush-hint${preview?.error ? ' danger' : ''}`} role="status">
-      {preview?.error ?? (stroke ? `${stroke.mode === 'erase' ? 'Стирание' : 'Рисование'}: ${fmtDate(fromDateKey(stroke.from))} — ${fmtDate(fromDateKey(stroke.to))} · ${fmtMonthYear(month)} · Escape — отменить` : message || 'Правая кнопка — выбор кисти. Левой протяните по дням одной строки. Начните на том же виде события, чтобы стереть. У края месяца удерживайте курсор для перелистывания.')}
+    hint: <div className={`tt-brush-hint${drawing ? '' : ' inactive'}${preview?.error ? ' danger' : ''}`} role={drawing ? 'status' : undefined} aria-hidden={!drawing}>
+      <span className="tt-brush-hint-reserve" aria-hidden>{BRUSH_HINT}</span>
+      <span className="tt-brush-hint-text">{preview?.error ?? (stroke ? `${stroke.mode === 'erase' ? 'Стирание' : 'Рисование'}: ${fmtDate(fromDateKey(stroke.from))} — ${fmtDate(fromDateKey(stroke.to))} · ${fmtMonthYear(month)} · Escape — отменить` : message || BRUSH_HINT)}</span>
     </div>,
     menu: menu && createPortal(<div className="tt-brush-menu" ref={menuEl} style={{ left: menu.x, top: menu.y, maxHeight: window.innerHeight - menu.y - 8 }} role="menu" aria-label="Кисть периода" onKeyDown={(e) => {
       if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key) || ((e.target as HTMLElement).tagName === 'INPUT' && ['Home', 'End'].includes(e.key))) return;
