@@ -95,7 +95,7 @@ export const Calendar = () => {
     else setCursor((c) => addDays(c, 7 * dir));
   };
   const { root, draggingId, drop, edgeDirection, onStart, ...dragEvents } = useCalendarDrag(state.tasks, canMove, moveTask, {
-    onNavigate: view === 'day' ? undefined : step,
+    onNavigate: step,
     periodKey: `${view}:${cursor.toISOString()}`,
   });
   const drag = { draggingId, drop, onStart, canMove };
@@ -186,9 +186,9 @@ export const Calendar = () => {
         </FilterCard>
       </div>
       </div>
-      {manager && <p className="calendar-move-note" role="status">{moveMessage || 'Перетащите задачу в другой день или интервал. Удерживайте у края календаря для смены недели или месяца. Alt+←/→ — день, Alt+↑/↓ — 30 минут. Escape — отмена переноса.'}</p>}
+      {manager && <p className="calendar-move-note" role="status">{moveMessage || 'Перетащите задачу в другой день или интервал. Удерживайте у края календаря для смены дня, недели или месяца. Alt+←/→ — день, Alt+↑/↓ — 30 минут. Escape — отмена переноса.'}</p>}
       {edgeDirection && <div className={`calendar-edge-hint calendar-edge-hint--${edgeDirection < 0 ? 'left' : 'right'}`} role="status">
-        {edgeDirection < 0 ? '← ' : ''}{view === 'month' ? (edgeDirection < 0 ? 'Предыдущий месяц' : 'Следующий месяц') : (edgeDirection < 0 ? 'Предыдущая неделя' : 'Следующая неделя')}{edgeDirection > 0 ? ' →' : ''}
+        {edgeDirection < 0 ? '← ' : ''}{view === 'day' ? (edgeDirection < 0 ? 'Предыдущий день' : 'Следующий день') : view === 'month' ? (edgeDirection < 0 ? 'Предыдущий месяц' : 'Следующий месяц') : (edgeDirection < 0 ? 'Предыдущая неделя' : 'Следующая неделя')}{edgeDirection > 0 ? ' →' : ''}
       </div>}
 
       {query.trim() && (
