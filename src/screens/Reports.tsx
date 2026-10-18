@@ -58,15 +58,15 @@ export const Reports = () => {
         subtitle={<>{department.name} · Исполненные мероприятия за выбранный отчётный период.</>}
         actions={
           <>
-            {canSubmit && <button type="button" className="btn btn--primary report-submit" disabled={!doneCount} onClick={() => dispatch({ type: 'submitReport', weekStart, periodEnd: weekEnd })}><Icon.Send size={15} /> {report ? 'Обновить отчёт' : 'Направить в отчёт'}</button>}
-            <button type="button" className="btn" onClick={download} disabled={!report || entries.length === 0}>
-              <Icon.Download size={15} /> Выгрузить CSV
+            {canSubmit && <button type="button" className="btn icon-btn btn--primary report-submit report-action" aria-label={report ? 'Обновить отчёт' : 'Направить в отчёт'} data-tip={report ? 'Обновить отчёт' : 'Направить в отчёт'} disabled={!doneCount} onClick={() => dispatch({ type: 'submitReport', weekStart, periodEnd: weekEnd })}>{report ? <Icon.Refresh size={21} /> : <Icon.ReportSend size={22} />}</button>}
+            <button type="button" className="btn icon-btn report-action" aria-label="Выгрузить CSV" data-tip="Выгрузить CSV" onClick={download} disabled={!report || entries.length === 0}>
+              <Icon.Download size={22} />
             </button>
-            <button type="button" className="btn" onClick={() => setDocOpen(true)} disabled={!report || entries.length === 0}>
-              Документ
+            <button type="button" className="btn icon-btn report-action" aria-label="Документ" data-tip="Документ" onClick={() => setDocOpen(true)} disabled={!report || entries.length === 0}>
+              <Icon.Word size={22} />
             </button>
-            <button type="button" className="btn btn--primary" onClick={() => window.print()} disabled={!report || entries.length === 0}>
-              <Icon.Print size={15} /> Печать
+            <button type="button" className="btn icon-btn btn--primary report-submit report-action" aria-label="Печать" data-tip="Печать" onClick={() => window.print()} disabled={!report || entries.length === 0}>
+              <Icon.Print size={22} />
             </button>
           </>
         }

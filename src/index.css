@@ -429,7 +429,8 @@ h2 { font-size: var(--size-heading); font-weight: 700; margin: 0; color: var(--i
 .stepper .value { min-width: 0; font-size: 15px; font-weight: 700; color: var(--ink); margin: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stepper > .text-action { grid-column: 3; justify-self: start; white-space: nowrap; }
 .page-actions > .report-submit { flex: 0 0 44px; width: 44px; min-width: 44px; height: 44px; padding: 0; background: var(--accent); border-color: var(--accent); color: var(--sheet); }
-.page-actions:has(> .report-submit) > .btn { flex: 1 1 auto; }
+.page-actions:has(> .report-submit) > .btn:not(.report-action) { flex: 1 1 auto; }
+.page-actions > .report-action { flex: 0 0 44px; width: 44px; min-width: 44px; height: 44px; padding: 0; }
 .page-actions > .report-submit:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 .stepper--compact { --stepper-value-width: 9em; grid-template-columns: 36px 36px var(--stepper-value-width) max-content; width: max-content; }
 .stepper--compact > .text-action { grid-column: auto; }
