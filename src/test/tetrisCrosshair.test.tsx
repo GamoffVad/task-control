@@ -43,6 +43,27 @@ const setup = () => {
 const overlay = () => document.querySelector<HTMLElement>('.tl-crosshair')!;
 const move = (board: HTMLElement, day: number, y = 160, pointerType = 'mouse') => fireEvent.pointerMove(board, { pointerType, clientX: 220 + (day - .5) * 30, clientY: y });
 
+it('перекрестие и подпись стоят в центре ячейки и меняют положение только при переходе в соседнюю', () => {
+  const view = setup();
+  const area = document.querySelector<HTMLElement>('.tl-crosshair-field')!, tip = document.querySelector<HTMLElement>('.tl-crosshair-label')!;
+  fireEvent.pointerMove(view.board, { pointerType: 'mouse', clientX: 282, clientY: 145 }); flush();
+  expect(area.style.getPropertyValue('--cross-x')).toBe('75px');
+  expect(area.style.getPropertyValue('--cross-y')).toBe('20px');
+  const linePosition = area.style.cssText, labelPosition = tip.style.transform;
+  for (const [clientX, clientY] of [[288, 155], [308, 178], [281, 141]]) {
+    fireEvent.pointerMove(view.board, { pointerType: 'mouse', clientX, clientY }); flush();
+    expect(area.style.cssText).toBe(linePosition);
+    expect(tip.style.transform).toBe(labelPosition);
+  }
+  fireEvent.pointerMove(view.board, { pointerType: 'mouse', clientX: 311, clientY: 178 }); flush();
+  expect(area.style.getPropertyValue('--cross-x')).toBe('105px');
+  expect(area.style.getPropertyValue('--cross-y')).toBe('20px');
+  expect(overlay()).toHaveTextContent('04.10.2026');
+  fireEvent.pointerMove(view.board, { pointerType: 'mouse', clientX: 311, clientY: 181 }); flush();
+  expect(area.style.getPropertyValue('--cross-y')).toBe('60px');
+  expect(overlay()).toHaveTextContent('Петров Пётр Иванович');
+});
+
 it('дата и сотрудник определяются поверх периода; движения объединяются в кадр без рендеров React', () => {
   const view = setup(), before = view.commits();
   for (let i = 1; i <= 12; i++) move(view.board, i);

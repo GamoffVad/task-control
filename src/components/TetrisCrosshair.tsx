@@ -16,7 +16,7 @@ export const TetrisCrosshair = memo(({ board, month, people, active }: Props) =>
     const names = new Map(people.map((p) => [p.id, `${p.lastname} ${p.name} ${p.patronymic}`.trim()]));
     const headers = el.querySelectorAll('.tl-dh');
     const count = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-    let frame: number | null = null, lastCoordinate = '';
+    let frame: number | null = null, lastCoordinate = '', lastPlacement = '';
     let markedDay: Element | null = null, markedEmployee: Element | null = null;
     const mark = (day: Element | null, employee: Element | null) => {
       if (day !== markedDay) { markedDay?.classList.remove('tl-crosshair-hit'); day?.classList.add('tl-crosshair-hit'); markedDay = day; }
@@ -25,7 +25,7 @@ export const TetrisCrosshair = memo(({ board, month, people, active }: Props) =>
       if (day && !day.classList.contains('tl-crosshair-hit')) day.classList.add('tl-crosshair-hit');
       if (employee && !employee.classList.contains('tl-crosshair-hit')) employee.classList.add('tl-crosshair-hit');
     };
-    const hide = () => { layer.hidden = true; mark(null, null); };
+    const hide = () => { layer.hidden = true; lastPlacement = ''; mark(null, null); };
     const clear = () => { point.current = null; hide(); };
     const paint = () => {
       frame = null;
@@ -51,11 +51,18 @@ export const TetrisCrosshair = memo(({ board, month, people, active }: Props) =>
         employeeLabel.current!.textContent = name;
         lastCoordinate = coordinate;
       }
-      area.style.cssText = `left:${left}px;top:${top}px;width:${right - left}px;height:${bottom - top}px;--cross-x:${p.x - left}px;--cross-y:${p.y - top}px`;
+      const cellLeft = rect.left + (day - 1) * rect.width / count, cellRight = rect.left + day * rect.width / count;
+      // Центр видимой части ячейки: линии и подпись не следуют за мышью внутри одного дня/сотрудника.
+      const snapX = (Math.max(left, cellLeft) + Math.min(right, cellRight)) / 2;
+      const snapY = (Math.max(top, rect.top) + Math.min(bottom, rect.bottom)) / 2;
+      const placement = `${coordinate}|${left}|${top}|${right}|${bottom}|${snapX}|${snapY}|${window.innerWidth}|${window.innerHeight}`;
+      if (placement === lastPlacement && !layer.hidden) return;
+      lastPlacement = placement;
+      area.style.cssText = `left:${left}px;top:${top}px;width:${right - left}px;height:${bottom - top}px;--cross-x:${snapX - left}px;--cross-y:${snapY - top}px`;
       layer.hidden = false;
       const box = tip.getBoundingClientRect();
-      const x = p.x + 14 + box.width > window.innerWidth - 8 ? p.x - box.width - 14 : p.x + 14;
-      const y = p.y + 14 + box.height > window.innerHeight - 8 ? p.y - box.height - 14 : p.y + 14;
+      const x = snapX + 14 + box.width > window.innerWidth - 8 ? snapX - box.width - 14 : snapX + 14;
+      const y = snapY + 14 + box.height > window.innerHeight - 8 ? snapY - box.height - 14 : snapY + 14;
       tip.style.transform = `translate(${Math.max(8, Math.min(x, window.innerWidth - box.width - 8))}px, ${Math.max(8, Math.min(y, window.innerHeight - box.height - 8))}px)`;
     };
     const queue = () => { if (frame === null && point.current) frame = requestAnimationFrame(paint); };
