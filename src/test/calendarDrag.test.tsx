@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { AppRoutes } from '../App';
 import { StoreProvider } from '../lib/StoreProvider';
 import { storeCalendarView } from '../lib/calendarView';
+import { loadCalendarStatus } from '../lib/calendarStatus';
 import { movedTaskDates } from '../lib/calendarLayout';
 import { createSeed } from '../lib/seed';
 import { loadState } from '../lib/store';
@@ -47,12 +48,50 @@ const setup = (view: CalendarView = 'week', executor = false, task: Task | Task[
     vi.spyOn(zone, 'getBoundingClientRect').mockReturnValue({ x: index * 100, y: 0, left: index * 100, top: 0, right: (index + 1) * 100, bottom: 840, width: 100, height: 840, toJSON: () => ({}) });
   });
   document.elementFromPoint = vi.fn((x, y) => y >= 0 && y < 840 ? zones[Math.floor(x / 100)] ?? null : null);
-  eventButton().setPointerCapture = vi.fn();
+  const source = eventButton();
+  if (source) source.setPointerCapture = vi.fn();
   return zones;
 };
 const pointer = (x: number, y: number, pointerType = 'mouse') => ({ button: 0, buttons: 1, isPrimary: true, pointerId: 1, pointerType, clientX: x, clientY: y });
 
 describe('статус и изменение периода в календаре', () => {
+  it.each(['Все задачи', 'В работе', 'Исполнено'])('восстанавливает фильтр «%s» после повторного открытия страницы', name => {
+    setup();
+    fireEvent.click(screen.getByRole('button', { name: /^Статус задач:/ }));
+    fireEvent.click(screen.getByRole('option', { name }));
+    cleanup();
+    setup();
+    expect(screen.getByRole('button', { name: `Статус задач: ${name}` })).toBeInTheDocument();
+  });
+
+  it('сохраняет статус после выхода и повторного входа', async () => {
+    setup();
+    fireEvent.click(screen.getByRole('button', { name: /^Статус задач:/ }));
+    fireEvent.click(screen.getByRole('option', { name: 'В работе' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Выйти' }));
+    expect(screen.getByRole('heading', { name: 'Вход в систему' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Логин'), { target: { value: 'user@example.com' } });
+    fireEvent.change(screen.getByLabelText('Пароль'), { target: { value: '123456' } });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Войти/ })); });
+    expect(screen.getByRole('button', { name: 'Статус задач: В работе' })).toBeInTheDocument();
+  });
+
+  it('хранит статусы разных сотрудников независимо', () => {
+    setup();
+    fireEvent.click(screen.getByRole('button', { name: /^Статус задач:/ }));
+    fireEvent.click(screen.getByRole('option', { name: 'Исполнено' }));
+    cleanup();
+    setup('week', true);
+    expect(screen.getByRole('button', { name: 'Статус задач: Все задачи' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Статус задач:/ }));
+    fireEvent.click(screen.getByRole('option', { name: 'В работе' }));
+    expect(loadCalendarStatus(1)).toBe('done');
+    expect(loadCalendarStatus(3)).toBe('active');
+    cleanup();
+    setup();
+    expect(screen.getByRole('button', { name: 'Статус задач: Исполнено' })).toBeInTheDocument();
+  });
+
   it.each(['day', 'week', 'month'] as const)('фильтрует исполненные и рабочие задачи вместе с поиском в виде %s', view => {
     setup(view, false, [eventTask(), { ...eventTask(), id: 'completed-task', title: 'Исполненная задача', done: true, doneAt: new Date().toISOString() }]);
     const visible = () => [...document.querySelectorAll<HTMLElement>('[data-calendar-task]')].map(el => el.dataset.calendarTask);

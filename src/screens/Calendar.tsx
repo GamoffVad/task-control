@@ -24,6 +24,7 @@ import { FIRST_HOUR, LAST_HOUR, layoutDay, movedTaskDates } from '../lib/calenda
 import { isManager, taskAccess } from '../lib/permissions';
 import { useCalendarDrag, type CalendarDrop } from '../lib/useCalendarDrag';
 import { loadCalendarView, storeCalendarView } from '../lib/calendarView';
+import { loadCalendarStatus, storeCalendarStatus, type CalendarTaskStatus } from '../lib/calendarStatus';
 import { useStore } from '../lib/store';
 import { useClashes } from '../lib/useClashes';
 import type { Clash } from '../lib/absences';
@@ -76,7 +77,11 @@ export const Calendar = () => {
   // Исполнитель по умолчанию видит свои задачи, но может посмотреть и весь отдел.
   const [employee, setEmployee] = useState<number | null>(manager ? null : (state.user?.employeeId ?? null));
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState<'all' | 'active' | 'done'>('all');
+  const [status, setStatusState] = useState<CalendarTaskStatus>(() => loadCalendarStatus(employeeId));
+  const setStatus = (next: CalendarTaskStatus) => {
+    setStatusState(next);
+    storeCalendarStatus(next, employeeId);
+  };
   const { keys: allCats, options: catOptions } = useCategoryOptions();
   // Снятые категории хранятся отдельно: добавленная в словаре категория сразу показывается.
   const [hiddenCats, setHiddenCats] = useState<Set<CatKey>>(() => new Set());

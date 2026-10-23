@@ -795,6 +795,9 @@ td.name { color: var(--ink); font-weight: 600; }
 }
 .cal-event:hover { outline: 1px solid var(--accent); }
 .calendar-move-note { margin: 6px 0; font-size: 12px; line-height: 1.5; height: 1.5em; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.planning-task-step { width: 10rem; max-width: 100%; min-width: 0; }
+.planning-task-step > .caps { display: block; font-size: 10px; }
+.planning-task-step .dd-btn { min-height: 2rem; }
 .calendar-movable { touch-action: none; cursor: grab; }
 .calendar-dragging, .calendar-dragging * { cursor: grabbing !important; user-select: none; }
 .calendar-dragging .calendar-moving { opacity: 0.3; }

@@ -1,7 +1,7 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTaskEditor } from '../components/taskEditor';
 import { GroupFilter } from '../components/ui';
-import { FilterCard, MultiSelect, PageHeader, SearchField, Stepper } from '../kit';
+import { FilterCard, MultiSelect, PageHeader, SearchField, Select, Stepper } from '../kit';
 import { Icon } from '../components/Icons';
 import { absenceType, categoryLabel, department, employees, groupMembers, shortName } from '../lib/data';
 import { addDays, fmtDate, fmtDateTime, fmtRange, plural, startOfDay, toDateKey } from '../lib/dates';
@@ -19,12 +19,15 @@ import { inScope } from '../lib/visibility';
 import { absenceInPeriod, fmtSpan, type Clash } from '../lib/absences';
 import { AbsentTag } from '../components/AbsentTag';
 import type { Task } from '../lib/types';
+import { loadPlanningStep, nextPlanningSlot, PLANNING_STEPS, storePlanningStep, WORK_START_HOUR, type PlanningStep } from '../lib/planningSlots';
 
 export const Planning = () => {
   const { state, dispatch } = useStore();
   const { openTask } = useTaskEditor();
   const manager = isManager(state.user);
   const me = state.user?.employeeId ?? 0;
+  const [taskStep, setTaskStep] = useState(() => loadPlanningStep(me));
+  const changeTaskStep = (step: PlanningStep) => { setTaskStep(step); storePlanningStep(step, me); };
   const periods = useMemo(() => normalizePeriodSettings(state.periodSettings), [state.periodSettings]);
   const [weekAnchor, setWeekStart] = useState(() => new Date());
   const weekStart = useMemo(() => weeklyPeriodStart(weekAnchor, periods.planning), [weekAnchor, periods.planning]);
@@ -51,7 +54,7 @@ export const Planning = () => {
     }
     return state.planRows.filter((row) => included.has(row.id));
   }, [state.planRows, rowQuery]);
-  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  const [status, setStatus] = useState<{ ok: boolean; text: string; manual?: () => void } | null>(null);
   const now = new Date();
   const clashes = useClashes();
 
@@ -104,20 +107,22 @@ export const Planning = () => {
   };
 
   const createInCell = (rowId: string, employeeId: number) => {
-    const today = startOfDay(now);
-    const day = today >= weekStart && today <= weekEnd ? today : weekStart;
-    const start = new Date(day);
-    start.setHours(16, 0, 0, 0);
     const row = state.planRows.find((r) => r.id === rowId);
-    openTask({
+    const open = (slot: { start: string; end: string }) => openTask({
       defaults: {
         rowId,
         assigneeIds: [employeeId],
-        start: start.toISOString(),
-        end: new Date(start.getTime() + 2 * 3600_000).toISOString(),
+        ...slot,
       },
       context: `${rowId} ${row?.title ?? ''} · ${shortName(employeeId)}`,
     });
+    const slot = nextPlanningSlot(state.tasks, employeeId, weekStart, weekEnd, taskStep, now);
+    if (slot) { setStatus(null); open(slot); return; }
+    // Не выдаём занятый интервал за свободный и не выходим молча за границы матрицы.
+    setStatus({ ok: false, text: `Для ${shortName(employeeId)} в оставшейся части выбранного периода нет свободного рабочего интервала на ${taskStep} мин. Уменьшите шаг или укажите время вручную.`, manual: () => {
+      const start = startOfDay(weekStart); start.setHours(WORK_START_HOUR);
+      open({ start: start.toISOString(), end: new Date(start.getTime() + taskStep * 60_000).toISOString() });
+    } });
   };
 
   const submit = () => {
@@ -143,6 +148,11 @@ export const Planning = () => {
         }
         actions={
           <>
+            <div className="planning-task-step">
+              <span className="caps" data-tip="Длительность и шаг новых задач. Ближайшее свободное время исполнителя: Пн–Пт, 09:00–18:00. Выбор сохраняется в этом браузере.">Шаг новых задач</span>
+              <Select<PlanningStep> label="Шаг новых задач" value={taskStep} onChange={changeTaskStep}
+                options={PLANNING_STEPS.map(value => ({ value, label: value < 60 ? `${value} мин` : `${Math.floor(value / 60)} ч${value % 60 ? ` ${value % 60} мин` : ''}` }))} />
+            </div>
             {/* Выгрузка перечня мероприятий недели и документ по шаблону — по выбранным сотрудникам. */}
             <button type="button" className="btn icon-btn report-action" aria-label="Документ" data-tip="Документ" onClick={() => setDocOpen(true)}>
               <Icon.Word size={22} />
@@ -189,7 +199,7 @@ export const Planning = () => {
       </div>
 
       {status && (
-        <p className={`status ${status.ok ? 'ok' : 'err'}`} role="status" style={{ margin: '12px 0 0' }}>{status.text}</p>
+        <p className={`status ${status.ok ? 'ok' : 'err'}`} role="status" style={{ margin: '12px 0 0' }}>{status.text}{status.manual && <> <button type="button" className="text-action" onClick={status.manual}>Указать время вручную</button></>}</p>
       )}
 
       <div className="plan-wrap" ref={wrap}>
