@@ -173,7 +173,7 @@ export const useTetrisBrush = (board: RefObject<HTMLDivElement | null>, month: D
       buttons[index]?.focus();
     }}>
       <TextInput autoFocus aria-label="Поиск кисти" placeholder="Поиск вида события…" value={query} onChange={(e) => setQuery(e.target.value)} />
-      <div className="tt-brush-items">{filtered.map((c) => <button key={c.key} type="button" role="menuitemradio" aria-checked={choice?.key === c.key} style={absColor(c.type)} onClick={() => { setChoiceKey(c.key); revealType(c.type); setMenu(null); setMessage(''); board.current?.focus({ preventScroll: true }); }}><i />{c.label}</button>)}{!filtered.length && <p>Ничего не найдено</p>}</div>
+      <div className="tt-brush-items">{filtered.map((c) => <button key={c.key} type="button" role="menuitemradio" aria-checked={choice?.key === c.key} style={absColor(c, state.dictionaries)} onClick={() => { setChoiceKey(c.key); revealType(c.type); setMenu(null); setMessage(''); board.current?.focus({ preventScroll: true }); }}><i />{c.label}</button>)}{!filtered.length && <p>Ничего не найдено</p>}</div>
       <small>Руководитель рисует согласованные события, сотрудник — заявки на себя. Дополнительные сведения задаются через форму.</small>
     </div>, document.body),
     bindings: {

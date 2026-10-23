@@ -19,7 +19,8 @@ import type { WindowsCheck } from '../lib/api';
 import type { AppearanceSettings, DictionaryEntry, DictionaryKind, DirectoryUser, DocumentTemplate, ManagedUser, ScoringSettings, TemplateScope, Permission, PlanRow, Role, Unit, UnitKind } from '../lib/types';
 import { PARENT_KIND, UNIT_KINDS, unitKindLabel, unitPath, unitTree, unitWithDescendants } from '../lib/units';
 import { unitOf } from '../lib/data';
-import { dutyDictionaryInUse, eventColorKey, systemEvent } from '../lib/eventTypes';
+import { dutyDictionaryInUse, systemEvent } from '../lib/eventTypes';
+import { dictionaryColorName, hasDictionaryColor } from '../lib/eventPresentation';
 import { entitlementFor, validDayoffAccrued } from '../lib/absences';
 import { annualVacationDays, normalizeVacationSettings, validVacationDays, vacationPeriodLabel, vacationTypeCode, vacationYear } from '../lib/vacations';
 
@@ -748,13 +749,13 @@ const DictionariesTab = ({ state, dispatch }: TabProps) => {
   const [editing, setEditing] = useState<DictionaryEntry | 'new' | null>(null);
   const [deleting, setDeleting] = useState<DictionaryEntry | null>(null);
   const info = DICTIONARIES.find((item) => item.value === dictionary)!;
-  const withColor = dictionary === 'absenceType' || dictionary === 'taskCategory';
+  const withColor = hasDictionaryColor(dictionary);
   const entries = useMemo(() => state.dictionaries.filter((entry) => entry.dictionary === dictionary).sort((a, b) => a.title.localeCompare(b.title, 'ru')), [state.dictionaries, dictionary]);
   return <div className="admin-grid">
     <aside className="admin-directory" aria-label="Справочники"><p className="caps">Справочники</p><div className="admin-directory-list" role="list">{DICTIONARIES.map((item) => <button key={item.value} type="button" role="listitem" aria-pressed={item.value === dictionary} onClick={() => { setDictionary(item.value); setEditing(null); }}><span>{item.label}</span><small className="num">{state.dictionaries.filter((entry) => entry.dictionary === item.value).length}</small></button>)}</div></aside>
     <div className="admin-content">
       <div className="card-head admin-content-head">
-        <div><h2>{info.label}</h2><p className="subtitle">{info.hint}{dictionary === 'absenceType' ? ' Цвет задаёт полосы «Тетриса» и точки у фамилий.' : dictionary === 'taskCategory' ? ' Цвет задаёт карточки Календаря, точки категорий, фильтр и легенду.' : ''}</p></div>
+        <div><h2>{info.label}</h2><p className="subtitle">{info.hint}{dictionary === 'absenceType' ? ' Цвет задаёт полосы «Тетриса» и точки у фамилий.' : dictionary === 'taskCategory' ? ' Цвет задаёт карточки Календаря, точки категорий, фильтр и легенду.' : dictionary === 'dutyType' || dictionary === 'vacationType' ? ' Название и отдельный цвет отображаются на полосах «Тетриса». Без отдельного цвета используется общий цвет события.' : ''}</p></div>
         <div className="admin-users-actions"><span className="faint num">{entries.length} знач.</span><Button variant="primary" icon={<Icon.Plus size={15} />} onClick={() => setEditing('new')}>Добавить значение</Button></div>
       </div>
       <div className="table-scroll admin-table-wrap"><table className="admin-table"><caption className="sr-only">Значения справочника «{info.label}»</caption>
@@ -763,7 +764,7 @@ const DictionariesTab = ({ state, dispatch }: TabProps) => {
           {entries.map((entry) => <tr key={entry.id}>
             <td><b>{entry.title}</b></td>
             <td><span className="num muted">{entry.code}</span></td>
-            {withColor && <td>{entry.color ? <span className="num"><i className="admin-swatch" style={{ background: entry.color }} aria-hidden />{entry.color}</span> : <span className="num muted"><i className="admin-swatch" style={{ background: `var(--${dictionary === 'absenceType' ? 'abs' : 'cat'}-${dictionary === 'absenceType' ? eventColorKey(entry.code) : entry.code})` }} aria-hidden />по умолчанию</span>}</td>}
+            {withColor && <td>{entry.color ? <span className="num"><i className="admin-swatch" style={{ background: entry.color }} aria-hidden />{entry.color}</span> : <span className="num muted"><i className="admin-swatch" style={{ background: dictionary === 'vacationType' ? 'var(--abs-vacation)' : dictionary === 'dutyType' ? 'var(--abs-duty)' : `var(${dictionaryColorName(dictionary, entry.code)})` }} aria-hidden />по умолчанию</span>}</td>}
             <td className="admin-icon-actions">
               <button type="button" className="admin-icon-action" onClick={() => setEditing(entry)} aria-label={`Изменить значение ${entry.title}`} data-tip="Изменить"><Icon.Edit size={15} /></button>
               <button type="button" className="admin-icon-action danger" disabled={dutyDictionaryInUse(entry, state.dictionaries, state.absences) || entry.dictionary === 'vacationType' && (entries.length <= 1 || state.absences.some((a) => a.type === 'vacation' && vacationTypeCode(a, state.dictionaries) === entry.code))} onClick={() => setDeleting(entry)} aria-label={`Удалить значение ${entry.title}`} data-tip={entry.dictionary === 'absenceType' || entry.dictionary === 'dutyType' || entry.dictionary === 'vacationType' ? 'Системное, используемое или последнее обязательное значение удалить нельзя' : 'Удалить'}><Icon.Trash size={15} /></button>
@@ -778,14 +779,16 @@ const DictionariesTab = ({ state, dispatch }: TabProps) => {
   </div>;
 };
 
-/** Форма значения справочника: код, название и — для видов отсутствий — цвет. */
+/** Форма значения справочника: код, название и цвет события/категории. */
 const DictionaryDialog = ({ entry, kind, label, entries, onClose, onSave }: { entry?: DictionaryEntry; kind: DictionaryKind; label: string; entries: DictionaryEntry[]; onClose: () => void; onSave: (draft: { id?: string; dictionary: DictionaryKind; code: string; title: string; color?: string }) => void }) => {
+  const { state } = useStore();
   const [code, setCode] = useState(entry?.code ?? '');
   const [title, setTitle] = useState(entry?.title ?? '');
   // Без сохранённого цвета — текущий цвет вида по умолчанию, чтобы сохранение ничего не перекрасило.
-  const [color, setColor] = useState(entry?.color ?? DEFAULT_DICTIONARIES.find((d) => d.dictionary === kind && d.code === entry?.code)?.color ?? '#8C816C');
+  const parentType = kind === 'vacationType' ? 'vacation' : kind === 'dutyType' ? 'duty' : null;
+  const [color, setColor] = useState(entry?.color ?? (parentType ? state.dictionaries.find((d) => d.dictionary === 'absenceType' && d.code === parentType)?.color : undefined) ?? DEFAULT_DICTIONARIES.find((d) => d.dictionary === (parentType ? 'absenceType' : kind) && d.code === (parentType ?? entry?.code))?.color ?? '#8C816C');
   const [error, setError] = useState('');
-  const withColor = kind === 'absenceType' || kind === 'taskCategory';
+  const withColor = hasDictionaryColor(kind);
   const submit = () => {
     const c = code.trim();
     const t = title.trim();
@@ -799,7 +802,7 @@ const DictionaryDialog = ({ entry, kind, label, entries, onClose, onSave }: { en
         <label className="field"><span className="caps">Название</span><TextInput value={title} onChange={(event) => { setTitle(event.target.value); setError(''); }} placeholder="Название значения" maxLength={160} invalid={!!error} /></label>
         <div className="field"><label className="caps" htmlFor="dict-code">Код</label><TextInput id="dict-code" value={code} readOnly={kind === 'absenceType' && !!entry && systemEvent(entry.code)} onChange={(event) => { setCode(event.target.value); setError(''); }} placeholder="internal-review" maxLength={48} mono invalid={!!error} aria-describedby="dict-code-hint" /><span className="field-hint" id="dict-code-hint">{kind === 'absenceType' && !!entry && systemEvent(entry.code) ? 'Системный код: определяет правила расчёта и не меняется.' : 'Связывает значение с данными. При смене кода события обновятся автоматически.'}</span></div>
       </div>
-      {withColor && <div className="field"><span className="caps">Цвет</span><ColorPicker value={color} onChange={(value) => { setColor(value); setError(''); }} label={kind === 'absenceType' ? 'Цвет вида отсутствия' : 'Цвет категории'} /><span className="field-hint">В тёмной теме цвет автоматически высветляется.</span></div>}
+      {withColor && <div className="field"><span className="caps">Цвет</span><ColorPicker value={color} onChange={(value) => { setColor(value); setError(''); }} label={kind === 'absenceType' ? 'Цвет вида отсутствия' : kind === 'dutyType' ? 'Цвет вида дежурства' : kind === 'vacationType' ? 'Цвет типа отпуска' : 'Цвет категории'} /><span className="field-hint">В тёмной теме цвет автоматически высветляется.</span></div>}
       {error && <p className="field-error" role="alert">{error}</p>}
       <div className="form-actions"><span className="spacer" /><Button type="submit" variant="primary" icon={<Icon.Save size={15} />}>{entry ? 'Сохранить' : 'Добавить'}</Button><Button onClick={onClose}>Отмена</Button></div>
     </form>

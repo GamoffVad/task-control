@@ -18,7 +18,7 @@ export const AbsentTag = ({ absence, from, dot, focusable = true }: { absence: A
   const started = !from || absence.from <= toDateKey(from);
   const when = absence.to === null ? `с ${short(absence.from)}` : started ? `до ${short(absence.to)}` : `с ${short(absence.from)}`;
   const details = `${absence.type === 'vacation' ? vacationTypeTitle(absence, state.dictionaries) : absenceType(absence.type).full}: ${fmtSpan(absence)}${travelNote(absence) ? `. ${travelNote(absence)}` : ''}${absence.note ? `. ${absence.note}` : ''}`;
-  if (dot) return <span className="absent-dot" style={absColor(absence.type)} tabIndex={focusable ? 0 : undefined} role="img" aria-label={`${type} · ${when}. ${details}`} data-tip={`${type[0].toUpperCase()}${type.slice(1)} · ${when}
+  if (dot) return <span className="absent-dot" style={absColor(absence, state.dictionaries)} tabIndex={focusable ? 0 : undefined} role="img" aria-label={`${type} · ${when}. ${details}`} data-tip={`${type[0].toUpperCase()}${type.slice(1)} · ${when}
 ${details}`} />;
   return (
     <span className="absent-tag" data-tip={details}>

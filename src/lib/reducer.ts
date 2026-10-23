@@ -18,6 +18,7 @@ import { DEFAULT_TEMPLATES, parseTemplate, templateScope } from './templates';
 import { normalizeVacationSettings, validVacationDays, validVacationSettings, vacationTypeCode, vacationTypes, vacationYear, withVacationTypes } from './vacations';
 import type { VacationSettings } from './types';
 import { dutyDictionaryInUse, dutyTypeCode, dutyTypes, eventTypeExists, systemEvent, withDutyTypes } from './eventTypes';
+import { hasDictionaryColor } from './eventPresentation';
 
 export type DictionaryDraft = {
   id?: string;
@@ -286,7 +287,7 @@ export const reducer = (state: AppState, action: Action): AppState => {
         entry.id !== existing?.id && entry.dictionary === draft.dictionary && entry.code.toLowerCase() === code.toLowerCase(),
       );
       if (duplicate) return state;
-      const color = draft.dictionary === 'absenceType' || draft.dictionary === 'taskCategory' ? normalizeColor(draft.color) : undefined;
+      const color = hasDictionaryColor(draft.dictionary) ? normalizeColor(draft.color) : undefined;
       const entry: DictionaryEntry = { id: existing?.id ?? newId('dict'), dictionary: draft.dictionary, code, title, ...(color ? { color } : {}) };
       const dictionaries = existing
         ? state.dictionaries.map((item) => (item.id === entry.id ? entry : item))

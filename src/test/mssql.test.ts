@@ -199,6 +199,19 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
     expect(back.users.find((u) => u.employeeId === 3)).toMatchObject({ annualVacationDays: 42 });
     expect(back.absences.filter((a) => a.type === 'vacation').every((a) => a.vacationType === 'annual' && a.travelDaysBefore === 1 && a.travelDaysAfter === 1)).toBe(true);
   });
+  it('сохраняет цвета видов дежурств и отпусков после переподключения без изменения периодов', async () => {
+    const before = (await repo.read())!;
+    const again = createMssqlRepo({ server: server!, database, ...(user ? { user } : {}), ...(password ? { password } : {}), encrypt: false, trustServerCertificate: true });
+    try {
+      await repo.update((data) => ({ ...data!, dictionaries: data!.dictionaries.map((entry) => entry.dictionary === 'dutyType' ? { ...entry, color: '#174EA6' } : entry.dictionary === 'vacationType' ? { ...entry, color: '#663399' } : entry) }));
+      const after = (await again.read())!;
+      expect(after.dictionaries.filter((entry) => entry.dictionary === 'dutyType').every((entry) => entry.color === '#174EA6')).toBe(true);
+      expect(after.dictionaries.filter((entry) => entry.dictionary === 'vacationType').every((entry) => entry.color === '#663399')).toBe(true);
+      expect(after.absences).toEqual(before.absences);
+      expect(after.entitlements).toEqual(before.entitlements);
+    } finally { await again.close?.(); await repo.update(() => before); }
+  });
+
   it('хранит общие периоды и фиксирует последний день отправленного отчёта', async () => {
     const before = (await repo.read())!;
     const settings = { planning: { startDay: 1, endDay: 0 }, reporting: { startDay: 1, endDay: 5 } };

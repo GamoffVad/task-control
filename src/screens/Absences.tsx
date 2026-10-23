@@ -388,7 +388,7 @@ export const Absences = () => {
             {(manager ? requests : requests.filter((r) => r.employeeId === me)).map((r) => {
               const affected = clashes.filter((c) => c.absence.id === r.id).length;
               return (
-                <li key={r.id} style={{ ...absColor(r.type), ['--sev' as string]: 'var(--c)' }}>
+                <li key={r.id} style={{ ...absColor(r, state.dictionaries), ['--sev' as string]: 'var(--c)' }}>
                   <button type="button" className="t" onClick={() => setEditing({ absence: r })}>
                     {shortName(r.employeeId)} — {(r.type === 'vacation' ? vacationTypeTitle(r, state.dictionaries) : r.type === 'duty' ? dutyTypeTitle(r, state.dictionaries) : absenceType(r.type).full).toLowerCase()}
                   </button>

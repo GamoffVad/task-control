@@ -1,8 +1,7 @@
 import { useStore } from '../lib/store';
-import { eventColorKey } from '../lib/eventTypes';
+import { dictionaryColorName, hasDictionaryColor } from '../lib/eventPresentation';
 
-/** Справочник → CSS-переменная: виды отсутствий красят --abs-<код>, категории задач — --cat-<код>. */
-const VARS = { absenceType: 'abs', taskCategory: 'cat' } as const;
+/** Цвета видов событий, подтипов и категорий — в отдельных пространствах CSS-переменных. */
 
 /** #RRGGBB → каналы «R G B» для записи rgb(var(--…-rgb) / доля). */
 const channels = (hex: string): [number, number, number] => {
@@ -24,9 +23,9 @@ const lighten = (hex: string, share: number) => {
  */
 export const DictionaryColors = () => {
   const { state } = useStore();
-  const colored = state.dictionaries.filter((e) => (e.dictionary === 'absenceType' || e.dictionary === 'taskCategory' && /^[\w-]+$/.test(e.code)) && e.color);
+  const colored = state.dictionaries.filter((e) => hasDictionaryColor(e.dictionary) && (e.dictionary !== 'taskCategory' || /^[\w-]+$/.test(e.code)) && e.color);
   if (colored.length === 0) return null;
-  const name = (e: (typeof colored)[number]) => `--${VARS[e.dictionary as keyof typeof VARS]}-${e.dictionary === 'absenceType' ? eventColorKey(e.code) : e.code}`;
+  const name = (e: (typeof colored)[number]) => dictionaryColorName(e.dictionary, e.code)!;
   const light = colored.map((e) => `${name(e)}: ${e.color}; ${name(e)}-rgb: ${channels(e.color!).join(' ')};`).join(' ');
   const dark = colored
     .map((e) => {

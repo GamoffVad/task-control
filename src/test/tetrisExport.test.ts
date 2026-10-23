@@ -82,6 +82,23 @@ describe('выгрузка «Тетриса» в Excel', () => {
     expect(typeColor([{ ...DICTIONARY[0], color: '#123456' }], 'vacation')).toBe('#123456');
   });
 
+  it('Excel использует цвета подтипов в графике, списке событий и легенде', () => {
+    const dictionaries: DictionaryEntry[] = [...DICTIONARY,
+      { id: 'night', dictionary: 'dutyType', code: 'night', title: 'Ночное дежурство', color: '#123456' },
+      { id: 'extra', dictionary: 'vacationType', code: 'extra', title: 'Дополнительный отпуск', color: '#663399' }];
+    for (const a of [absence({ type: 'duty', dutyType: 'night' }), absence({ vacationType: 'extra' })]) {
+      const book = tetrisSheets(input({ dictionaries, absences: [a] }));
+      const color = typeColor(dictionaries, a);
+      expect(color).toBe(a.type === 'duty' ? '#123456' : '#663399');
+      const graph = book.find((sheet) => sheet.name === 'График')!;
+      const event = book.find((sheet) => sheet.name === 'События')!.rows[4].cells[1];
+      expect(event?.value).toBe(a.type === 'duty' ? 'Ночное дежурство' : 'Дополнительный отпуск');
+      expect(graph.rows[4].cells[2]?.style?.fill).toBe(event?.style?.fill);
+      const legend = graph.rows.find((row) => row.cells[0]?.value === event?.value)!;
+      expect(legend.cells[1]?.style?.fill).toBe(event?.style?.fill);
+    }
+  });
+
   it('книга разбита на листы: график, события, пересечения и остатки', () => {
     expect(sheets().map((s) => s.name)).toEqual(['График', 'События', 'Пересечения', 'Остатки']);
     // Остатки видны не всем: без них лист не создаётся.

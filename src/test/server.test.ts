@@ -114,7 +114,8 @@ describe('API', () => {
     const token = await login('user');
     const action = (body: unknown) => call('/api/action', { method: 'POST', token, body: { action: body } });
     expect((await action({ type: 'saveDictionary', draft: { dictionary: 'absenceType', code: 'медосмотр', title: 'Медосмотр', color: '#446B46' } })).status).toBe(200);
-    expect((await action({ type: 'saveDictionary', draft: { dictionary: 'dutyType', code: 'daily', title: 'Суточное дежурство' } })).status).toBe(200);
+    expect((await action({ type: 'saveDictionary', draft: { dictionary: 'dutyType', code: 'daily', title: 'Суточное дежурство', color: '#174ea6' } })).status).toBe(200);
+    expect((await repo.read())!.dictionaries.find((entry) => entry.dictionary === 'dutyType' && entry.code === 'daily')?.color).toBe('#174EA6');
     const draft = { employeeId: 3, type: 'медосмотр', from: '2027-02-01', to: '2027-02-03', note: '', status: 'approved' };
     expect((await action({ type: 'saveAbsence', draft })).status).toBe(200);
     expect((await action({ type: 'saveAbsence', draft: { ...draft, type: 'unknown', from: '2027-02-06', to: '2027-02-07' } })).status).toBe(400);
@@ -133,7 +134,8 @@ describe('API', () => {
     const action = (body: unknown) => call('/api/action', { method: 'POST', token, body: { action: body } });
     expect((await action({ type: 'saveVacationSettings', settings: { resetMonth: 4, resetDay: 15 } })).status).toBe(200);
     expect((await action({ type: 'saveManagedUser', employeeId: 3, role: 'executor', active: true, annualVacationDays: 42 })).status).toBe(200);
-    expect((await action({ type: 'saveDictionary', draft: { dictionary: 'vacationType', code: 'extra', title: 'Дополнительный отпуск' } })).status).toBe(200);
+    expect((await action({ type: 'saveDictionary', draft: { dictionary: 'vacationType', code: 'extra', title: 'Дополнительный отпуск', color: '#663399' } })).status).toBe(200);
+    expect((await repo.read())!.dictionaries.find((entry) => entry.dictionary === 'vacationType' && entry.code === 'extra')?.color).toBe('#663399');
     const saved = await action({ type: 'saveAbsence', draft: { employeeId: 3, type: 'vacation', vacationType: 'extra', travelDaysBefore: 1, travelDaysAfter: 1, from: '2027-02-01', to: '2027-02-03', note: '', status: 'approved' } });
     expect(saved.status).toBe(200);
     const data = (await repo.read())!;

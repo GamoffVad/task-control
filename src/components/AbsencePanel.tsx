@@ -120,7 +120,7 @@ export const AbsencePanel = ({ id }: { id: number }) => {
       {list.length === 0 && <p className="empty">За расчётный период событий нет.</p>}
       <ul className="list">
         {list.map((a) => (
-          <li key={a.id} style={{ ...absColor(a.type), borderLeftColor: 'var(--c)' }}>
+          <li key={a.id} style={{ ...absColor(a, state.dictionaries), borderLeftColor: 'var(--c)' }}>
             <button type="button" className="t" onClick={() => setEditing({ absence: a })}>
               {a.type === 'vacation' ? vacationTypeTitle(a, state.dictionaries) : a.type === 'duty' ? dutyTypeTitle(a, state.dictionaries) : absenceType(a.type).full}
             </button>

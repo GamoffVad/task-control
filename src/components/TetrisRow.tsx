@@ -10,6 +10,7 @@ import { useStore } from '../lib/store';
 import type { Absence, Employee, Task } from '../lib/types';
 import { vacationPeriodLabel, vacationTypeTitle, vacationYear } from '../lib/vacations';
 import { absColor } from './absColor';
+import { eventLabel } from '../lib/eventPresentation';
 import { useTaskEditor } from './taskEditor';
 
 type Props = {
@@ -45,14 +46,16 @@ export const TetrisRow = memo(({ employee: e, groupStart, days, today, balanceDa
         const from = new Date(`${stroke.from}T00:00`), to = new Date(`${stroke.to}T00:00`);
         if (to < monthStart || from > monthEnd) return null;
         const start = from < monthStart ? 1 : from.getDate(), end = to > monthEnd ? days.length : to.getDate();
-        return <div aria-hidden className={`tl-brush-preview${stroke.mode === 'erase' ? ' erasing' : ''}${invalid ? ' invalid' : ''}`} style={{ ...absColor(stroke.type), gridColumn: `${start} / span ${end - start + 1}` }} />;
+        return <div aria-hidden className={`tl-brush-preview${stroke.mode === 'erase' ? ' erasing' : ''}${invalid ? ' invalid' : ''}`} style={{ ...absColor(stroke, state.dictionaries), gridColumn: `${start} / span ${end - start + 1}` }} />;
       })()}
       {bars.map(({ a, from, span }) => {
-        const t = absenceType(a.type), hit = clashes.some((c) => c.absence.id === a.id);
+        const t = absenceType(a.type), hit = clashes.some((c) => c.absence.id === a.id), subtype = a.type === 'vacation' || a.type === 'duty';
+        const label = subtype ? eventLabel(a, state.dictionaries) : span >= 3 ? t.label : `${t.label.slice(0, 3)}.`;
         return <button key={a.id} type="button" id={`abs-${a.id}`} className={`tl-bar${a.status === 'request' ? ' request' : ''}${a.to === null ? ' open' : ''}${hit ? ' clash' : ''}${flash === a.id ? ' flash' : ''}`}
-          style={{ ...absColor(a.type), gridColumn: `${from} / span ${span}` }} onClick={() => onEdit(a)}
+          style={{ ...absColor(a, state.dictionaries), gridColumn: `${from} / span ${span}` }} onClick={() => onEdit(a)}
           data-tip={`${a.type === 'vacation' ? vacationTypeTitle(a, state.dictionaries) : a.type === 'duty' ? dutyTypeTitle(a, state.dictionaries) : t.full}${a.status === 'request' ? ' — заявка' : ''}: ${name}, ${fmtSpan(a)}${travelNote(a) ? `. ${travelNote(a)}` : ''}${a.note ? `. ${a.note}` : ''}${hit ? '. Есть задачи со сроком в этот период' : ''}`}>
-          {span >= 3 ? <>{t.label}{a.status === 'request' && ' · заявка'}<small>{fmtSpan(a)} · {absenceDays(a)} дн.</small></> : <>{t.label.slice(0, 3)}.<small>{absenceDays(a)} дн.</small></>}
+          <span className="tl-bar-title">{label}{span >= 3 && a.status === 'request' && ' · заявка'}</span>
+          <small>{span >= 3 ? `${fmtSpan(a)} · ` : ''}{absenceDays(a)} дн.</small>
         </button>;
       })}
       {tasks.map((t) => {

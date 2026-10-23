@@ -9,6 +9,7 @@ import { buildXlsx, columnName, type Cell, type Sheet } from './xlsx';
 import type { Absence, AbsenceType, DictionaryEntry, Employee, Task } from './types';
 import { vacationTypeTitle } from './vacations';
 import { dutyTypeTitle } from './eventTypes';
+import { eventSubtype, type EventAppearance } from './eventPresentation';
 
 /** Цвета видов по умолчанию — те же, что в стилях приложения (светлая тема). */
 const DEFAULT_COLORS: Record<string, string> = {
@@ -51,8 +52,11 @@ const INK = '#1F2B3A';
 const DANGER = '#A32D22';
 const MUTED = '#5D6575';
 
-export const typeColor = (dictionaries: DictionaryEntry[], type: string) =>
-  dictionaries.find((d) => d.dictionary === 'absenceType' && d.code === type)?.color ?? DEFAULT_COLORS[type] ?? '#8C816C';
+export const typeColor = (dictionaries: DictionaryEntry[], event: string | EventAppearance): string => {
+  const type = typeof event === 'string' ? event : event.type;
+  const subtype = typeof event === 'string' ? undefined : eventSubtype(event, dictionaries);
+  return subtype?.color ?? dictionaries.find((d) => d.dictionary === 'absenceType' && d.code === type)?.color ?? DEFAULT_COLORS[type] ?? '#8C816C';
+};
 
 const SEVERITY: Record<Clash['severity'], string> = { overdue: 'Просрочено', risk: 'Под угрозой', request: 'По заявке' };
 
@@ -104,7 +108,7 @@ const chartSheet = (input: TetrisExportInput): Sheet => {
       const done = marks.length > 0 && marks.every((t) => t.done);
       const clash = marks.some((t) => clashTaskIds.has(t.id));
       const text = marks.length === 0 ? '' : clash ? '!' : done ? '✓' : '•';
-      const color = absence ? typeColor(dictionaries, absence.type) : null;
+      const color = absence ? typeColor(dictionaries, absence) : null;
       cells.push({
         value: text,
         style: {
@@ -136,8 +140,10 @@ const chartSheet = (input: TetrisExportInput): Sheet => {
   // Легенда под графиком — там же, где она на экране.
   rows.push({ cells: [] });
   rows.push({ cells: [{ value: 'Виды событий', style: { bold: true } }] });
-  for (const type of types) {
-    const color = typeColor(dictionaries, type.key);
+  const legend = [...types.map((type) => ({ full: type.full, color: typeColor(dictionaries, type.key) })),
+    ...dictionaries.filter((entry) => entry.dictionary === 'dutyType' || entry.dictionary === 'vacationType').map((entry) => ({ full: entry.title, color: entry.color ?? typeColor(dictionaries, entry.dictionary === 'dutyType' ? 'duty' : 'vacation') }))];
+  for (const type of legend) {
+    const color = type.color;
     rows.push({
       cells: [
         { value: type.full, style: {} },
@@ -168,7 +174,7 @@ const eventsSheet = (input: TetrisExportInput): Sheet => {
     rows.push({
       cells: [
         { value: shortName(a.employeeId), style: { border: true } },
-        { value: a.type === 'vacation' ? vacationTypeTitle(a, dictionaries) : a.type === 'duty' ? dutyTypeTitle(a, dictionaries) : type?.full ?? a.type, style: { border: true, fill: lighten(typeColor(dictionaries, a.type), approved(a) ? 0.55 : 0.25) } },
+        { value: a.type === 'vacation' ? vacationTypeTitle(a, dictionaries) : a.type === 'duty' ? dutyTypeTitle(a, dictionaries) : type?.full ?? a.type, style: { border: true, fill: lighten(typeColor(dictionaries, a), approved(a) ? 0.55 : 0.25) } },
         { value: fmtSpan(a), style: { border: true } },
         { value: absenceDays(a), style: { border: true, center: true } },
         { value: approved(a) ? 'согласовано' : 'заявка', style: { border: true } },
@@ -202,7 +208,7 @@ const clashesSheet = (input: TetrisExportInput): Sheet => {
         { value: clash.task.title, style: { border: true, wrap: true } },
         { value: shortName(clash.employeeId), style: { border: true } },
         { value: fmtDate(new Date(clash.task.end)), style: { border: true, center: true, color: overdue ? DANGER : INK } },
-        { value: clash.absence.type === 'vacation' ? vacationTypeTitle(clash.absence, dictionaries) : type?.full ?? clash.absence.type, style: { border: true, fill: lighten(typeColor(dictionaries, clash.absence.type), approved(clash.absence) ? 0.55 : 0.25) } },
+        { value: clash.absence.type === 'vacation' ? vacationTypeTitle(clash.absence, dictionaries) : type?.full ?? clash.absence.type, style: { border: true, fill: lighten(typeColor(dictionaries, clash.absence), approved(clash.absence) ? 0.55 : 0.25) } },
         { value: fmtSpan(clash.absence), style: { border: true } },
         { value: SEVERITY[clash.severity], style: { border: true, bold: overdue, color: overdue ? DANGER : INK } },
       ],

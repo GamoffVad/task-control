@@ -164,7 +164,7 @@ export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
             <div className="field">
               <span className="caps">Вид</span>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <i aria-hidden style={{ ...absColor(draft.type), width: 10, height: 10, flex: 'none', background: 'var(--c)' }} />
+                <i aria-hidden style={{ ...absColor(draft, state.dictionaries), width: 10, height: 10, flex: 'none', background: 'var(--c)' }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <Select<AbsenceType>
                     variant="light"
