@@ -37,9 +37,9 @@ const eventTask = (): Task => ({
 const eventButton = () => document.querySelector<HTMLButtonElement>('[data-calendar-task="drag-task"]')!;
 const savedTask = () => loadState().tasks.find((task) => task.id === 'drag-task')!;
 
-const setup = (view: CalendarView = 'week', executor = false, task = eventTask()) => {
+const setup = (view: CalendarView = 'week', executor = false, task: Task | Task[] = eventTask()) => {
   storeCalendarView(view, executor ? 3 : 1);
-  render(<StoreProvider initial={{ ...createSeed(), tasks: [task], user: { email: 'test@example.com', employeeId: executor ? 3 : 1, role: executor ? 'executor' : 'administrator' } }}>
+  render(<StoreProvider initial={{ ...createSeed(), tasks: Array.isArray(task) ? task : [task], user: { email: 'test@example.com', employeeId: executor ? 3 : 1, role: executor ? 'executor' : 'administrator' } }}>
     <MemoryRouter initialEntries={['/calendar']}><AppRoutes /></MemoryRouter>
   </StoreProvider>);
   const zones = [...document.querySelectorAll<HTMLElement>('[data-calendar-day]')];
@@ -51,6 +51,126 @@ const setup = (view: CalendarView = 'week', executor = false, task = eventTask()
   return zones;
 };
 const pointer = (x: number, y: number, pointerType = 'mouse') => ({ button: 0, buttons: 1, isPrimary: true, pointerId: 1, pointerType, clientX: x, clientY: y });
+
+describe('статус и изменение периода в календаре', () => {
+  it.each(['day', 'week', 'month'] as const)('фильтрует исполненные и рабочие задачи вместе с поиском в виде %s', view => {
+    setup(view, false, [eventTask(), { ...eventTask(), id: 'completed-task', title: 'Исполненная задача', done: true, doneAt: new Date().toISOString() }]);
+    const visible = () => [...document.querySelectorAll<HTMLElement>('[data-calendar-task]')].map(el => el.dataset.calendarTask);
+    const choose = (name: string) => {
+      fireEvent.click(screen.getByRole('button', { name: /^Статус задач:/ }));
+      fireEvent.click(screen.getByRole('option', { name }));
+    };
+    expect(visible()).toEqual(expect.arrayContaining(['drag-task', 'completed-task']));
+    choose('Исполнено');
+    expect(visible()).toEqual(['completed-task']);
+    fireEvent.change(screen.getByLabelText('Поиск мероприятий по содержанию'), { target: { value: 'Переносимая' } });
+    expect(visible()).toEqual([]);
+    expect(screen.getByRole('region', { name: 'Результаты поиска' })).toHaveTextContent('Ничего не найдено');
+    choose('В работе');
+    expect(visible()).toEqual(['drag-task']);
+    fireEvent.change(screen.getByLabelText('Поиск мероприятий по содержанию'), { target: { value: '' } });
+    choose('Все задачи');
+    expect(visible()).toHaveLength(2);
+    expect(loadState().tasks).toHaveLength(2);
+  });
+
+  it.each(['day', 'week'] as const)('растягивает нижний край в %s и сохраняет только при отпускании, включая окончательную позицию до кадра', view => {
+    setup(view);
+    const source = eventButton(), before = savedTask(), x = view === 'day' ? 50 : 350;
+    fireEvent.pointerDown(source.querySelector('[data-calendar-resize="end"]')!, pointer(x, 240));
+    fireEvent.pointerMove(source, pointer(x, 360));
+    flushFrame();
+    expect(document.querySelector('.calendar-drag-ghost')).toBeNull();
+    expect(document.querySelector('.cal-drop-preview')).toHaveTextContent('09:00–13:00');
+    expect(savedTask()).toEqual(before);
+    fireEvent.pointerUp(source, pointer(x, 390));
+    expect(savedTask()).toEqual({ ...before, end: new Date(2026, 8, 17, 13, 30).toISOString() });
+    fireEvent.click(source);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent('Период изменён');
+  });
+
+  it('растягивает верхний край и не меняет окончание, исполнителей и документы', () => {
+    setup();
+    const source = eventButton(), before = savedTask();
+    fireEvent.pointerDown(source.querySelector('[data-calendar-resize="start"]')!, pointer(350, 120));
+    fireEvent.pointerMove(source, pointer(350, 60));
+    fireEvent.pointerUp(source, pointer(350, 60));
+    expect(savedTask()).toEqual({ ...before, start: new Date(2026, 8, 17, 8).toISOString() });
+  });
+
+  it.each(['start', 'end'] as const)('не позволяет краю %s пересечь противоположный: минимум 30 минут', edge => {
+    setup();
+    const source = eventButton();
+    fireEvent.pointerDown(source.querySelector(`[data-calendar-resize="${edge}"]`)!, pointer(350, edge === 'start' ? 120 : 240));
+    const y = edge === 'start' ? 400 : 40;
+    fireEvent.pointerMove(source, pointer(350, y));
+    fireEvent.pointerUp(source, pointer(350, y));
+    expect(new Date(savedTask().end).getTime() - new Date(savedTask().start).getTime()).toBe(30 * 60_000);
+    expect(savedTask()[edge === 'start' ? 'end' : 'start']).toBe(eventTask()[edge === 'start' ? 'end' : 'start']);
+  });
+
+  it.each(['escape', 'cancel', 'outside', 'capture'] as const)('отменяет растягивание при %s', reason => {
+    setup();
+    const source = eventButton(), root = document.querySelector('.calendar-layout')!;
+    fireEvent.pointerDown(source.querySelector('[data-calendar-resize="end"]')!, pointer(350, 240));
+    fireEvent.pointerMove(source, pointer(350, 360));
+    flushFrame();
+    if (reason === 'escape') fireEvent.keyDown(root, { key: 'Escape' });
+    else if (reason === 'cancel') fireEvent.pointerCancel(root, pointer(350, 360));
+    else if (reason === 'capture') fireEvent.lostPointerCapture(root, pointer(350, 360));
+    else fireEvent.pointerUp(root, pointer(-100, -100));
+    fireEvent.pointerUp(root, pointer(350, 360));
+    expect(savedTask()).toEqual(eventTask());
+    expect(document.querySelector('.cal-drop-preview')).toBeNull();
+    expect(root).not.toHaveClass('calendar-resizing');
+  });
+
+  it('показывает новый интервал на всех затронутых днях, не перенося начало', () => {
+    setup();
+    const source = eventButton();
+    fireEvent.pointerDown(source.querySelector('[data-calendar-resize="end"]')!, pointer(350, 240));
+    fireEvent.pointerMove(source, pointer(450, 180));
+    flushFrame();
+    expect(document.querySelectorAll('.cal-drop-preview')).toHaveLength(2);
+    fireEvent.pointerUp(source, pointer(450, 180));
+    expect(savedTask().start).toBe(eventTask().start);
+    expect(savedTask().end).toBe(new Date(2026, 8, 18, 10).toISOString());
+  });
+
+  it.each(['start', 'end'] as const)('в месяце край %s меняет дату, сохраняя время и противоположный край', edge => {
+    const zones = setup('month'), source = eventButton();
+    const from = zones.findIndex(zone => new Date(zone.dataset.calendarDay!).getDate() === 17);
+    const to = from + (edge === 'start' ? -2 : 2);
+    fireEvent.pointerDown(source.querySelector(`[data-calendar-resize="${edge}"]`)!, pointer(from * 100 + 50, 20));
+    fireEvent.pointerMove(source, pointer(to * 100 + 50, 20));
+    flushFrame();
+    expect(document.querySelectorAll('.calendar-drop-day')).toHaveLength(3);
+    fireEvent.pointerUp(source, pointer(to * 100 + 50, 20));
+    expect(savedTask()[edge]).toBe(new Date(2026, 8, edge === 'start' ? 15 : 19, edge === 'start' ? 9 : 11).toISOString());
+    expect(savedTask()[edge === 'start' ? 'end' : 'start']).toBe(eventTask()[edge === 'start' ? 'end' : 'start']);
+  });
+
+  it('продолжает растягивание после переключения месяца у края', () => {
+    setup('month');
+    const { root, rectFor } = navigationGeometry(), source = eventButton();
+    fireEvent.pointerDown(source.querySelector('[data-calendar-resize="end"]')!, pointer(350, 135));
+    fireEvent.pointerMove(source, pointer(695, 135));
+    act(() => vi.advanceTimersByTime(700));
+    expect(source.isConnected).toBe(false);
+    const zone = [...document.querySelectorAll<HTMLElement>('[data-calendar-day]')].find(el => el.dataset.calendarDay === new Date(2026, 9, 3).toISOString())!;
+    const rect = rectFor(zone), x = rect.left + 50, y = rect.top + 70;
+    fireEvent.pointerMove(root, pointer(x, y));
+    fireEvent.pointerUp(root, pointer(x, y));
+    expect(savedTask().start).toBe(eventTask().start);
+    expect(savedTask().end).toBe(new Date(2026, 9, 3, 11).toISOString());
+  });
+
+  it('не предлагает растягивание исполнителю без права планирования', () => {
+    setup('day', true);
+    expect(document.querySelector('[data-calendar-resize]')).toBeNull();
+  });
+});
 
 /** Геометрия обновляется вместе с DOM при смене периода, как в настоящем календаре. */
 const navigationGeometry = () => {

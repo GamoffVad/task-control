@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode, type PointerEvent } from 'react';
 import { useTaskEditor } from '../components/taskEditor';
 import { EmployeeFilter } from '../components/ui';
-import { FilterCard, MultiSelect, PageHeader, SearchField, Segmented, Stepper } from '../kit';
+import { FilterCard, MultiSelect, PageHeader, SearchField, Segmented, Select, Stepper } from '../kit';
 import { Icon } from '../components/Icons';
 import { CATEGORIES, categoryLabel, shortName } from '../lib/data';
 import { catColor, useCategoryOptions, type CatKey } from '../lib/categories';
@@ -76,6 +76,7 @@ export const Calendar = () => {
   // Исполнитель по умолчанию видит свои задачи, но может посмотреть и весь отдел.
   const [employee, setEmployee] = useState<number | null>(manager ? null : (state.user?.employeeId ?? null));
   const [query, setQuery] = useState('');
+  const [status, setStatus] = useState<'all' | 'active' | 'done'>('all');
   const { keys: allCats, options: catOptions } = useCategoryOptions();
   // Снятые категории хранятся отдельно: добавленная в словаре категория сразу показывается.
   const [hiddenCats, setHiddenCats] = useState<Set<CatKey>>(() => new Set());
@@ -89,14 +90,20 @@ export const Calendar = () => {
     dispatch({ type: 'saveTask', draft: { ...task, ...movedTaskDates(task, start) } });
     setMoveMessage(`Перенесено: ${task.title} — ${fmtDateTime(start)}`);
   };
+  const resizeTask = (task: Task, start: Date, end: Date) => {
+    if (!canMove(task) || end.getTime() - start.getTime() < 30 * 60_000 || (start.toISOString() === task.start && end.toISOString() === task.end)) return;
+    dispatch({ type: 'saveTask', draft: { ...task, start: start.toISOString(), end: end.toISOString() } });
+    setMoveMessage(`Период изменён: ${task.title} — ${fmtDateTime(start)} – ${fmtDateTime(end)}`);
+  };
   const step = (dir: 1 | -1) => {
     if (view === 'day') setCursor((c) => addDays(c, dir));
     else if (view === 'month') setCursor((c) => addMonths(c, dir));
     else setCursor((c) => addDays(c, 7 * dir));
   };
-  const { root, draggingId, drop, edgeDirection, onStart, ...dragEvents } = useCalendarDrag(state.tasks, canMove, moveTask, {
+  const { root, draggingId, resizing, drop, edgeDirection, onStart, ...dragEvents } = useCalendarDrag(state.tasks, canMove, moveTask, {
     onNavigate: step,
     periodKey: `${view}:${cursor.toISOString()}`,
+    onResize: resizeTask,
   });
   const drag = { draggingId, drop, onStart, canMove };
 
@@ -107,10 +114,10 @@ export const Calendar = () => {
 
   const tasks = useMemo(() => {
     const byFilters = state.tasks.filter(
-      (t) => (employee === null || t.assigneeIds.includes(employee)) && cats.has(t.category ?? 'none'),
+      (t) => (employee === null || t.assigneeIds.includes(employee)) && cats.has(t.category ?? 'none') && (status === 'all' || t.done === (status === 'done')),
     );
     return searchTasks(byFilters, query, state.planRows);
-  }, [state.tasks, state.planRows, employee, cats, query]);
+  }, [state.tasks, state.planRows, employee, cats, query, status]);
 
   const found = useMemo(() => (query.trim() ? [...tasks].sort((a, b) => a.start.localeCompare(b.start)) : []), [tasks, query]);
 
@@ -141,9 +148,12 @@ export const Calendar = () => {
     setCursor(startOfDay(new Date(t.start)));
     openTask({ task: t });
   };
+  const interactionNote = resizing && drop
+    ? `Новый период: ${fmtDateTime(drop.start)} – ${fmtDateTime(drop.end)}`
+    : moveMessage || 'Переносите задачу за середину, меняйте период за края. У края календаря — смена дня/недели/месяца. Escape — отмена.';
 
   return (
-    <div className={`calendar-layout${draggingId ? ' calendar-dragging' : ''}`} ref={root} tabIndex={-1} {...dragEvents}>
+    <div className={`calendar-layout${draggingId ? ' calendar-dragging' : ''}${resizing ? ' calendar-resizing' : ''}`} ref={root} tabIndex={-1} {...dragEvents}>
       {/* Заголовок и фильтры закреплены под шапкой приложения: при прокрутке они остаются на месте. */}
       <div className="sticky-head">
       <PageHeader
@@ -181,12 +191,19 @@ export const Calendar = () => {
             onChange={(shown) => setHiddenCats(new Set(allCats.filter((k) => !shown.includes(k))))}
           />
         </FilterCard>
+        <FilterCard label="Статус">
+          <Select label="Статус задач" value={status} options={[
+            { value: 'all', label: 'Все задачи' },
+            { value: 'active', label: 'В работе' },
+            { value: 'done', label: 'Исполнено' },
+          ]} onChange={setStatus} />
+        </FilterCard>
         <FilterCard label="Поиск">
           <SearchField value={query} onChange={setQuery} placeholder="Название, результат, документ…" label="Поиск мероприятий по содержанию" />
         </FilterCard>
       </div>
       </div>
-      {manager && <p className="calendar-move-note" role="status">{moveMessage || 'Перетащите задачу в другой день или интервал. Удерживайте у края календаря для смены дня, недели или месяца. Alt+←/→ — день, Alt+↑/↓ — 30 минут. Escape — отмена переноса.'}</p>}
+      {manager && <p className="calendar-move-note" role="status" data-tip={interactionNote}>{interactionNote}</p>}
       {edgeDirection && <div className={`calendar-edge-hint calendar-edge-hint--${edgeDirection < 0 ? 'left' : 'right'}`} role="status">
         {edgeDirection < 0 ? '← ' : ''}{view === 'day' ? (edgeDirection < 0 ? 'Предыдущий день' : 'Следующий день') : view === 'month' ? (edgeDirection < 0 ? 'Предыдущий месяц' : 'Следующий месяц') : (edgeDirection < 0 ? 'Предыдущая неделя' : 'Следующая неделя')}{edgeDirection > 0 ? ' →' : ''}
       </div>}
@@ -194,7 +211,7 @@ export const Calendar = () => {
       {query.trim() && (
         <section className="search-results" aria-label="Результаты поиска">
           <p className="caps" style={{ margin: '4px 0 6px' }} role="status">
-            {found.length ? `Найдено: ${found.length}. Нажмите, чтобы перейти к дню и открыть задачу` : 'Ничего не найдено. Измените запрос или включите все категории.'}
+            {found.length ? `Найдено: ${found.length}. Нажмите, чтобы перейти к дню и открыть задачу` : 'Ничего не найдено. Измените запрос или проверьте фильтры категорий, исполнителя и статуса.'}
           </p>
           {found.length > 0 && (
             <ul>
@@ -280,8 +297,8 @@ const DayColumn = ({ day, tasks, now, clashes, drag, onCreate, onOpen }: {
   const placed = useMemo(() => layoutDay(tasks, day), [tasks, day]);
   const today = isSameDay(day, now);
   const nowOffset = now.getHours() + now.getMinutes() / 60 - FIRST_HOUR;
-  const previewTask = drag.drop?.day === day.toISOString() ? tasks.find((task) => task.id === drag.drop?.taskId) : null;
-  const preview = previewTask && drag.drop ? layoutDay([{ ...previewTask, ...movedTaskDates(previewTask, drag.drop.start) }], day)[0] : null;
+  const previewTask = drag.drop && (drag.drop.mode !== 'move' || drag.drop.day === day.toISOString()) ? tasks.find((task) => task.id === drag.drop?.taskId) : null;
+  const preview = previewTask && drag.drop ? layoutDay([{ ...previewTask, start: drag.drop.start.toISOString(), end: drag.drop.end.toISOString() }], day)[0] : null;
   return (
     <div className={`cal-day${today ? ' today' : ''}`} data-calendar-day={day.toISOString()} data-calendar-mode="time">
       {HOURS.flatMap((h) =>
@@ -318,6 +335,10 @@ const DayColumn = ({ day, tasks, now, clashes, drag, onCreate, onOpen }: {
           onClick={() => onOpen(task)}
           data-tip={`${fmtTime(new Date(task.start))}–${fmtTime(new Date(task.end))} ${task.title}${task.category ? ` — ${categoryLabel(task.category)}` : ''} · ${whoOf(task)}${task.done ? '. Исполнено' : isOverdue(task, now) ? '. Просрочено' : ''}${clashes.some((c) => c.task.id === task.id) ? '. Исполнитель отсутствует в день срока' : ''}`}
         >
+          {drag.canMove(task) && <>
+            {isSameDay(new Date(task.start), day) && new Date(task.start).getHours() >= FIRST_HOUR && <span className="calendar-resize-handle calendar-resize-handle--start" data-calendar-resize="start" aria-hidden="true" data-tip="Изменить начало задачи" />}
+            {isSameDay(new Date(task.end), day) && new Date(task.end).getHours() <= LAST_HOUR && <span className="calendar-resize-handle calendar-resize-handle--end" data-calendar-resize="end" aria-hidden="true" data-tip="Изменить окончание задачи" />}
+          </>}
           {/* В коротком событии время стоит в строке с названием, чтобы название поместилось. */}
           <span className="ti">
             {height < 1.25 ? (
@@ -375,10 +396,11 @@ const MonthView = ({ cursor, tasks, now, clashes, drag, onCreate, onOpen }: {
         {cells.map((d) => {
           const list = byDay.get(d.toDateString()) ?? [];
           const other = d.getMonth() !== cursor.getMonth();
+          const resizeRange = drag.drop && drag.drop.mode !== 'move' && d < drag.drop.end && addDays(d, 1) > drag.drop.start;
           return (
             <div
               key={d.toISOString()}
-              className={`month-cell${other ? ' other' : ''}${isSameDay(d, now) ? ' today' : ''}${drag.drop?.day === d.toISOString() ? ' calendar-drop-day' : ''}`}
+              className={`month-cell${other ? ' other' : ''}${isSameDay(d, now) ? ' today' : ''}${(drag.drop?.mode === 'move' && drag.drop.day === d.toISOString()) || resizeRange ? ' calendar-drop-day' : ''}`}
               data-calendar-day={d.toISOString()}
               data-calendar-mode="month"
               onClick={() => onCreate(d)}
@@ -407,11 +429,15 @@ const MonthView = ({ cursor, tasks, now, clashes, drag, onCreate, onOpen }: {
                       e.stopPropagation();
                       onOpen(t);
                     }}
-                    data-tip={`${t.title}${t.category ? ` — ${categoryLabel(t.category)}` : ''} · ${whoOf(t)}${t.done ? '. Исполнено' : isOverdue(t, now) ? '. Просрочено' : ''}${clashes.some((c) => c.task.id === t.id) ? '. Исполнитель отсутствует в день срока' : ''}`}
+                    data-tip={`${fmtDateTime(new Date(t.start))} – ${fmtDateTime(new Date(t.end))} · ${t.title}${t.category ? ` — ${categoryLabel(t.category)}` : ''} · ${whoOf(t)}${t.done ? '. Исполнено' : isOverdue(t, now) ? '. Просрочено' : ''}${clashes.some((c) => c.task.id === t.id) ? '. Исполнитель отсутствует в день срока' : ''}`}
                   >
                     <span className="num" style={{ fontSize: 10.5, color: 'var(--ink-3)', marginRight: 4 }}>{fmtTime(new Date(t.start))}</span>
                     <StateMark task={t} now={now} />
                     {t.title}
+                    {drag.canMove(t) && <>
+                      <span className="calendar-resize-handle calendar-resize-handle--start" data-calendar-resize="start" aria-hidden="true" data-tip="Изменить дату начала задачи" />
+                      <span className="calendar-resize-handle calendar-resize-handle--end" data-calendar-resize="end" aria-hidden="true" data-tip="Изменить дату окончания задачи" />
+                    </>}
                   </button>
                 ))}
               </div>
