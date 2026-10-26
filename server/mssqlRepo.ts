@@ -174,6 +174,7 @@ export const TABLES: SchemaTable[] = [
       { name: 'parent_id', type: 'nvarchar(64)', nullable: true },
       { name: 'kind', type: 'nvarchar(32)', default: "'section'" },
       { name: 'name', type: 'nvarchar(256)', default: "''" },
+      { name: 'manages_parent', type: 'bit', nullable: true },
     ],
   },
   {
@@ -449,8 +450,8 @@ const readAll = async (q: Q): Promise<Data | null> => {
       : DEFAULT_TEMPLATES.map((t) => ({ ...t })),
     units: unitsReady
       ? units.map((x) => {
-          const u = x as unknown as { id: string; parent_id: string | null; kind: Unit['kind']; name: string };
-          return { id: u.id, parentId: u.parent_id, kind: u.kind, name: u.name } as Unit;
+          const u = x as unknown as { id: string; parent_id: string | null; kind: Unit['kind']; name: string; manages_parent: boolean | null };
+          return { id: u.id, parentId: u.parent_id, kind: u.kind, name: u.name, ...(u.manages_parent != null ? { managesParent: !!u.manages_parent } : {}) } as Unit;
         })
       : INITIAL_UNITS.map((u) => ({ ...u })),
     roles: migratedRoles,
@@ -594,7 +595,7 @@ const USERS: Table<ManagedUser> = {
 const UNITS: Table<Unit> = {
   key: (unit) => unit.id,
   upsert: (q, unit) =>
-    upsert(q, 'tc_units', '[id] = @v1', '[parent_id]=@v2, [kind]=@v3, [name]=@v4', '[id],[parent_id],[kind],[name]', '@v1,@v2,@v3,@v4', [S(unit.id, 64), S(unit.parentId, 64), S(unit.kind, 32), S(unit.name, 256)]),
+    upsert(q, 'tc_units', '[id] = @v1', '[parent_id]=@v2, [kind]=@v3, [name]=@v4, [manages_parent]=@v5', '[id],[parent_id],[kind],[name],[manages_parent]', '@v1,@v2,@v3,@v4,@v5', [S(unit.id, 64), S(unit.parentId, 64), S(unit.kind, 32), S(unit.name, 256), BIT(unit.managesParent)]),
   remove: (q, unit) => run(q, 'delete from dbo.tc_units where [id] = @v1', [S(unit.id, 64)]),
 };
 

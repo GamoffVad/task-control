@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode, type PointerEvent } from 'react';
 import { useTaskEditor } from '../components/taskEditor';
-import { EmployeeFilter } from '../components/ui';
+import { EmployeeFilter, GroupFilter } from '../components/ui';
 import { FilterCard, MultiSelect, PageHeader, SearchField, Segmented, Select, Stepper } from '../kit';
 import { Icon } from '../components/Icons';
-import { CATEGORIES, categoryLabel, shortName } from '../lib/data';
+import { CATEGORIES, categoryLabel, groupMembers, shortName, unitOf } from '../lib/data';
 import { catColor, useCategoryOptions, type CatKey } from '../lib/categories';
 import {
   addDays,
@@ -25,6 +25,11 @@ import { isManager, taskAccess } from '../lib/permissions';
 import { useCalendarDrag, type CalendarDrop } from '../lib/useCalendarDrag';
 import { loadCalendarView, storeCalendarView } from '../lib/calendarView';
 import { loadCalendarStatus, storeCalendarStatus, type CalendarTaskStatus } from '../lib/calendarStatus';
+import { calendarOffset } from '../lib/calendarScale';
+import { useCalendarScale } from '../lib/useCalendarScale';
+import { useScope } from '../lib/useScope';
+import { inScope } from '../lib/visibility';
+import { unitWithDescendants } from '../lib/units';
 import { useStore } from '../lib/store';
 import { useClashes } from '../lib/useClashes';
 import type { Clash } from '../lib/absences';
@@ -74,8 +79,22 @@ export const Calendar = () => {
     storeCalendarView(next, employeeId);
   };
   const [cursor, setCursor] = useState(() => startOfDay(new Date()));
-  // Исполнитель по умолчанию видит свои задачи, но может посмотреть и весь отдел.
+  // Исполнитель видит свои задачи; руководитель может сузить доступную ему область фильтрами.
   const [employee, setEmployee] = useState<number | null>(manager ? null : (state.user?.employeeId ?? null));
+  const [group, setGroup] = useState('all');
+  const scope = useScope();
+  const groupIds = useMemo(() => {
+    const inside = unitWithDescendants(state.units, group);
+    return new Set(state.users.filter((account) => inScope(scope, account.employeeId) &&
+      (group === 'all' || (group === 'unit-none'
+        ? groupMembers(group).some((person) => person.id === account.employeeId)
+        : inside.has(unitOf(account) ?? '')))).map((account) => account.employeeId));
+  }, [group, state.users, state.units, scope]);
+  const people = groupMembers('all').filter((person) => groupIds.has(person.id));
+  const changeGroup = (next: string) => {
+    setGroup(next);
+    if (employee !== null && !groupMembers(next).some((person) => person.id === employee)) setEmployee(null);
+  };
   const [query, setQuery] = useState('');
   const [status, setStatusState] = useState<CalendarTaskStatus>(() => loadCalendarStatus(employeeId));
   const setStatus = (next: CalendarTaskStatus) => {
@@ -119,10 +138,10 @@ export const Calendar = () => {
 
   const tasks = useMemo(() => {
     const byFilters = state.tasks.filter(
-      (t) => (employee === null || t.assigneeIds.includes(employee)) && cats.has(t.category ?? 'none') && (status === 'all' || t.done === (status === 'done')),
+      (t) => (group === 'all' || t.assigneeIds.some((id) => groupIds.has(id))) && (employee === null || t.assigneeIds.includes(employee)) && cats.has(t.category ?? 'none') && (status === 'all' || t.done === (status === 'done')),
     );
     return searchTasks(byFilters, query, state.planRows);
-  }, [state.tasks, state.planRows, employee, cats, query, status]);
+  }, [state.tasks, state.planRows, group, groupIds, employee, cats, query, status]);
 
   const found = useMemo(() => (query.trim() ? [...tasks].sort((a, b) => a.start.localeCompare(b.start)) : []), [tasks, query]);
 
@@ -131,6 +150,7 @@ export const Calendar = () => {
     const monday = startOfWeek(cursor);
     return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   }, [view, cursor]);
+  const { grid, heights } = useCalendarScale(tasks, days, view);
 
   const title =
     view === 'day'
@@ -183,9 +203,12 @@ export const Calendar = () => {
           </>
         }
       />
-      <div className="filters">
+      <div className="filters calendar-filters">
+        <FilterCard label="Подразделение">
+          <GroupFilter value={group} onChange={changeGroup} />
+        </FilterCard>
         <FilterCard label="Исполнитель">
-          <EmployeeFilter value={employee} onChange={setEmployee} />
+          <EmployeeFilter value={employee} onChange={setEmployee} people={people} />
         </FilterCard>
         <FilterCard label="Категории">
           <MultiSelect<CatKey>
@@ -244,7 +267,7 @@ export const Calendar = () => {
       ) : (
         <div className="cal">
           <div className="cal-scroll" data-calendar-surface>
-            <div className="cal-grid" style={{ gridTemplateColumns: `56px repeat(${days.length}, minmax(${view === 'day' ? 240 : 110}px, 1fr))` }}>
+            <div ref={grid} className="cal-grid cal-grid--adaptive" style={{ gridTemplateColumns: `56px repeat(${days.length}, minmax(${view === 'day' ? 240 : 110}px, 1fr))` }}>
               <div className="cal-corner" />
               {days.map((d) => (
                 <div key={d.toISOString()} className={`cal-head${isSameDay(d, now) ? ' today' : ''}`}>
@@ -252,13 +275,13 @@ export const Calendar = () => {
                   <span className="d">{d.getDate()}</span>
                 </div>
               ))}
-              <div className="cal-hours" aria-hidden>
+              <div className="cal-hours" aria-hidden style={{ height: calendarOffset(heights, LAST_HOUR - FIRST_HOUR) }}>
                 {HOURS.map((h) => (
-                  <div key={h} className="cal-hour">{h > FIRST_HOUR ? `${String(h).padStart(2, '0')}:00` : ''}</div>
+                  <div key={h} className="cal-hour" style={{ position: 'absolute', top: calendarOffset(heights, h - FIRST_HOUR), width: '100%' }}>{h > FIRST_HOUR ? `${String(h).padStart(2, '0')}:00` : ''}</div>
                 ))}
               </div>
               {days.map((d) => (
-                <DayColumn key={d.toISOString()} day={d} tasks={tasks} now={now} clashes={clashes} drag={drag} onCreate={create} onOpen={(t) => openTask({ task: t })} />
+                <DayColumn key={d.toISOString()} day={d} tasks={tasks} now={now} clashes={clashes} drag={drag} heights={heights} onCreate={create} onOpen={(t) => openTask({ task: t })} />
               ))}
             </div>
           </div>
@@ -290,12 +313,13 @@ type CalendarDrag = {
   canMove: (task: Task) => boolean;
 };
 
-const DayColumn = ({ day, tasks, now, clashes, drag, onCreate, onOpen }: {
+const DayColumn = ({ day, tasks, now, clashes, drag, heights, onCreate, onOpen }: {
   day: Date;
   tasks: Task[];
   now: Date;
   clashes: Clash[];
   drag: CalendarDrag;
+  heights: number[];
   onCreate: (start: Date) => void;
   onOpen: (t: Task) => void;
 }) => {
@@ -315,6 +339,8 @@ const DayColumn = ({ day, tasks, now, clashes, drag, onCreate, onOpen }: {
               key={`${h}:${m}`}
               type="button"
               className="cal-slot"
+              data-calendar-minute={h * 60 + m}
+              style={{ height: heights[(h - FIRST_HOUR) * 2 + m / 30] }}
               aria-label={`Создать задачу: ${fmtDayMonth(day)}, ${fmtTime(s)}`}
               onClick={() => onCreate(s)}
             />
@@ -327,12 +353,14 @@ const DayColumn = ({ day, tasks, now, clashes, drag, onCreate, onOpen }: {
           type="button"
           className={`cal-event cat${stateClass(task, now)}${clashes.some((c) => c.task.id === task.id) ? ' absent' : ''}${drag.canMove(task) ? ' calendar-movable' : ''}${drag.draggingId === task.id ? ' calendar-moving' : ''}`}
           data-calendar-task={task.id}
+          data-calendar-top={top}
+          data-calendar-duration={height}
           draggable={false}
           onPointerDown={(event) => drag.onStart(event, task)}
           style={{
             ...catStyle(task),
-            top: `calc(var(--hour) * ${top})`,
-            height: `calc(var(--hour) * ${height} - 2px)`,
+            top: calendarOffset(heights, top),
+            height: calendarOffset(heights, top + height) - calendarOffset(heights, top) - 2,
             left: `calc(${(lane / lanes) * 100}% + 3px)`,
             width: `calc(${100 / lanes}% - 6px)`,
             right: 'auto',
@@ -344,27 +372,23 @@ const DayColumn = ({ day, tasks, now, clashes, drag, onCreate, onOpen }: {
             {isSameDay(new Date(task.start), day) && new Date(task.start).getHours() >= FIRST_HOUR && <span className="calendar-resize-handle calendar-resize-handle--start" data-calendar-resize="start" aria-hidden="true" data-tip="Изменить начало задачи" />}
             {isSameDay(new Date(task.end), day) && new Date(task.end).getHours() <= LAST_HOUR && <span className="calendar-resize-handle calendar-resize-handle--end" data-calendar-resize="end" aria-hidden="true" data-tip="Изменить окончание задачи" />}
           </>}
-          {/* В коротком событии время стоит в строке с названием, чтобы название поместилось. */}
-          <span className="ti">
-            {height < 1.25 ? (
-              <span className="t inline">{fmtTime(new Date(task.start))}</span>
-            ) : (
+          <span className="cal-event-content" data-calendar-content>
+            <span className="ti">
               <span className="t">
                 {fmtTime(new Date(task.start))}–{fmtTime(new Date(task.end))}
               </span>
-            )}
-            <StateMark task={task} now={now} />
-            {task.title}
+              <StateMark task={task} now={now} />
+              {task.title}
+            </span>
+            <span className="who">{whoOf(task)}</span>
           </span>
-          {/* Исполнитель виден всегда: в низком событии — в одну строку с названием. */}
-          {height >= 1.4 ? <span className="who">{whoOf(task)}</span> : <span className="who inline"> · {whoOf(task, true)}</span>}
         </button>
       ))}
-      {preview && <div className="cal-drop-preview" aria-hidden style={{ top: `calc(var(--hour) * ${preview.top})`, height: `calc(var(--hour) * ${preview.height} - 2px)` }}>
+      {preview && <div className="cal-drop-preview" aria-hidden style={{ top: calendarOffset(heights, preview.top), height: calendarOffset(heights, preview.top + preview.height) - calendarOffset(heights, preview.top) - 2 }}>
         <b>{fmtTime(new Date(preview.task.start))}–{fmtTime(new Date(preview.task.end))}</b><span>{preview.task.title}</span>
       </div>}
       {today && nowOffset >= 0 && nowOffset <= LAST_HOUR - FIRST_HOUR && (
-        <div className="cal-now" style={{ top: `calc(var(--hour) * ${nowOffset})` }} aria-hidden />
+        <div className="cal-now" style={{ top: calendarOffset(heights, nowOffset) }} aria-hidden />
       )}
     </div>
   );

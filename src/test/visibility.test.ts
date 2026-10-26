@@ -38,8 +38,10 @@ describe('область видимости задач', () => {
 
   it('начальник отдела и администратор видят всё: у них разрешение «Видеть задачи всего отдела»', () => {
     expect(scopeOf(1, users, DEFAULT_UNITS, DEFAULT_ROLES)).toBeNull();
-    // Руководитель без этого разрешения ограничен подразделением, даже если он заместитель.
-    expect(scopeOf(2, users, DEFAULT_UNITS, DEFAULT_ROLES)).not.toBeNull();
+    // Заместитель из «Руководства» видит все дочерние отделения своего отдела.
+    const deputy = scopeOf(2, users, DEFAULT_UNITS, DEFAULT_ROLES);
+    expect(deputy).not.toBeNull();
+    for (const id of [1, 3, 101, 111, 121]) expect(inScope(deputy, id)).toBe(true);
     // Разрешение можно выдать роли — тогда видимость расширяется.
     const wide = DEFAULT_ROLES.map((r) => (r.role === 'manager' ? { ...r, permissions: [...r.permissions, 'tasks.viewAll' as const] } : r));
     expect(scopeOf(101, users, DEFAULT_UNITS, wide)).toBeNull();
@@ -50,6 +52,23 @@ describe('область видимости задач', () => {
     const scope = scopeOf(2, deputy, DEFAULT_UNITS, DEFAULT_ROLES)!;
     // Руководитель на уровне отдела видит все отделения отдела.
     for (const id of [3, 101, 111, 121]) expect(scope.has(id)).toBe(true);
+  });
+
+  it('группа руководства управляет родительским отделом, но не соседним отделом', () => {
+    const units = [...DEFAULT_UNITS.map((unit) => unit.id === 'g-1' ? { ...unit, name: 'Руководство отдела' } : unit),
+      { id: 'other-dept', parentId: 'u-dir-it', kind: 'department' as const, name: 'Другой отдел' },
+      { id: 'other-section', parentId: 'other-dept', kind: 'section' as const, name: 'Отделение' }];
+    const accounts = [...users, { ...users[2], employeeId: 999, unitId: 'other-section' }];
+    const scope = scopeOf(2, accounts, units, DEFAULT_ROLES);
+    expect(inScope(scope, 3)).toBe(true);
+    expect(inScope(scope, 101)).toBe(true);
+    expect(inScope(scope, 999)).toBe(false);
+    const renamed = units.map((unit) => unit.id === 'g-1' ? { ...unit, name: 'Управление отделом', managesParent: true } : unit);
+    expect(inScope(scopeOf(2, accounts, renamed, DEFAULT_ROLES), 101)).toBe(true);
+    const disabled = units.map((unit) => unit.id === 'g-1' ? { ...unit, managesParent: false } : unit);
+    expect(inScope(scopeOf(2, accounts, disabled, DEFAULT_ROLES), 101)).toBe(false);
+    const executor = accounts.map((account) => account.employeeId === 2 ? { ...account, role: 'executor' as const } : account);
+    expect([...scopeOf(2, executor, units, DEFAULT_ROLES)!]).toEqual([2]);
   });
 
   it('задача видна, если среди исполнителей есть сотрудник из области видимости', () => {

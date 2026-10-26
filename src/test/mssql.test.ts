@@ -161,6 +161,18 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
     expect(back.planRows).toEqual(seed.planRows);
   });
 
+  it('сохраняет явное включение и отключение руководства подразделения после переподключения', async () => {
+    const before = (await repo.read())!;
+    try {
+      for (const managesParent of [true, false]) {
+        await repo.update((data) => ({ ...data!, units: data!.units!.map((unit) => unit.id === 'g-1' ? { ...unit, managesParent } : unit) }));
+        const again = createMssqlRepo({ server: server!, database, ...(user ? { user } : {}), ...(password ? { password } : {}), encrypt: false, trustServerCertificate: true });
+        try { expect((await again.read())!.units!.find((unit) => unit.id === 'g-1')?.managesParent).toBe(managesParent); }
+        finally { await again.close?.(); }
+      }
+    } finally { await repo.update(() => before); }
+  });
+
   it('сохраняет рисунок через границу года и оба фрагмента после стирания в SQL Server', async () => {
     const before = (await repo.read())!;
     const stroke = { employeeId: 3, type: 'vacation', vacationType: 'annual', from: '2030-12-30', to: '2031-01-03', mode: 'paint' as const };
@@ -238,7 +250,7 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
       insert into dbo.corporate_settings values (1, N'Сохранить настройку');`);
     await raw("update dbo.tc_tasks set corporate_reference = N'Рабочий номер документа';");
     const removed: Record<string, string[]> = {
-      tc_users: ['hidden', 'annual_vacation_days'], tc_absences: ['duty_type', 'vacation_type', 'travel_days_before', 'travel_days_after'], tc_reports: ['period_end'],
+      tc_users: ['hidden', 'annual_vacation_days'], tc_absences: ['duty_type', 'vacation_type', 'travel_days_before', 'travel_days_after'], tc_reports: ['period_end'], tc_units: ['manages_parent'],
     };
     const snapshot = async () => {
       const result: Record<string, unknown> = {};
@@ -258,6 +270,7 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
       await again.ping!();
       expect(await snapshot()).toEqual(before);
       expect((await raw("select [hidden], [annual_vacation_days] from dbo.tc_users;")).recordset.every((row) => row.hidden === false && row.annual_vacation_days === null)).toBe(true);
+      expect((await raw('select [manages_parent] from dbo.tc_units;')).recordset.every((row) => row.manages_parent === null)).toBe(true);
       // Ручной скрипт и два одновременно запускаемых процесса используют ту же схему и блокировку.
       await raw(schemaUpdateScript().replace(/^\ufeff/, ''));
       await Promise.all([applySchema(await poolFor(database)), applySchema(await poolFor(database))]);

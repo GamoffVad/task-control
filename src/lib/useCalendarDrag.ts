@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type PointerEvent, type KeyboardEvent } from 'react';
-import { FIRST_HOUR, LAST_HOUR, movedTaskDates } from './calendarLayout';
+import { LAST_HOUR, movedTaskDates } from './calendarLayout';
+import { calendarMinutesAt } from './calendarScale';
 import { addDays } from './dates';
 import type { Task } from './types';
 
@@ -58,8 +59,7 @@ export function useCalendarDrag(tasks: Task[], canMove: (task: Task) => boolean,
 
   const timeAt = (zone: HTMLElement, y: number) => {
     const day = new Date(zone.dataset.calendarDay!);
-    const rect = zone.getBoundingClientRect();
-    const minutes = FIRST_HOUR * 60 + (y - rect.top) / rect.height * (LAST_HOUR - FIRST_HOUR) * 60;
+    const minutes = calendarMinutesAt(zone, y);
     day.setHours(0, minutes, 0, 0);
     return day.getTime();
   };

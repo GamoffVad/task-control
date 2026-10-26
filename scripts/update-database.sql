@@ -212,13 +212,16 @@ BEGIN TRY
     [id] nvarchar(64) not null primary key,
     [parent_id] nvarchar(64) null,
     [kind] nvarchar(32) not null constraint df_tc_units_kind default ''section'',
-    [name] nvarchar(256) not null constraint df_tc_units_name default '''')');
+    [name] nvarchar(256) not null constraint df_tc_units_name default '''',
+    [manages_parent] bit null)');
 
   EXEC(N'if col_length(''dbo.tc_units'', ''parent_id'') is null alter table dbo.tc_units add [parent_id] nvarchar(64) null');
 
   EXEC(N'if col_length(''dbo.tc_units'', ''kind'') is null alter table dbo.tc_units add [kind] nvarchar(32) not null constraint df_tc_units_kind default ''section''');
 
   EXEC(N'if col_length(''dbo.tc_units'', ''name'') is null alter table dbo.tc_units add [name] nvarchar(256) not null constraint df_tc_units_name default ''''');
+
+  EXEC(N'if col_length(''dbo.tc_units'', ''manages_parent'') is null alter table dbo.tc_units add [manages_parent] bit null');
 
   EXEC(N'if object_id(N''dbo.tc_templates'', N''U'') is null create table dbo.tc_templates (
     [id] nvarchar(64) not null primary key,

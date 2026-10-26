@@ -111,7 +111,10 @@ export const entriesInPeriod = (reports: Report[], period: Period, now: Date = n
     for (const entry of report.entries) unique.set(`${entry.taskId}|${entry.assigneeId}`, entry);
   }
   const all = [...unique.values()];
-  return from ? all.filter((e) => new Date(e.doneAt) >= from) : all;
+  return all.filter((e) => {
+    const done = new Date(e.doneAt);
+    return (!from || done >= from) && done <= now;
+  });
 };
 
 // ——— Правила подсчёта баллов ———

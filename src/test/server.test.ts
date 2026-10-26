@@ -344,10 +344,23 @@ describe('API', () => {
     expect(adminTasks.length).toBeGreaterThan(executor.length);
     expect(executor.length).toBeGreaterThan(0);
     expect(executor.every((t) => t.assigneeIds.includes(3))).toBe(true);
-    // Петров — руководитель отделения «Руководство» (Иванов и Петров): чужих исполнителей в его выдаче нет.
-    expect(manager.length).toBeGreaterThan(0);
-    expect(manager.every((t) => t.assigneeIds.some((id) => id === 1 || id === 2))).toBe(true);
-    expect(manager.length).toBeLessThan(adminTasks.length);
+    // Петров из «Руководства» получает задачи всех дочерних отделений отдела.
+    expect(manager.map((task) => task.id)).toEqual(adminTasks.map((task) => task.id));
+    expect(manager.some((task) => task.assigneeIds.includes(3))).toBe(true);
+  });
+
+  it('настройка руководства сохраняется, применяется на сервере и не выдаётся исполнителю', async () => {
+    const admin = await login('user');
+    const deputy = await login('petrov');
+    const save = (managesParent: unknown, token = admin) => call('/api/action', { method: 'POST', token,
+      body: { action: { type: 'saveUnit', draft: { id: 'g-1', parentId: 'u-dept-dev', kind: 'section', name: 'Координация', managesParent } } } });
+    expect((await save(true)).status).toBe(200);
+    expect((await repo.read())!.units!.find((unit) => unit.id === 'g-1')?.managesParent).toBe(true);
+    expect((await call('/api/state', { token: deputy })).json.data!.tasks.some((task) => task.assigneeIds.includes(3))).toBe(true);
+    expect((await save(false)).status).toBe(200);
+    expect((await call('/api/state', { token: deputy })).json.data!.tasks.every((task) => task.assigneeIds.some((id) => id === 1 || id === 2))).toBe(true);
+    expect((await save('yes')).status).toBe(400);
+    expect((await save(true, await login('sidorov'))).status).toBe(403);
   });
 
   it('исполнитель создаёт заявку только на себя, даже если прислал чужой id', async () => {

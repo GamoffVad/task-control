@@ -297,7 +297,9 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
       if (!['organization', 'directorate', 'department', 'section'].includes(d.kind as string)) bad('уровень подразделения');
       if (!str(d.name, 200) || !String(d.name).trim()) bad('название подразделения');
       if (d.parentId !== null && !str(d.parentId, 100)) bad('вышестоящее подразделение');
-      return { type: 'saveUnit', draft: { ...(d.id ? { id: d.id as string } : {}), parentId: d.parentId as string | null, kind: d.kind as UnitKind, name: d.name as string } };
+      if (d.managesParent !== undefined && typeof d.managesParent !== 'boolean') bad('руководство подразделения');
+      return { type: 'saveUnit', draft: { ...(d.id ? { id: d.id as string } : {}), parentId: d.parentId as string | null, kind: d.kind as UnitKind, name: d.name as string,
+        ...(d.managesParent !== undefined ? { managesParent: d.managesParent as boolean } : {}) } };
     }
     case 'saveTemplate': {
       if (!isObj(a.draft)) bad('шаблон');

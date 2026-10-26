@@ -55,6 +55,20 @@ const setup = (view: CalendarView = 'week', executor = false, task: Task | Task[
 const pointer = (x: number, y: number, pointerType = 'mouse') => ({ button: 0, buttons: 1, isPrimary: true, pointerId: 1, pointerType, clientX: x, clientY: y });
 
 describe('статус и изменение периода в календаре', () => {
+  it('растягивает окончание по реальному времени после адаптивного расширения строк', () => {
+    const task = { ...eventTask(), end: new Date(2026, 8, 17, 9, 30).toISOString() };
+    const [zone] = setup('day', false, task), source = eventButton();
+    for (const [minute, top, height] of [[540, 120, 240], [570, 360, 100]]) {
+      const slot = zone.querySelector<HTMLElement>(`[data-calendar-minute="${minute}"]`)!;
+      vi.spyOn(slot, 'getBoundingClientRect').mockReturnValue({ top, bottom: top + height, height } as DOMRect);
+    }
+    fireEvent.pointerDown(source.querySelector('[data-calendar-resize="end"]')!, pointer(50, 360));
+    fireEvent.pointerMove(source, pointer(50, 460));
+    flushFrame();
+    fireEvent.pointerUp(source, pointer(50, 460));
+    expect(savedTask().start).toBe(task.start);
+    expect(savedTask().end).toBe(new Date(2026, 8, 17, 10).toISOString());
+  });
   it.each(['Все задачи', 'В работе', 'Исполнено'])('восстанавливает фильтр «%s» после повторного открытия страницы', name => {
     setup();
     fireEvent.click(screen.getByRole('button', { name: /^Статус задач:/ }));

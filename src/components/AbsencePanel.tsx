@@ -1,6 +1,6 @@
 import { TextInput } from '../kit';
 import { useState } from 'react';
-import { absenceDays, balanceFor, entitlementFor, fmtSpan, travelDays } from '../lib/absences';
+import { absenceDays, balanceFor, dutyDayoffs, entitlementFor, fmtSpan, travelDays } from '../lib/absences';
 import { ABSENCE_STATUS_LABELS, absenceType } from '../lib/data';
 import { plural } from '../lib/dates';
 import { isManager } from '../lib/permissions';
@@ -27,6 +27,7 @@ export const AbsencePanel = ({ id }: { id: number }) => {
   const b = balanceFor(state.absences, state.entitlements, id, year, new Date(), { users: state.users, settings: state.vacationSettings });
   const ent = entitlementFor(state.entitlements, id, periodYear, state.users);
   const calendarEnt = entitlementFor(state.entitlements, id, year, state.users);
+  const weekendDuties = dutyDayoffs(state.absences, id, year);
   const [editing, setEditing] = useState<{ absence?: Absence } | null>(null);
   const [norms, setNorms] = useState<{ vacationDays: string; carriedOver: string; dayoffAccrued: string } | null>(null);
   const list = state.absences
@@ -89,6 +90,11 @@ export const AbsencePanel = ({ id }: { id: number }) => {
             <span>использовано <span className="num">{b.dayoff.used}</span></span>
             {b.dayoff.requested > 0 && <span className="amber">в заявках <span className="num">{b.dayoff.requested}</span></span>}
           </div>
+        </div>
+        <div className="bal-block" style={absColor('duty')} aria-label="Дежурства в выходные">
+          <div className="top"><span className="caps">Дежурства в выходные</span><span className="num faint" style={{ fontSize: 12 }}>{year}</span></div>
+          <div className="big">{weekendDuties} <small>{plural(weekendDuties, 'день', 'дня', 'дней')}</small></div>
+          <div className="bal-keys"><span>согласованные субботы и воскресенья по текущую дату</span><span>начислено отгулов <span className="num">{weekendDuties}</span></span></div>
         </div>
         {(['sick', 'trip', 'study'] as const).map((k) => (
           <div key={k} className="bal-block" style={absColor(k)}>

@@ -16,29 +16,50 @@ const report = (weekStart: string, entries: ReportEntry[]): Report => ({ weekSta
 
 describe('начало периода показателей', () => {
   it('отсчёт идёт с 1-го числа месяца', () => {
-    expect(toDateKey(periodStart('month', NOW)!)).toBe('2026-09-01');
-    expect(toDateKey(periodStart('quarter', NOW)!)).toBe('2026-07-01');
-    expect(toDateKey(periodStart('half', NOW)!)).toBe('2026-04-01');
-    expect(toDateKey(periodStart('year', NOW)!)).toBe('2025-10-01');
+    expect(toDateKey(periodStart('month', NOW)!)).toBe('2026-10-01');
+    expect(toDateKey(periodStart('quarter', NOW)!)).toBe('2026-10-01');
+    expect(toDateKey(periodStart('half', NOW)!)).toBe('2026-07-01');
+    expect(toDateKey(periodStart('year', NOW)!)).toBe('2026-01-01');
     expect(periodStart('all', NOW)).toBeNull();
   });
 
   it('не зависит от числа, на которое приходится «сегодня»', () => {
     for (const day of [1, 9, 31]) {
       const now = new Date(2026, 9, day, 10, 0);
-      expect(toDateKey(periodStart('month', now)!)).toBe('2026-09-01');
+      expect(toDateKey(periodStart('month', now)!)).toBe('2026-10-01');
     }
-    // Конец месяца с разной длиной: 31 мая минус месяц — не «31 апреля», а 1 апреля.
-    expect(toDateKey(periodStart('month', new Date(2026, 4, 31))!)).toBe('2026-04-01');
+    expect(toDateKey(periodStart('month', new Date(2026, 4, 31))!)).toBe('2026-05-01');
     expect(startOfMonth(new Date(2026, 1, 28, 23, 59)).getDate()).toBe(1);
   });
 
   it('баллы с 1-го числа входят в период, а за день до — нет', () => {
-    const reports = [report('2026-08-28', [entry(3, new Date(2026, 7, 31, 23, 0).toISOString())]), report('2026-09-04', [entry(3, new Date(2026, 8, 1, 0, 30).toISOString(), 7)])];
+    const reports = [report('2026-09-25', [entry(3, new Date(2026, 8, 30, 23, 0).toISOString()), entry(3, new Date(2026, 9, 1, 0, 0).toISOString(), 7)])];
     const rows = kpiByEmployee(reports, 'month', NOW);
     expect(rows.find((r) => r.employeeId === 3)).toMatchObject({ total: 7, count: 1 });
     expect(entriesInPeriod(reports, 'month', NOW)).toHaveLength(1);
     expect(entriesInPeriod(reports, 'all', NOW)).toHaveLength(2);
+  });
+
+  it.each([
+    [new Date(2026, 0, 1), '2026-01-01', '2026-01-01'],
+    [new Date(2026, 2, 31), '2026-01-01', '2026-01-01'],
+    [new Date(2026, 3, 1), '2026-04-01', '2026-01-01'],
+    [new Date(2026, 6, 1), '2026-07-01', '2026-07-01'],
+    [new Date(2026, 11, 31), '2026-10-01', '2026-07-01'],
+  ])('календарные границы квартала и полугодия на %s', (now, quarter, half) => {
+    expect(toDateKey(periodStart('quarter', now)!)).toBe(quarter);
+    expect(toDateKey(periodStart('half', now)!)).toBe(half);
+    expect(toDateKey(periodStart('year', now)!)).toBe('2026-01-01');
+  });
+
+  it('год исключает прошлый год и будущие исполнения, сохраняя 1 января', () => {
+    const list = [report('2025-12-26', [
+      entry(3, new Date(2025, 11, 31, 23, 59).toISOString(), 1),
+      entry(3, new Date(2026, 0, 1).toISOString(), 2),
+      entry(3, NOW.toISOString(), 3),
+      entry(3, new Date(2026, 10, 1).toISOString(), 4),
+    ])];
+    expect(entriesInPeriod(list, 'year', NOW).map((item) => item.score)).toEqual([2, 3]);
   });
 });
 

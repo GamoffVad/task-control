@@ -1,11 +1,12 @@
 // Какие задачи видит сотрудник. Видимость следует иерархии подразделений:
 //   подчинённый                      — только свои задачи;
 //   начальник отделения (планирует)  — задачи своего подразделения вместе с вложенными (направления);
-//   начальник отдела и администратор — все задачи отдела (разрешение «Видеть задачи всего отдела»).
+//   руководитель в группе руководства — родительский отдел со всеми вложенными отделениями;
+//   разрешение «Видеть задачи всего отдела» — вся область приложения.
 // Правило применяют и сервер (отдаёт клиенту только видимое), и редьюсер (не даёт менять невидимое).
 import { permissionsFor } from './access';
 import { unitOf } from './data';
-import { unitWithDescendants } from './units';
+import { managedUnitId, unitWithDescendants } from './units';
 import type { ManagedUser, Report, RoleDefinition, Task, Unit } from './types';
 
 /** Сотрудники, чьи задачи видны; null — все. */
@@ -17,11 +18,11 @@ export const scopeOf = (employeeId: number, users: ManagedUser[], units: Unit[],
   if (!me) return own;
   const permissions = permissionsFor(me.role, roles);
   if (permissions.includes('tasks.viewAll')) return null;
-  // Тот, кто планирует задачи другим, — начальник: видит подразделение, в котором состоит, со вложенными.
+  // Руководитель видит подразделение со вложенными; группа руководства представляет родительский отдел.
   if (!permissions.includes('tasks.plan')) return own;
   const unitId = unitOf(me);
   if (!unitId) return own;
-  const inside = unitWithDescendants(units, unitId);
+  const inside = unitWithDescendants(units, managedUnitId(units, unitId));
   for (const user of users) if (inside.has(unitOf(user) ?? '')) own.add(user.employeeId);
   return own;
 };

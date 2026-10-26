@@ -17,7 +17,7 @@ import { DEFAULT_DICTIONARIES } from '../lib/seed';
 import { useStore } from '../lib/store';
 import type { WindowsCheck } from '../lib/api';
 import type { AppearanceSettings, DictionaryEntry, DictionaryKind, DirectoryUser, DocumentTemplate, ManagedUser, ScoringSettings, TemplateScope, Permission, PlanRow, Role, Unit, UnitKind } from '../lib/types';
-import { PARENT_KIND, UNIT_KINDS, unitKindLabel, unitPath, unitTree, unitWithDescendants } from '../lib/units';
+import { isDepartmentLeadership, PARENT_KIND, UNIT_KINDS, unitKindLabel, unitPath, unitTree, unitWithDescendants } from '../lib/units';
 import { unitOf } from '../lib/data';
 import { dutyDictionaryInUse, systemEvent } from '../lib/eventTypes';
 import { dictionaryColorName, hasDictionaryColor } from '../lib/eventPresentation';
@@ -945,12 +945,13 @@ const UnitsTab = ({ state, dispatch }: TabProps) => {
 };
 
 /** Форма подразделения: уровень, вышестоящее подразделение нужного уровня и название. */
-const UnitDialog = ({ unit, parentId: initialParent = null, units, onClose, onSave }: { unit?: Unit; parentId?: string | null; units: Unit[]; onClose: () => void; onSave: (draft: { id?: string; parentId: string | null; kind: UnitKind; name: string }) => void }) => {
+const UnitDialog = ({ unit, parentId: initialParent = null, units, onClose, onSave }: { unit?: Unit; parentId?: string | null; units: Unit[]; onClose: () => void; onSave: (draft: { id?: string; parentId: string | null; kind: UnitKind; name: string; managesParent?: boolean }) => void }) => {
   const parentUnit = initialParent ? units.find((u) => u.id === initialParent) : undefined;
   const initialKind: UnitKind = unit?.kind ?? (parentUnit ? UNIT_KINDS.find((k) => PARENT_KIND[k.kind] === parentUnit.kind)?.kind ?? 'section' : 'organization');
   const [kind, setKind] = useState<UnitKind>(initialKind);
   const [parent, setParent] = useState<string | null>(unit ? unit.parentId : initialParent);
   const [name, setName] = useState(unit?.name ?? '');
+  const [leadership, setLeadership] = useState<boolean | undefined>(unit?.managesParent);
   const [error, setError] = useState('');
   const hasChildren = !!unit && units.some((u) => u.parentId === unit.id);
   const parentKind = PARENT_KIND[kind];
@@ -966,7 +967,8 @@ const UnitDialog = ({ unit, parentId: initialParent = null, units, onClose, onSa
     const n = name.trim();
     if (!n) return setError('Введите название подразделения.');
     if (parentKind && !parent) return setError(`Выберите вышестоящее подразделение: ${unitKindLabel(parentKind).toLowerCase()}.`);
-    onSave({ ...(unit ? { id: unit.id } : {}), parentId: parentKind ? parent : null, kind, name: n });
+    onSave({ ...(unit ? { id: unit.id } : {}), parentId: parentKind ? parent : null, kind, name: n,
+      ...(kind === 'section' ? { managesParent: leadership ?? isDepartmentLeadership({ kind, name: n }) } : {}) });
   };
   return <Dialog title={unit ? 'Изменить подразделение' : 'Добавить подразделение'} context={unit ? `${unitKindLabel(unit.kind)} · ${unit.name}` : parentUnit ? `В «${parentUnit.name}»` : 'Новое подразделение'} onClose={onClose}>
     <form className="form-stack" onSubmit={(event) => { event.preventDefault(); submit(); }} noValidate>
@@ -975,6 +977,10 @@ const UnitDialog = ({ unit, parentId: initialParent = null, units, onClose, onSa
         {parentKind && <div className="field"><span className="caps">Вышестоящее: {unitKindLabel(parentKind).toLowerCase()}</span><Select<string> variant="light" label="Вышестоящее подразделение" value={parent ?? ''} options={parents.length ? parents.map((u) => ({ value: u.id, label: u.name })) : [{ value: '', label: `Сначала добавьте: ${unitKindLabel(parentKind).toLowerCase()}` }]} onChange={(v) => { setParent(v || null); setError(''); }} /></div>}
       </div>
       <label className="field"><span className="caps">Название</span><TextInput value={name} onChange={(event) => { setName(event.target.value); setError(''); }} placeholder={kind === 'section' ? 'Отделение разработки' : kind === 'department' ? 'Отдел разработки' : kind === 'directorate' ? 'Управление информационных технологий' : 'Ведомство'} maxLength={200} invalid={!!error} /></label>
+      {kind === 'section' && <div className="field">
+        <label className="check"><input type="checkbox" checked={leadership ?? isDepartmentLeadership({ kind, name })} onChange={(event) => setLeadership(event.target.checked)} />Руководство родительского отдела</label>
+        <span className="field-hint">Руководители этой группы видят задачи и отчёты всех отделений родительского отдела. Для исполнителей доступ остаётся личным.</span>
+      </div>}
       {error && <p className="field-error" role="alert">{error}</p>}
       <div className="form-actions"><span className="spacer" /><Button type="submit" variant="primary" icon={<Icon.Save size={15} />}>{unit ? 'Сохранить' : 'Добавить'}</Button><Button onClick={onClose}>Отмена</Button></div>
     </form>

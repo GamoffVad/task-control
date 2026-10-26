@@ -40,7 +40,7 @@ export type PlanRowDraft = {
   baseScore: number;
 };
 
-export type UnitDraft = { id?: string; parentId: string | null; kind: UnitKind; name: string };
+export type UnitDraft = { id?: string; parentId: string | null; kind: UnitKind; name: string; managesParent?: boolean };
 
 export type Action =
   | { type: 'login'; email: string; employeeId: number; role: Role; permissions?: Permission[] }
@@ -408,7 +408,10 @@ export const reducer = (state: AppState, action: Action): AppState => {
       if (parentKind ? parent?.kind !== parentKind : d.parentId !== null) return state;
       // Смена уровня у подразделения с вложенными нарушила бы иерархию.
       if (existing && existing.kind !== d.kind && state.units.some((u) => u.parentId === existing.id)) return state;
-      const unit: Unit = { id: existing?.id ?? newId('unit'), parentId: parentKind ? d.parentId : null, kind: d.kind, name };
+      if (d.managesParent !== undefined && typeof d.managesParent !== 'boolean') return state;
+      const managesParent = d.managesParent ?? existing?.managesParent;
+      const unit: Unit = { id: existing?.id ?? newId('unit'), parentId: parentKind ? d.parentId : null, kind: d.kind, name,
+        ...(d.kind === 'section' && managesParent !== undefined ? { managesParent } : {}) };
       const units = existing ? state.units.map((u) => (u.id === unit.id ? unit : u)) : [...state.units, unit];
       return { ...state, units };
     }

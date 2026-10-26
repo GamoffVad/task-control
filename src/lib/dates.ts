@@ -148,22 +148,20 @@ export const defaultDeadlineFor = (bucket: DeadlineBucket, now: Date = new Date(
 export const startOfMonth = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), 1);
 
 /**
- * Начало периода показателей: отсчёт назад на нужное число месяцев, но не с того же числа, а с 1-го числа месяца,
- * в который он попал. Так баллы месяца считаются за целые календарные месяцы, а не со «скользящей» даты.
- * Пример на 9 октября: «Месяц» — с 1 сентября, «Квартал» — с 1 июля, «Год» — с 1 октября прошлого года.
+ * Начало текущего календарного периода: месяц, квартал, полугодие или год.
  */
 export const periodStart = (period: Period, now: Date = new Date()): Date | null => {
   switch (period) {
     case 'all':
       return null;
     case 'month':
-      return startOfMonth(addMonths(now, -1));
+      return startOfMonth(now);
     case 'quarter':
-      return startOfMonth(addMonths(now, -3));
+      return new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
     case 'half':
-      return startOfMonth(addMonths(now, -6));
+      return new Date(now.getFullYear(), now.getMonth() < 6 ? 0 : 6, 1);
     case 'year':
-      return startOfMonth(addMonths(now, -12));
+      return new Date(now.getFullYear(), 0, 1);
   }
 };
 

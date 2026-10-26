@@ -4,7 +4,7 @@ import { PeriodPicker } from '../components/ui';
 import { FilterCard, PageHeader } from '../kit';
 import { department, employeeById, shortName } from '../lib/data';
 import { fmtDate, fmtDayMonth, fmtNum, PERIOD_LABELS, periodStart, plural, points } from '../lib/dates';
-import { kpiByDirection, kpiByEmployee, reportWeek, summarize, type ScoringContext } from '../lib/logic';
+import { entriesInPeriod, kpiByDirection, kpiByEmployee, reportWeek, summarize, type ScoringContext } from '../lib/logic';
 import { useStore } from '../lib/store';
 import { useScope } from '../lib/useScope';
 import { inScope } from '../lib/visibility';
@@ -38,13 +38,13 @@ export const Kpi = () => {
   const from = periodStart(period, now);
 
   const weeks = useMemo(() => {
-    const start = periodStart(period);
+    const included = new Set(entriesInPeriod(state.reports, period, now));
     const list = [...state.reports]
       .sort((a, b) => a.weekStart.localeCompare(b.weekStart))
-      .filter((r) => !start || reportWeek(r) >= new Date(start.getTime() - 7 * 86_400_000))
-      .slice(-26);
+      .map((report) => ({ ...report, entries: report.entries.filter((entry) => included.has(entry)) }))
+      .filter((report) => report.entries.length > 0);
     return list.map((r) => ({ week: reportWeek(r), total: r.entries.reduce((s, e) => s + e.score, 0), count: r.entries.length }));
-  }, [state.reports, period]);
+  }, [state.reports, period, now]);
   const weekMax = Math.max(1, ...weeks.map((w) => w.total));
 
   return (
@@ -172,7 +172,7 @@ export const Kpi = () => {
                 ))}
               </div>
               <p className="help-note" style={{ marginTop: 16 }}>
-                Каждый столбец — отчёт за неделю, подпись — дата её начала (пятница). Наведите курсор, чтобы увидеть сумму.
+                Каждый столбец — отчёт за неделю; учитываются только исполнения выбранного периода. Подпись — дата начала отчётной недели. Наведите курсор, чтобы увидеть сумму.
               </p>
             </>
           )}

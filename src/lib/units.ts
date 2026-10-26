@@ -38,6 +38,17 @@ export const DEFAULT_UNITS: Unit[] = [
 /** Подразделение по умолчанию для демонстрационных сотрудников 1–7. */
 export const DEFAULT_UNIT_OF: Record<number, string> = { 1: 'g-1', 2: 'g-1', 3: 'g-2', 4: 'g-2', 5: 'g-3', 6: 'g-3', 7: 'g-4' };
 
+/** Старые группы «Руководство …» распознаются без изменения существующих данных.
+ * Явная настройка имеет приоритет над названием. Право tasks.plan проверяется отдельно. */
+export const isDepartmentLeadership = (unit: Pick<Unit, 'kind' | 'name' | 'managesParent'>): boolean =>
+  unit.kind === 'section' && (unit.managesParent ?? /^руководство(?:\s|$)/i.test(unit.name.trim()));
+
+export const managedUnitId = (units: Unit[], id: string): string => {
+  const unit = units.find((item) => item.id === id);
+  const parent = units.find((item) => item.id === unit?.parentId);
+  return unit && isDepartmentLeadership(unit) && parent?.kind === 'department' ? parent.id : id;
+};
+
 /** Подразделение и все вложенные в него. */
 export const unitWithDescendants = (units: Unit[], id: string): Set<string> => {
   const out = new Set([id]);

@@ -66,6 +66,8 @@ export type Unit = {
   parentId: string | null;
   kind: UnitKind;
   name: string;
+  /** Руководство отдела: руководители этого отделения видят весь родительский отдел. */
+  managesParent?: boolean;
 };
 
 export type DirectoryUser = {
