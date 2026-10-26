@@ -61,6 +61,66 @@ const withApi = async (options: Partial<Parameters<typeof createApi>[0]> & { rep
 };
 
 describe('API', () => {
+  it('сохраняет связи поездок, валидирует подмены и разрешает правку после удаления поездки', async () => {
+    const data = (await repo.read())!;
+    const base = { ...data.tasks[0], id: 'trip-work', assigneeIds: [3], tripAbsenceIds: undefined,
+      start: new Date(2030, 10, 12, 9).toISOString(), end: new Date(2030, 10, 12, 11).toISOString() };
+    const trip = { id: 'trip-linked', employeeId: 3, type: 'trip', from: '2030-11-12', to: '2030-11-15', note: 'Приказ', status: 'approved' as const, createdAt: NOW.toISOString(), decidedBy: 1 };
+    repo = createMemoryRepo(undefined, { ...data, tasks: [base], absences: [trip] });
+    const admin = await login('user');
+    const save = (draft: unknown, token = admin) => call('/api/action', { method: 'POST', token, body: { action: { type: 'saveTask', draft } } });
+    expect((await save({ ...base, tripAbsenceIds: ['trip-linked'] })).status).toBe(200);
+    expect((await repo.read())!.tasks[0].tripAbsenceIds).toEqual(['trip-linked']);
+    for (const ids of [['missing'], ['trip-linked', 'trip-linked'], [12], 'trip-linked', null]) expect((await save({ ...base, tripAbsenceIds: ids })).status).toBe(400);
+    const executor = await login('sidorov');
+    expect((await save({ ...base, tripAbsenceIds: [], result: 'Результат' }, executor)).status).toBe(200);
+    expect((await repo.read())!.tasks[0].tripAbsenceIds).toEqual(['trip-linked']);
+    await repo.update((current) => ({ ...current!, absences: [] }));
+    expect((await save({ ...base, tripAbsenceIds: ['trip-linked'], result: 'После удаления' })).status).toBe(200);
+    expect((await save({ ...base, tripAbsenceIds: [] })).status).toBe(200);
+    expect((await repo.read())!.tasks[0].tripAbsenceIds).toBeUndefined();
+  });
+
+  it('создаёт командировку вместе с задачей атомарно и проверяет права и корреляционные ссылки', async () => {
+    const data = (await repo.read())!;
+    repo = createMemoryRepo(undefined, { ...data, tasks: [], absences: [] });
+    const { id: _id, doneAt: _doneAt, ...base } = data.tasks[0];
+    const draft = { ...base, assigneeIds: [3], start: new Date(2030, 10, 12, 9).toISOString(), end: new Date(2030, 10, 12, 11).toISOString(), tripAbsenceIds: ['pending-trip'] };
+    const trip = { id: 'pending-trip', employeeId: 3, type: 'trip', from: '2030-11-12', to: '2030-11-15', status: 'approved', note: 'Приказ' };
+    const admin = await login('user');
+    const save = (body: unknown, token = admin) => call('/api/action', { method: 'POST', token, body: { action: body } });
+    const response = await save({ type: 'saveTask', draft, newTrips: [trip] });
+    expect(response.status).toBe(200);
+    const stored = (await repo.read())!;
+    expect(stored.tasks).toHaveLength(1); expect(stored.absences).toHaveLength(1);
+    expect(stored.tasks[0].tripAbsenceIds).toEqual([stored.absences[0].id]);
+    expect(stored.absences[0].id).not.toBe('pending-trip');
+    repo = createMemoryRepo(undefined, { ...data, tasks: [], absences: [] });
+    expect((await save({ type: 'saveTask', draft: { ...draft, tripAbsenceIds: [] }, newTrips: [trip] })).status).toBe(403);
+    expect((await repo.read())!.absences).toEqual([]);
+    expect((await save({ type: 'saveTask', draft, newTrips: [trip, { ...trip, id: 'second' }] })).status).toBe(400);
+    expect((await repo.read())!.tasks).toEqual([]);
+    const executor = await login('sidorov');
+    const own = await save({ type: 'saveTask', draft, newTrips: [trip] }, executor);
+    expect(own.status).toBe(200);
+    expect((await repo.read())!.absences[0]).toMatchObject({ employeeId: 3, status: 'request', decidedBy: null });
+  });
+
+  it('форма поездки связывает задачи без изменения их дат и не обходит права исполнителя', async () => {
+    const data = (await repo.read())!;
+    const task = { ...data.tasks[0], id: 'trip-work', assigneeIds: [3] };
+    const trip = { id: 'trip-linked', employeeId: 3, type: 'trip', from: '2030-11-12', to: '2030-11-15', note: 'Приказ', status: 'approved' as const, createdAt: NOW.toISOString(), decidedBy: 1 };
+    repo = createMemoryRepo(undefined, { ...data, tasks: [task], absences: [trip] });
+    const admin = await login('user');
+    const save = (taskLinks: unknown, token = admin) => call('/api/action', { method: 'POST', token, body: { action: { type: 'saveAbsence', draft: trip, taskLinks } } });
+    expect((await save([{ taskId: task.id, linked: true }])).status).toBe(200);
+    expect((await repo.read())!.tasks[0]).toMatchObject({ start: task.start, end: task.end, tripAbsenceIds: [trip.id] });
+    for (const changes of [[{ taskId: 'missing', linked: true }], [{ taskId: task.id, linked: 'yes' }], [{ taskId: task.id, linked: false }, { taskId: task.id, linked: true }]]) expect((await save(changes)).status).toBe(400);
+    await repo.update((current) => ({ ...current!, absences: [{ ...trip, status: 'request', decidedBy: null }] }));
+    expect((await save([{ taskId: task.id, linked: false }], await login('sidorov'))).status).toBe(403);
+    expect((await repo.read())!.tasks[0].tripAbsenceIds).toEqual([trip.id]);
+  });
+
   it('сохраняет кисть одной транзакцией, разрезает период и проверяет права на сервере', async () => {
     const token = await login('user');
     const save = (stroke: unknown, as = token) => call('/api/action', { method: 'POST', token: as, body: { action: { type: 'paintAbsences', stroke } } });

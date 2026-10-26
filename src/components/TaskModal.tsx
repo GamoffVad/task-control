@@ -1,18 +1,23 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { employees, shortName } from '../lib/data';
 import { useCategorySelectOptions } from '../lib/categories';
-import { fmtNum, fromInputDateTime, toInputDateTime } from '../lib/dates';
+import { fmtNum, fromInputDateTime, toDateKey, toInputDateTime } from '../lib/dates';
 import { baseScore, MAX_SCORE, MIN_SCORE, validateTask, type TaskDraft, type TaskErrors } from '../lib/logic';
-import { taskAccess } from '../lib/permissions';
+import { absenceAccess, taskAccess } from '../lib/permissions';
 import { useStore } from '../lib/store';
 import { useScopeEmployees } from '../lib/useScope';
-import { covers, fmtSpan, isActive } from '../lib/absences';
+import { fmtSpan, taskAbsenceConflicts } from '../lib/absences';
+import { hasPermission } from '../lib/access';
+import { newId } from '../lib/reducer';
+import { selectTaskTrip, tripLinksError } from '../lib/taskTrips';
 import { absenceType } from '../lib/data';
-import type { Category, User } from '../lib/types';
+import type { Absence, Category, User } from '../lib/types';
 import { EditorContext, type OpenArgs } from './taskEditor';
 import { Checkbox, DateTimeField, Dialog, Select, TextArea, TextInput } from '../kit';
 import { Icon } from './Icons';
 import { AssigneePicker } from './AssigneePicker';
+import { AbsenceModal } from './AbsenceModal';
+import { TaskTripsField } from './TaskTripsField';
 
 const emptyDraft = (user: User | null, defaults: Partial<TaskDraft> = {}): TaskDraft => {
   const start = new Date();
@@ -62,6 +67,11 @@ const TaskModal = ({ task, defaults, context, onClose }: OpenArgs & { onClose: (
   const [scoreText, setScoreText] = useState<string | null>(null);
   const [errors, setErrors] = useState<TaskErrors>({});
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [tripMode, setTripMode] = useState(!!task?.tripAbsenceIds?.length || !!defaults?.tripAbsenceIds?.length);
+  const [pendingTrips, setPendingTrips] = useState<Absence[]>([]);
+  const [creatingTrip, setCreatingTrip] = useState<number | null>(null);
+  const [tripError, setTripError] = useState<string>();
+  const allTrips = [...state.absences, ...pendingTrips];
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const isNew = !task;
   const readOnly = !access.plan && !access.execution;
@@ -111,9 +121,12 @@ const TaskModal = ({ task, defaults, context, onClose }: OpenArgs & { onClose: (
 
   const save = () => {
     const errs = validateTask(draft);
+    const tripError = tripLinksError(draft, allTrips, task?.tripAbsenceIds) || (tripMode && !draft.tripAbsenceIds?.length ? 'Выберите командировку или снимите флажок связи.' : undefined);
+    setTripError(tripError);
     setErrors(errs);
-    if (Object.keys(errs).length) return;
-    dispatch({ type: 'saveTask', draft: { ...draft, title: draft.title.trim(), result: draft.result.trim() } });
+    if (Object.keys(errs).length || tripError) return;
+    const newTrips = pendingTrips.filter((trip) => draft.tripAbsenceIds?.includes(trip.id));
+    dispatch({ type: 'saveTask', draft: { ...draft, title: draft.title.trim(), result: draft.result.trim() }, ...(newTrips.length ? { newTrips } : {}) });
     onClose();
   };
 
@@ -128,12 +141,7 @@ const TaskModal = ({ task, defaults, context, onClose }: OpenArgs & { onClose: (
   };
 
   // Кто из исполнителей отсутствует в день срока.
-  const absentees = draft.done
-    ? []
-    : draft.assigneeIds.flatMap((id) => {
-        const a = state.absences.find((x) => x.employeeId === id && isActive(x) && covers(x, new Date(draft.end)));
-        return a ? [{ id, a }] : [];
-      });
+  const absentees = draft.done ? [] : taskAbsenceConflicts(draft, allTrips).map((a) => ({ id: a.employeeId, a }));
 
   const row = draft.rowId ? state.planRows.find((item) => item.id === draft.rowId) : null;
   const rowIsHeader = !!row?.isHeader;
@@ -142,6 +150,18 @@ const TaskModal = ({ task, defaults, context, onClose }: OpenArgs & { onClose: (
   const assigneeChoices = access.plan && user?.role === 'executor'
     ? employees.filter((e) => e.id === user.employeeId)
     : employees.filter((e) => visibleEmployees.some((v) => v.id === e.id) || draft.assigneeIds.includes(e.id));
+
+  // Пока создаётся поездка, показывается одно модальное окно; отмена возвращает черновик задачи.
+  if (creatingTrip !== null) return <AbsenceModal
+    defaults={{ employeeId: creatingTrip, type: 'trip', from: toDateKey(new Date(draft.start)), to: toDateKey(new Date(draft.end)), note: draft.title.slice(0, 500) }}
+    onClose={() => setCreatingTrip(null)} onSaveDraft={(trip) => {
+      const id = newId('pending-trip');
+      const preview: Absence = { ...trip, id, status: hasPermission(user, 'absences.manage') ? trip.status : 'request', createdAt: new Date().toISOString(), decidedBy: null };
+      setPendingTrips((before) => [...before, preview]);
+      setDraft((before) => ({ ...before, tripAbsenceIds: selectTaskTrip(before, trip.employeeId, id, allTrips) }));
+      setCreatingTrip(null);
+      setTripError(undefined);
+    }} />;
 
   return (
     <Dialog
@@ -204,6 +224,10 @@ const TaskModal = ({ task, defaults, context, onClose }: OpenArgs & { onClose: (
                 </label>
               </div>
               {errors.end && <span className="field-error">{errors.end}</span>}
+              <TaskTripsField draft={draft} absences={allTrips} enabled={tripMode} readOnly={!access.plan} error={tripError}
+                onEnabled={(enabled) => { setTripMode(enabled); setTripError(undefined); if (!enabled) { set('tripAbsenceIds', []); setPendingTrips([]); } }}
+                onChange={(ids) => { set('tripAbsenceIds', ids); setTripError(undefined); }} onCreate={setCreatingTrip}
+                canCreate={(id) => absenceAccess(user, null).edit && (hasPermission(user, 'absences.manage') || id === user?.employeeId)} />
               {absentees.length > 0 && (
                 <p className="warn-note" role="note">
                   <b>Срок приходится на отсутствие исполнителя.</b>{' '}
@@ -258,7 +282,7 @@ const TaskModal = ({ task, defaults, context, onClose }: OpenArgs & { onClose: (
                   readOnly={!access.plan || user?.role === 'executor'}
                   absence={(id) => {
                     if (draft.done) return null;
-                    const a = state.absences.find((x) => x.employeeId === id && isActive(x) && covers(x, new Date(draft.end)));
+                    const a = absentees.find((item) => item.id === id)?.a;
                     return a ? absenceType(a.type).label.toLowerCase() + (a.status === 'request' ? ' (заявка)' : '') : null;
                   }}
                 />

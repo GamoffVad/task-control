@@ -173,6 +173,21 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
     } finally { await repo.update(() => before); }
   });
 
+  it('сохраняет ссылки задач на командировки после переподключения и после удаления поездки', async () => {
+    const before = (await repo.read())!;
+    const source = before.tasks[0];
+    const trip = { id: 'trip-roundtrip', employeeId: source.assigneeIds[0], type: 'trip', from: '2030-11-12', to: '2030-11-15', note: '', status: 'approved' as const, decidedBy: 1, createdAt: NOW.toISOString() };
+    try {
+      await repo.update((data) => ({ ...data!, absences: [...data!.absences, trip], tasks: data!.tasks.map((task) => task.id === source.id ? { ...task, tripAbsenceIds: [trip.id] } : task) }));
+      const again = createMssqlRepo({ server: server!, database, ...(user ? { user } : {}), ...(password ? { password } : {}), encrypt: false, trustServerCertificate: true });
+      try {
+        expect((await again.read())!.tasks.find((task) => task.id === source.id)?.tripAbsenceIds).toEqual([trip.id]);
+        await again.update((data) => ({ ...data!, absences: data!.absences.filter((item) => item.id !== trip.id) }));
+        expect((await again.read())!.tasks.find((task) => task.id === source.id)?.tripAbsenceIds).toEqual([trip.id]);
+      } finally { await again.close?.(); }
+    } finally { await repo.update(() => before); }
+  });
+
   it('сохраняет рисунок через границу года и оба фрагмента после стирания в SQL Server', async () => {
     const before = (await repo.read())!;
     const stroke = { employeeId: 3, type: 'vacation', vacationType: 'annual', from: '2030-12-30', to: '2031-01-03', mode: 'paint' as const };
@@ -250,7 +265,7 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
       insert into dbo.corporate_settings values (1, N'Сохранить настройку');`);
     await raw("update dbo.tc_tasks set corporate_reference = N'Рабочий номер документа';");
     const removed: Record<string, string[]> = {
-      tc_users: ['hidden', 'annual_vacation_days'], tc_absences: ['duty_type', 'vacation_type', 'travel_days_before', 'travel_days_after'], tc_reports: ['period_end'], tc_units: ['manages_parent'],
+      tc_users: ['hidden', 'annual_vacation_days'], tc_absences: ['duty_type', 'vacation_type', 'travel_days_before', 'travel_days_after'], tc_reports: ['period_end'], tc_units: ['manages_parent'], tc_tasks: ['trip_absence_ids'],
     };
     const snapshot = async () => {
       const result: Record<string, unknown> = {};
@@ -271,6 +286,7 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
       expect(await snapshot()).toEqual(before);
       expect((await raw("select [hidden], [annual_vacation_days] from dbo.tc_users;")).recordset.every((row) => row.hidden === false && row.annual_vacation_days === null)).toBe(true);
       expect((await raw('select [manages_parent] from dbo.tc_units;')).recordset.every((row) => row.manages_parent === null)).toBe(true);
+      expect((await raw('select [trip_absence_ids] from dbo.tc_tasks;')).recordset.every((row) => row.trip_absence_ids === null)).toBe(true);
       // Ручной скрипт и два одновременно запускаемых процесса используют ту же схему и блокировку.
       await raw(schemaUpdateScript().replace(/^\ufeff/, ''));
       await Promise.all([applySchema(await poolFor(database)), applySchema(await poolFor(database))]);

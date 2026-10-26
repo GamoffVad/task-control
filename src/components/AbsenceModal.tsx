@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import {
   absenceDays,
   balanceFor,
@@ -12,7 +12,7 @@ import {
 } from '../lib/absences';
 import { ABSENCE_STATUS_LABELS, ABSENCE_TYPES, absenceType, employees, fullName, shortName } from '../lib/data';
 import { fmtDate, fromDateKey, plural, toDateKey } from '../lib/dates';
-import { absenceAccess, isManager } from '../lib/permissions';
+import { absenceAccess, isManager, taskAccess } from '../lib/permissions';
 import { useStore } from '../lib/store';
 import type { Absence, AbsenceStatus, AbsenceType } from '../lib/types';
 import { Checkbox, DateField, Dialog, Segmented, Select, TextInput } from '../kit';
@@ -20,8 +20,10 @@ import { Icon } from './Icons';
 import { vacationPeriodLabel, vacationTypeCode, vacationTypes, vacationYear } from '../lib/vacations';
 import { dutyTypeCode, dutyTypes } from '../lib/eventTypes';
 import { absColor } from './absColor';
+import { linkedTripCoversTask } from '../lib/taskTrips';
+import { EditorContext } from './taskEditor';
 
-type Props = { absence?: Absence; defaults?: Partial<AbsenceDraft>; onClose: () => void };
+type Props = { absence?: Absence; defaults?: Partial<AbsenceDraft>; onClose: () => void; onSaveDraft?: (draft: AbsenceDraft) => void };
 
 const STATUS_OPTIONS: { value: AbsenceStatus; label: string }[] = [
   { value: 'request', label: 'Заявка' },
@@ -30,9 +32,10 @@ const STATUS_OPTIONS: { value: AbsenceStatus; label: string }[] = [
 ];
 
 /** Создание, изменение и согласование отсутствия. */
-export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
+export const AbsenceModal = ({ absence, defaults, onClose, onSaveDraft }: Props) => {
   const { state, dispatch } = useStore();
   const user = state.user;
+  const editor = useContext(EditorContext);
   const manager = isManager(user);
   const access = absenceAccess(user, absence ?? null);
   const today = new Date();
@@ -56,6 +59,9 @@ export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
   const [roadBefore, setRoadBefore] = useState(String(absence?.travelDaysBefore ?? defaults?.travelDaysBefore ?? 0));
   const [roadAfter, setRoadAfter] = useState(String(absence?.travelDaysAfter ?? defaults?.travelDaysAfter ?? 0));
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [initialLinks] = useState(() => state.tasks.filter((task) => absence && task.tripAbsenceIds?.includes(absence.id)).map((task) => task.id));
+  const [linkedIds, setLinkedIds] = useState(initialLinks);
+  const [taskSearch, setTaskSearch] = useState('');
   const readOnly = !access.edit;
 
   const set = <K extends keyof AbsenceDraft>(k: K, v: AbsenceDraft[K]) => {
@@ -88,19 +94,29 @@ export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
   const leftNow = counted === 'vacation' ? before.vacation.left : counted === 'dayoff' ? before.dayoff.left : null;
   const leftAfter = counted === 'vacation' ? withThis.vacation.left : counted === 'dayoff' ? withThis.dayoff.left : null;
 
-  const clashing = valid && draft.type !== 'duty' ? state.tasks.filter((t) => !t.done && t.assigneeIds.includes(draft.employeeId) && covers(probe, new Date(t.end), today)) : [];
+  const clashing = valid && draft.type !== 'duty' && draft.status !== 'rejected' ? state.tasks.filter((t) => !t.done && t.assigneeIds.includes(draft.employeeId)
+    && covers(probe, new Date(t.end), today) && !linkedTripCoversTask({ ...t, tripAbsenceIds: linkedIds.includes(t.id) ? [probe.id] : [] }, probe)) : [];
+  const linkChanges = [...new Set([...initialLinks, ...linkedIds])].filter((id) => initialLinks.includes(id) !== linkedIds.includes(id)).map((taskId) => ({ taskId, linked: linkedIds.includes(taskId) }));
+  const normalizedQuery = taskSearch.toLocaleLowerCase('ru').replace(/ё/g, 'е');
+  const linkChoices = state.tasks.filter((task) => (task.assigneeIds.includes(draft.employeeId) || linkedIds.includes(task.id))
+    && task.title.toLocaleLowerCase('ru').replace(/ё/g, 'е').includes(normalizedQuery))
+    .sort((a, b) => Number(linkedIds.includes(b.id)) - Number(linkedIds.includes(a.id))
+      || Number(linkedTripCoversTask({ ...b, tripAbsenceIds: [probe.id] }, probe)) - Number(linkedTripCoversTask({ ...a, tripAbsenceIds: [probe.id] }, probe))
+      || a.end.localeCompare(b.end));
 
   const save = (status?: AbsenceStatus) => {
     const next = status ? { ...travelDraft, status } : travelDraft;
     const errs = validateAbsence(next, state.absences, today);
     setErrors(errs);
     if (Object.keys(errs).length) return;
-    dispatch({ type: 'saveAbsence', draft: next });
+    if (onSaveDraft) return onSaveDraft(next);
+    dispatch({ type: 'saveAbsence', draft: next, ...(linkChanges.length ? { taskLinks: linkChanges } : {}) });
     onClose();
   };
 
   const decide = (status: 'approved' | 'rejected') => {
     if (!absence) return save(status);
+    if (linkChanges.length) return save(status);
     dispatch({ type: 'decideAbsence', id: absence.id, status });
     onClose();
   };
@@ -145,6 +161,7 @@ export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
           {!manager && !absence && (
             <p className="help-note" style={{ margin: 0 }}>Заявка уйдёт руководителю на согласование. До решения она не уменьшает остаток.</p>
           )}
+          {onSaveDraft && <p className="help-note" role="note">Командировка будет создана и связана после сохранения задачи. Отмена задачи отменит и новый период.</p>}
 
           <div className="field-row">
             <div className="field">
@@ -153,6 +170,7 @@ export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
                 <Select<number>
                   variant="light"
                   label="Сотрудник"
+                  disabled={!!onSaveDraft}
                   value={draft.employeeId}
                   options={employees.map((e) => ({ value: e.id, label: shortName(e.id) }))}
                   onChange={(v) => set('employeeId', v)}
@@ -171,7 +189,7 @@ export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
                     label="Вид события"
                     value={draft.type}
                     options={typeOptions}
-                    disabled={readOnly}
+                    disabled={readOnly || !!onSaveDraft}
                     onChange={(v) => setDraft((d) => ({ ...d, type: v, to: v === 'sick' ? d.to : (d.to ?? d.from) }))}
                   />
                 </div>
@@ -259,6 +277,23 @@ export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
             </div>
           )}
 
+          {draft.type === 'trip' && !onSaveDraft && <section className="trip-related-tasks" aria-label="Задачи командировки">
+            <h3>Задачи командировки</h3>
+            <p className="field-hint">Отметьте задачи, которые выполняются в этой поездке. Связи применятся после сохранения события. Даты задач автоматически не меняются.</p>
+            <TextInput aria-label="Поиск задач командировки" value={taskSearch} onChange={(event) => setTaskSearch(event.target.value)} placeholder="Найти задачу по названию" />
+            <div className="trip-task-options">
+              {linkChoices.map((task) => <div key={task.id} className="trip-task-option">
+                <Checkbox checked={linkedIds.includes(task.id)} disabled={readOnly || !taskAccess(user, task).plan || (!linkedIds.includes(task.id) && (draft.status === 'rejected' || !task.assigneeIds.includes(draft.employeeId)))}
+                  onChange={(checked) => setLinkedIds((before) => checked ? [...before, task.id] : before.filter((id) => id !== task.id))}>
+                  {task.title} · срок {fmtDate(new Date(task.end))}
+                </Checkbox>
+                {linkedIds.includes(task.id) && !linkedTripCoversTask({ ...task, tripAbsenceIds: [probe.id] }, probe) && <span className="field-hint amber">Проверьте исполнителя, статус и даты: задача не помещается в эту командировку.</span>}
+                {editor && <button type="button" className="text-action" onClick={() => { onClose(); editor.openTask({ task }); }}>Открыть задачу «{task.title}»</button>}
+              </div>)}
+              {!linkChoices.length && <p className="field-hint">Задачи не найдены. Проверьте сотрудника и строку поиска.</p>}
+            </div>
+          </section>}
+
           <label className="field">
             <span className="caps">Комментарий</span>
             <TextInput value={draft.note} readOnly={readOnly} maxLength={500} placeholder="Основание, номер приказа или листа" onChange={(e) => set('note', e.target.value)} />
@@ -267,7 +302,7 @@ export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
           {manager && !readOnly && (
             <div className="field">
               <span className="caps">Статус</span>
-              <Segmented label="Статус события" value={draft.status} options={STATUS_OPTIONS} onChange={(v) => set('status', v)} />
+              <Segmented label="Статус события" value={draft.status} options={onSaveDraft ? STATUS_OPTIONS.filter((option) => option.value !== 'rejected') : STATUS_OPTIONS} onChange={(v) => set('status', v)} />
             </div>
           )}
 
@@ -286,7 +321,7 @@ export const AbsenceModal = ({ absence, defaults, onClose }: Props) => {
             ) : (
               <>
                 <button type="submit" className="btn btn--primary">
-                  <Icon.Save size={15} /> {manager ? 'Сохранить' : absence ? 'Сохранить заявку' : 'Подать заявку'}
+                  <Icon.Save size={15} /> {onSaveDraft ? 'Связать с задачей' : manager ? 'Сохранить' : absence ? 'Сохранить заявку' : 'Подать заявку'}
                 </button>
                 {manager && absence?.status === 'request' && (
                   <>

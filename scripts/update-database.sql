@@ -29,6 +29,7 @@ BEGIN TRY
     [row_id] nvarchar(64) null,
     [category] nvarchar(64) null,
     [assignee_ids] nvarchar(max) not null constraint df_tc_tasks_assignee_ids default ''[]'',
+    [trip_absence_ids] nvarchar(max) null,
     [start_at] datetimeoffset(3) not null constraint df_tc_tasks_start_at default sysdatetimeoffset(),
     [end_at] datetimeoffset(3) not null constraint df_tc_tasks_end_at default sysdatetimeoffset(),
     [doc_name] nvarchar(max) not null constraint df_tc_tasks_doc_name default '''',
@@ -47,6 +48,8 @@ BEGIN TRY
   EXEC(N'if col_length(''dbo.tc_tasks'', ''category'') is null alter table dbo.tc_tasks add [category] nvarchar(64) null');
 
   EXEC(N'if col_length(''dbo.tc_tasks'', ''assignee_ids'') is null alter table dbo.tc_tasks add [assignee_ids] nvarchar(max) not null constraint df_tc_tasks_assignee_ids default ''[]''');
+
+  EXEC(N'if col_length(''dbo.tc_tasks'', ''trip_absence_ids'') is null alter table dbo.tc_tasks add [trip_absence_ids] nvarchar(max) null');
 
   EXEC(N'if col_length(''dbo.tc_tasks'', ''start_at'') is null alter table dbo.tc_tasks add [start_at] datetimeoffset(3) not null constraint df_tc_tasks_start_at default sysdatetimeoffset()');
 

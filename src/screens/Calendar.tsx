@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode, type PointerEvent } from 'react';
 import { useTaskEditor } from '../components/taskEditor';
+import { TaskTripLabel } from '../components/TaskTripLabel';
 import { EmployeeFilter, GroupFilter } from '../components/ui';
 import { FilterCard, MultiSelect, PageHeader, SearchField, Segmented, Select, Stepper } from '../kit';
 import { Icon } from '../components/Icons';
@@ -380,6 +381,7 @@ const DayColumn = ({ day, tasks, now, clashes, drag, heights, onCreate, onOpen }
               <StateMark task={task} now={now} />
               {task.title}
             </span>
+            <TaskTripLabel task={task} />
             <span className="who">{whoOf(task)}</span>
           </span>
         </button>

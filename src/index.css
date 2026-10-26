@@ -972,6 +972,13 @@ td.name { color: var(--ink); font-weight: 600; }
   align-self: flex-start;
 }
 .cal-event-content { display: block; flex: none; min-width: 0; white-space: pre-wrap; }
+.task-trips { border-block: 1px dashed var(--dash); padding-block: 10px; display: grid; gap: 8px; }
+.task-trips .warn-note, .task-trips .warn-note p { margin: 0; }
+.trip-related-tasks { display: grid; gap: 8px; }
+.trip-related-tasks h3 { margin: 0; font-size: 14px; }
+.trip-task-options { max-height: 240px; overflow-y: auto; overscroll-behavior: contain; }
+.trip-task-option { padding-block: 8px; border-bottom: 1px dashed var(--dash); display: grid; gap: 5px; }
+.task-trip-label { display: block; font-size: 10px; color: var(--accent); margin-top: 4px; }
 @media (min-width: 1024px) and (max-width: 1399px) {
   .calendar-layout .calendar-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .calendar-layout .calendar-filters > .filter-card:last-child { grid-column: 1 / -1; padding-left: 0; border-left: none !important; }

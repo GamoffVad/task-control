@@ -19,6 +19,7 @@ import { normalizeVacationSettings, validVacationDays, validVacationSettings, va
 import type { VacationSettings } from './types';
 import { dutyDictionaryInUse, dutyTypeCode, dutyTypes, eventTypeExists, systemEvent, withDutyTypes } from './eventTypes';
 import { hasDictionaryColor } from './eventPresentation';
+import { selectTaskTrip, tripLinksError } from './taskTrips';
 
 export type DictionaryDraft = {
   id?: string;
@@ -45,13 +46,13 @@ export type UnitDraft = { id?: string; parentId: string | null; kind: UnitKind; 
 export type Action =
   | { type: 'login'; email: string; employeeId: number; role: Role; permissions?: Permission[] }
   | { type: 'logout' }
-  | { type: 'saveTask'; draft: TaskDraft; now?: Date }
+  | { type: 'saveTask'; draft: TaskDraft; newTrips?: AbsenceDraft[]; now?: Date }
   | { type: 'deleteTask'; id: string }
   | { type: 'submitReport'; weekStart: Date; periodEnd?: Date; now?: Date }
   | { type: 'sendMessage'; text: string; now?: Date }
   | { type: 'deleteMessage'; id: string }
   | { type: 'markChatRead'; now?: Date }
-  | { type: 'saveAbsence'; draft: AbsenceDraft; now?: Date }
+  | { type: 'saveAbsence'; draft: AbsenceDraft; taskLinks?: { taskId: string; linked: boolean }[]; now?: Date }
   | { type: 'paintAbsences'; stroke: AbsenceStroke; now?: Date }
   | { type: 'deleteAbsence'; id: string }
   | { type: 'decideAbsence'; id: string; status: Exclude<AbsenceStatus, 'request'> }
@@ -179,12 +180,30 @@ export const reducer = (state: AppState, action: Action): AppState => {
       const existing = action.draft.id ? state.tasks.find((t) => t.id === action.draft.id) : undefined;
       const allowed = applyDraft(state.user, existing, action.draft, userScope(state));
       if (!allowed) return state;
-      const { id: _id, ...rest } = allowed;
+      let working = state;
+      let tripIds = allowed.tripAbsenceIds ?? existing?.tripAbsenceIds ?? [];
+      const newTrips = action.newTrips ?? [];
+      if (newTrips.length > 20 || (newTrips.length && !taskAccess(state.user, existing ?? null).plan)) return state;
+      const seen = new Set<string>();
+      for (const draft of newTrips) {
+        if (!draft.id || seen.has(draft.id) || state.absences.some((item) => item.id === draft.id) || !tripIds.includes(draft.id)
+          || draft.type !== 'trip' || !eventTypeExists('trip', working.dictionaries) || !allowed.assigneeIds.includes(draft.employeeId)
+          || (!hasPermission(state.user, 'absences.manage') && draft.employeeId !== state.user?.employeeId)
+          || Object.keys(validateAbsence({ ...draft, id: undefined }, working.absences, now)).length) return state;
+        seen.add(draft.id);
+        const next = saveAbsence(working, { ...draft, id: undefined }, now);
+        if (next === working) return state;
+        const created = next.absences[next.absences.length - 1];
+        tripIds = tripIds.map((id) => id === draft.id ? created.id : id);
+        working = next;
+      }
+      if (tripLinksError({ ...allowed, tripAbsenceIds: tripIds }, working.absences, existing?.tripAbsenceIds)) return state;
+      const { id: _id, tripAbsenceIds: _tripIds, ...rest } = allowed;
       const doneAt = rest.done ? (existing?.done && existing.doneAt ? existing.doneAt : now.toISOString()) : null;
       const score = rest.score === null ? null : clampScore(rest.score);
-      const task: Task = { ...rest, score, id: existing?.id ?? newId('task'), doneAt };
+      const task: Task = { ...rest, ...(tripIds.length ? { tripAbsenceIds: tripIds } : {}), score, id: existing?.id ?? newId('task'), doneAt };
       const tasks = existing ? state.tasks.map((t) => (t.id === task.id ? task : t)) : [...state.tasks, task];
-      return { ...state, tasks };
+      return { ...working, tasks };
     }
     case 'deleteTask':
       if (!hasPermission(state.user, 'tasks.delete')) return state;
@@ -234,7 +253,25 @@ export const reducer = (state: AppState, action: Action): AppState => {
       if (draft.type === 'duty' && !dutyTypes(state.dictionaries).some((e) => e.code === dutyTypeCode(draft, state.dictionaries))) return state;
       const code = vacationTypeCode(draft, state.dictionaries);
       if (draft.type === 'vacation' && !vacationTypes(state.dictionaries).some((e) => e.code === code)) return state;
-      return saveAbsence(state, { ...draft, vacationType: draft.type === 'vacation' ? code : undefined }, action.now ?? new Date());
+      const saved = saveAbsence(state, { ...draft, vacationType: draft.type === 'vacation' ? code : undefined }, action.now ?? new Date());
+      if (saved === state || action.taskLinks === undefined) return saved;
+      const absence = draft.id ? saved.absences.find((item) => item.id === draft.id)! : saved.absences[saved.absences.length - 1];
+      const changes = action.taskLinks;
+      if (!Array.isArray(changes) || changes.length > 1000 || new Set(changes.map((change) => change.taskId)).size !== changes.length
+        || changes.some((change) => typeof change.linked !== 'boolean' || !state.tasks.some((task) => task.id === change.taskId))) return state;
+      let denied = false;
+      const tasks = state.tasks.map((task) => {
+        const change = changes.find((item) => item.taskId === task.id);
+        if (!change) return task;
+        const before = !!task.tripAbsenceIds?.includes(absence.id), after = change.linked;
+        if (before === after) return task;
+        if (!taskVisible(task, userScope(state)) || !taskAccess(state.user, task).plan
+          || (after && (absence.type !== 'trip' || absence.status === 'rejected' || !task.assigneeIds.includes(absence.employeeId)))) { denied = true; return task; }
+        const ids = after ? selectTaskTrip(task, absence.employeeId, absence.id, saved.absences) : (task.tripAbsenceIds ?? []).filter((id) => id !== absence.id);
+        const { tripAbsenceIds: _links, ...base } = task;
+        return { ...base, ...(ids.length ? { tripAbsenceIds: ids } : {}) };
+      });
+      return denied ? state : { ...saved, tasks };
     }
     case 'saveVacationSettings':
       return hasPermission(state.user, 'entitlements.manage') && validVacationSettings(action.settings) ? { ...state, vacationSettings: { ...action.settings } } : state;

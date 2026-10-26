@@ -181,6 +181,8 @@ export type Task = {
   rowId: string | null;
   category: Category | null;
   assigneeIds: number[];
+  /** Конкретные командировки исполнителей; одна поездка на каждого исполнителя. */
+  tripAbsenceIds?: string[];
   /** ISO-дата начала. */
   start: string;
   /** ISO-дата окончания — это же срок исполнения. */

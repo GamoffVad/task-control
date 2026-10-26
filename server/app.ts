@@ -18,6 +18,7 @@ import { ACCESS_VERSION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS, effectiv
 import { CATEGORIES, employeeById, planRows, syncCategories, syncStaff } from '../src/lib/data';
 import { DEFAULT_UNITS, MAIN_DEPARTMENT_ID } from '../src/lib/units';
 import { validateTask, type TaskDraft } from '../src/lib/logic';
+import { tripLinksError } from '../src/lib/taskTrips';
 import { fromData, PERSISTED, reducer, toData, type Action } from '../src/lib/reducer';
 import { DEFAULT_DICTIONARIES } from '../src/lib/seed';
 import { DEFAULT_TEMPLATES } from '../src/lib/templates';
@@ -25,7 +26,7 @@ import { validVacationDays, validVacationSettings, vacationTypeCode, vacationTyp
 import { dutyTypeCode, dutyTypes, eventTypeExists, withDutyTypes } from '../src/lib/eventTypes';
 import type { VacationSettings } from '../src/lib/types';
 import { normalizePeriodSettings, validPeriodSettings, validReportRange } from '../src/lib/periods';
-import type { Data, DictionaryKind, Entitlement, ManagedUser, Permission, Role, ScoringSettings, UnitKind, User } from '../src/lib/types';
+import type { Absence, Data, DictionaryKind, Entitlement, ManagedUser, Permission, Role, ScoringSettings, UnitKind, User } from '../src/lib/types';
 import { signToken, verifyToken } from './auth';
 import type { Repo } from './repo';
 import { DatabaseConnectionError, type DatabaseConnectionControl } from './databaseConnection';
@@ -112,12 +113,14 @@ const checkTaskDraft = (d: unknown, data: Data): TaskDraft => {
   if (!str(d.docName, 300) || !str(d.docNumber, 100) || !str(d.result, 4000)) bad('документ или результат');
   if (typeof d.done !== 'boolean') bad('отметка об исполнении');
   if (d.score !== null && typeof d.score !== 'number') bad('баллы');
+  if (d.tripAbsenceIds !== undefined && (!Array.isArray(d.tripAbsenceIds) || d.tripAbsenceIds.length > 20 || !d.tripAbsenceIds.every((id) => str(id, 100)))) bad('связи с командировками');
   const draft: TaskDraft = {
     ...(d.id ? { id: d.id as string } : {}),
     title: d.title as string,
     rowId: d.rowId as string | null,
     category: d.category as TaskDraft['category'],
     assigneeIds: d.assigneeIds as number[],
+    ...(d.tripAbsenceIds !== undefined ? { tripAbsenceIds: d.tripAbsenceIds as string[] } : {}),
     start: new Date(d.start as string).toISOString(),
     end: new Date(d.end as string).toISOString(),
     docName: d.docName as string,
@@ -128,6 +131,8 @@ const checkTaskDraft = (d: unknown, data: Data): TaskDraft => {
   };
   const errors = Object.values(validateTask(draft));
   if (errors.length) throw new HttpError(400, errors[0]!);
+  const tripError = tripLinksError(draft, data.absences, data.tasks.find((task) => task.id === draft.id)?.tripAbsenceIds);
+  if (tripError) throw new HttpError(400, tripError);
   return draft;
 };
 
@@ -167,8 +172,17 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
   if (!isObj(raw) || typeof raw.type !== 'string' || !PERSISTED.includes(raw.type as Action['type'])) bad('действие');
   const a = raw as Record<string, unknown>;
   switch (a.type) {
-    case 'saveTask':
-      return { type: 'saveTask', draft: checkTaskDraft(a.draft, data), now };
+    case 'saveTask': {
+      if (a.newTrips !== undefined && (!Array.isArray(a.newTrips) || a.newTrips.length > 20)) bad('новые командировки');
+      const temporary: Absence[] = [];
+      const newTrips = ((a.newTrips ?? []) as unknown[]).map((value) => {
+        const draft = checkAbsenceDraft(value, { ...data, absences: [...data.absences, ...temporary] }, now);
+        if (!draft.id || draft.type !== 'trip' || draft.status === 'rejected' || [...data.absences, ...temporary].some((item) => item.id === draft.id)) bad('новая командировка');
+        temporary.push({ ...draft, id: draft.id!, createdAt: now.toISOString(), decidedBy: null });
+        return draft;
+      });
+      return { type: 'saveTask', draft: checkTaskDraft(a.draft, { ...data, absences: [...data.absences, ...temporary] }), ...(newTrips.length ? { newTrips } : {}), now };
+    }
     case 'deleteTask':
       if (!str(a.id, 100)) bad('идентификатор задачи');
       return { type: 'deleteTask', id: a.id as string };
@@ -195,8 +209,12 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
         ...(s.type === 'duty' ? { dutyType: dutyTypeCode(s, data.dictionaries) } : {}),
       }, now };
     }
-    case 'saveAbsence':
-      return { type: 'saveAbsence', draft: checkAbsenceDraft(a.draft, data, now), now };
+    case 'saveAbsence': {
+      if (a.taskLinks !== undefined && (!Array.isArray(a.taskLinks) || a.taskLinks.length > 1000
+        || !a.taskLinks.every((change) => isObj(change) && str(change.taskId, 100) && typeof change.linked === 'boolean' && data.tasks.some((task) => task.id === change.taskId))
+        || new Set(a.taskLinks.map((change) => (change as { taskId: string }).taskId)).size !== a.taskLinks.length)) bad('связанные задачи');
+      return { type: 'saveAbsence', draft: checkAbsenceDraft(a.draft, data, now), ...(a.taskLinks !== undefined ? { taskLinks: a.taskLinks as { taskId: string; linked: boolean }[] } : {}), now };
+    }
     case 'deleteAbsence':
       if (!str(a.id, 100)) bad('идентификатор отсутствия');
       return { type: 'deleteAbsence', id: a.id as string };

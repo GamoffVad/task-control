@@ -61,6 +61,7 @@ export const TABLES: SchemaTable[] = [
       { name: 'row_id', type: 'nvarchar(64)', nullable: true },
       { name: 'category', type: 'nvarchar(64)', nullable: true },
       { name: 'assignee_ids', type: 'nvarchar(max)', default: "'[]'" },
+      { name: 'trip_absence_ids', type: 'nvarchar(max)', nullable: true },
       { name: 'start_at', type: 'datetimeoffset(3)', default: NOW_SQL },
       { name: 'end_at', type: 'datetimeoffset(3)', default: NOW_SQL },
       { name: 'doc_name', type: 'nvarchar(max)', default: "''" },
@@ -381,13 +382,15 @@ const readAll = async (q: Q): Promise<Data | null> => {
 
   return {
     tasks: tasks.map((x) => {
-      const t = x as unknown as { id: string; title: string; row_id: string | null; category: string | null; assignee_ids: string; start_at: Date; end_at: Date; doc_name: string; doc_number: string; result: string; done: boolean; score: number | null; done_at: Date | null };
+      const t = x as unknown as { id: string; title: string; row_id: string | null; category: string | null; assignee_ids: string; trip_absence_ids: string | null; start_at: Date; end_at: Date; doc_name: string; doc_number: string; result: string; done: boolean; score: number | null; done_at: Date | null };
+      const trips = json<string[]>(t.trip_absence_ids, []);
       return {
         id: t.id,
         title: t.title,
         rowId: t.row_id,
         category: t.category,
         assigneeIds: json<number[]>(t.assignee_ids, []),
+        ...(trips.length ? { tripAbsenceIds: trips } : {}),
         start: iso(t.start_at)!,
         end: iso(t.end_at)!,
         docName: t.doc_name,
@@ -483,10 +486,10 @@ const TASKS: Table<Task> = {
       q,
       'tc_tasks',
       '[id] = @v1',
-      '[title]=@v2, [row_id]=@v3, [category]=@v4, [assignee_ids]=@v5, [start_at]=@v6, [end_at]=@v7, [doc_name]=@v8, [doc_number]=@v9, [result]=@v10, [done]=@v11, [score]=@v12, [done_at]=@v13',
-      '[id],[title],[row_id],[category],[assignee_ids],[start_at],[end_at],[doc_name],[doc_number],[result],[done],[score],[done_at]',
-      '@v1,@v2,@v3,@v4,@v5,@v6,@v7,@v8,@v9,@v10,@v11,@v12,@v13',
-      [S(t.id, 64), S(t.title), S(t.rowId, 64), S(t.category, 64), J(t.assigneeIds), DT(t.start), DT(t.end), S(t.docName), S(t.docNumber), S(t.result), BIT(t.done), NUM(t.score), DT(t.doneAt)],
+      '[title]=@v2, [row_id]=@v3, [category]=@v4, [assignee_ids]=@v5, [start_at]=@v6, [end_at]=@v7, [doc_name]=@v8, [doc_number]=@v9, [result]=@v10, [done]=@v11, [score]=@v12, [done_at]=@v13, [trip_absence_ids]=@v14',
+      '[id],[title],[row_id],[category],[assignee_ids],[start_at],[end_at],[doc_name],[doc_number],[result],[done],[score],[done_at],[trip_absence_ids]',
+      '@v1,@v2,@v3,@v4,@v5,@v6,@v7,@v8,@v9,@v10,@v11,@v12,@v13,@v14',
+      [S(t.id, 64), S(t.title), S(t.rowId, 64), S(t.category, 64), J(t.assigneeIds), DT(t.start), DT(t.end), S(t.docName), S(t.docNumber), S(t.result), BIT(t.done), NUM(t.score), DT(t.doneAt), J(t.tripAbsenceIds ?? [])],
     ),
   remove: (q, t) => run(q, 'delete from dbo.tc_tasks where [id] = @v1', [S(t.id, 64)]),
 };

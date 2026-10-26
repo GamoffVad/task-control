@@ -2,6 +2,7 @@
 import { addDays, fromDateKey, startOfDay, toDateKey } from './dates';
 import type { Absence, AbsenceType, Entitlement, ManagedUser, Task, VacationSettings } from './types';
 import { annualVacationDays, vacationPeriod, vacationYear } from './vacations';
+import { linkedTripCoversTask, type TripTask } from './taskTrips';
 
 /** Больничный без даты окончания считается длящимся ещё столько дней после сегодняшнего. */
 export const OPEN_SICK_DAYS = 3;
@@ -129,20 +130,23 @@ export type ClashSeverity = 'overdue' | 'risk' | 'request';
 
 export type Clash = { task: Task; employeeId: number; absence: Absence; severity: ClashSeverity };
 
+/** Единое правило для окна задачи, календаря, контроля и Тетриса. */
+export const taskAbsenceConflicts = (task: TripTask, absences: Absence[], today = new Date()): Absence[] =>
+  absences.filter((absence) => task.assigneeIds.includes(absence.employeeId) && isActive(absence) && isAbsence(absence)
+    && covers(absence, new Date(task.end), today) && !linkedTripCoversTask(task, absence, absences));
+
 /**
  * Пересечение: срок неисполненной задачи приходится на отсутствие её исполнителя.
  * Прошедший срок — «просрочено», будущий — «под угрозой», отсутствие по заявке — «по заявке».
  */
 export const findClashes = (tasks: Task[], absences: Absence[], today: Date = new Date()): Clash[] => {
-  const active = absences.filter((a) => isActive(a) && isAbsence(a));
   const t = startOfDay(today);
   const out: Clash[] = [];
   for (const task of tasks) {
     if (task.done) continue;
     const end = new Date(task.end);
-    for (const employeeId of task.assigneeIds) {
-      const absence = active.find((a) => a.employeeId === employeeId && covers(a, end, today));
-      if (!absence) continue;
+    for (const absence of taskAbsenceConflicts(task, absences, today)) {
+      const employeeId = absence.employeeId;
       const severity: ClashSeverity = absence.status === 'request' ? 'request' : startOfDay(end) < t ? 'overdue' : 'risk';
       out.push({ task, employeeId, absence, severity });
     }
