@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -59,7 +59,7 @@ describe('выбор исполнителей', () => {
     render(<Harness choices={many} />);
     const search = screen.getByRole('searchbox', { name: 'Найти сотрудника' });
     expect(screen.getByText('выбрано 0 из 30')).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: 'Без группы' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Выбрать: Без группы' })).toBeInTheDocument();
     await user.type(search, 'федор');
     expect(screen.getAllByRole('checkbox')).toHaveLength(1);
     await user.click(screen.getByRole('checkbox', { name: 'Фёдоров И.П.' }));
@@ -80,10 +80,9 @@ describe('выбор исполнителей', () => {
   it('выбирает и снимает группу целиком', async () => {
     const user = userEvent.setup();
     render(<Harness choices={employees} initial={[1]} />);
-    const group = screen.getByRole('group', { name: 'Проектная группа 1' });
-    await user.click(within(group).getByRole('button', { name: 'выбрать группу' }));
+    await user.click(screen.getByRole('button', { name: 'Выбрать: Проектная группа 1' }));
     expect(screen.getByTestId('ids')).toHaveTextContent('1,3,4');
-    await user.click(within(group).getByRole('button', { name: 'снять группу' }));
+    await user.click(screen.getByRole('button', { name: 'Снять: Проектная группа 1' }));
     expect(screen.getByTestId('ids')).toHaveTextContent(/^1$/);
   });
 

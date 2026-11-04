@@ -52,6 +52,7 @@ describe('подразделения и адаптивные карточки к
       return original.call(this);
     });
     setup(view);
+    fireEvent.click(screen.getByRole('button', { name: 'Перемещение карточек' }));
     const card = document.querySelector<HTMLElement>('[data-calendar-task="first"]')!;
     expect(parseFloat(card.style.height)).toBeGreaterThanOrEqual(220);
     expect(within(card).getByText('Сидоров Д.Е.')).toBeInTheDocument();

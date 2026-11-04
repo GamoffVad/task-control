@@ -22,7 +22,7 @@ import { tripLinksError } from '../src/lib/taskTrips';
 import { fromData, PERSISTED, reducer, toData, type Action } from '../src/lib/reducer';
 import { DEFAULT_DICTIONARIES } from '../src/lib/seed';
 import { DEFAULT_TEMPLATES } from '../src/lib/templates';
-import { validVacationDays, validVacationSettings, vacationTypeCode, vacationTypes } from '../src/lib/vacations';
+import { addDefaultVacationTypes, validVacationDays, validVacationSettings, vacationTypeCode, vacationTypes } from '../src/lib/vacations';
 import { dutyTypeCode, dutyTypes, eventTypeExists, withDutyTypes } from '../src/lib/eventTypes';
 import type { VacationSettings } from '../src/lib/types';
 import { normalizePeriodSettings, validPeriodSettings, validReportRange } from '../src/lib/periods';
@@ -111,12 +111,14 @@ const checkTaskDraft = (d: unknown, data: Data): TaskDraft => {
   // Порядок дат проверяется и здесь: в интерфейсе он тоже проверяется, но сервер данным клиента не доверяет.
   if (new Date(d.end as string) < new Date(d.start as string)) bad('сроки: окончание раньше начала');
   if (!str(d.docName, 300) || !str(d.docNumber, 100) || !str(d.result, 4000)) bad('документ или результат');
+  if (d.local !== undefined && typeof d.local !== 'boolean') bad('признак личной заметки');
   if (typeof d.done !== 'boolean') bad('отметка об исполнении');
   if (d.score !== null && typeof d.score !== 'number') bad('баллы');
   if (d.tripAbsenceIds !== undefined && (!Array.isArray(d.tripAbsenceIds) || d.tripAbsenceIds.length > 20 || !d.tripAbsenceIds.every((id) => str(id, 100)))) bad('связи с командировками');
   const draft: TaskDraft = {
     ...(d.id ? { id: d.id as string } : {}),
     title: d.title as string,
+    ...(d.local === true ? { local: true } : {}),
     rowId: d.rowId as string | null,
     category: d.category as TaskDraft['category'],
     assigneeIds: d.assigneeIds as number[],
@@ -244,7 +246,8 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
       if (!isObj(draft)) bad('значение справочника');
       const entry = draft as Record<string, unknown>;
       if (entry.id !== undefined && !str(entry.id, 100)) bad('идентификатор значения');
-      if (!['taskCategory', 'absenceType', 'taskStatus', 'vacationType', 'dutyType'].includes(entry.dictionary as string)) bad('справочник');
+      if (!['taskCategory', 'absenceType', 'taskStatus', 'vacationType', 'dutyType', 'position', 'rank'].includes(entry.dictionary as string)) bad('справочник');
+      if (entry.order !== undefined && (!Number.isInteger(entry.order) || (entry.order as number) < 1 || (entry.order as number) > 1000000)) bad('порядок значения');
       if (entry.color !== undefined && (typeof entry.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(entry.color))) bad('цвет значения');
       if (!str(entry.code, 48) || !str(entry.title, 160)) bad('код или название значения');
       return {
@@ -255,6 +258,7 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
           code: entry.code as string,
           title: entry.title as string,
           ...(typeof entry.color === 'string' ? { color: entry.color } : {}),
+          ...(typeof entry.order === 'number' ? { order: entry.order } : {}),
         },
       };
     }
@@ -280,6 +284,7 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
       if (!['administrator', 'manager', 'executor'].includes(a.role as string) || typeof a.active !== 'boolean' || (a.windowsLogin !== undefined && (!str(a.windowsLogin, 128) || !(a.windowsLogin as string).trim()))) bad('роль или Windows-логин пользователя');
       if (a.unitId !== undefined && (typeof a.unitId !== 'string' || (a.unitId !== '' && !(data.units ?? DEFAULT_UNITS).some((u) => u.id === a.unitId)))) bad('подразделение пользователя');
       if (a.fullName !== undefined && (!str(a.fullName, 200) || !String(a.fullName).trim())) bad('ФИО сотрудника');
+      if (a.rank !== undefined && !str(a.rank, 200)) bad('звание сотрудника');
       if (a.position !== undefined && !str(a.position, 200)) bad('должность сотрудника');
       if (a.email !== undefined && (!str(a.email, 200) || !String(a.email).trim())) bad('электронную почту сотрудника');
       return {
@@ -295,6 +300,7 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
         ...(a.unitId !== undefined ? { unitId: a.unitId as string } : {}),
         ...(a.fullName !== undefined ? { fullName: a.fullName as string } : {}),
         ...(a.position !== undefined ? { position: a.position as string } : {}),
+        ...(a.rank !== undefined ? { rank: a.rank as string } : {}),
         ...(a.email !== undefined ? { email: a.email as string } : {}),
       };
     case 'addManagedUser': {
@@ -302,6 +308,7 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
       const account = a.account as Record<string, unknown>;
       if (typeof account.employeeId !== 'number' || !Number.isInteger(account.employeeId) || account.employeeId < 1) bad('идентификатор пользователя');
       if (!str(account.fullName, 200) || !String(account.fullName).trim() || !str(account.position, 200) || !str(account.email, 200) || !str(account.windowsLogin, 128) || !String(account.windowsLogin).trim()) bad('данные пользователя');
+      if (account.rank !== undefined && !str(account.rank, 200)) bad('звание сотрудника');
       if (!['administrator', 'manager', 'executor'].includes(account.role as string) || typeof account.active !== 'boolean') bad('роль пользователя');
       if (account.hidden !== undefined && typeof account.hidden !== 'boolean') bad('скрытие сотрудника');
       if (account.annualVacationDays !== undefined && !validVacationDays(account.annualVacationDays as number)) bad('ежегодную норму отпуска (целое число от 0 до 366)');
@@ -459,7 +466,7 @@ const forUser = (data: Data, user: User): Data => {
   const scope = scopeOf(user.employeeId, data.users, data.units ?? DEFAULT_UNITS, data.roles);
   return {
     ...rest,
-    tasks: visibleTasks(data.tasks, scope),
+    tasks: visibleTasks(data.tasks, scope, user.employeeId),
     reports: visibleReports(data.reports, scope),
     chatReads: (data.chatReads ?? []).filter((r) => r.employeeId === user.employeeId),
   };
@@ -477,7 +484,7 @@ export const createApi = ({ repo, connection, secret, now = () => new Date(), wi
     const storedRoles = data.roles ?? DEFAULT_ROLES;
     const roles = data.accessVersion === ACCESS_VERSION ? storedRoles : withAddedPermissions(storedRoles);
     const access = recoverAdministrativeAccess(normalizeUsers(data.users ?? []), roles, fallbackAdministrator);
-    return { ...data, ...access, authentication, dictionaries: withDutyTypes(data.dictionaries ?? DEFAULT_DICTIONARIES) };
+    return { ...data, ...access, authentication, dictionaries: withDutyTypes(data.vacationTypesVersion === 1 ? (data.dictionaries ?? DEFAULT_DICTIONARIES) : addDefaultVacationTypes(data.dictionaries ?? DEFAULT_DICTIONARIES)), vacationTypesVersion: 1 };
   };
   /**
    * Начальные данные пустой базы — без тестовых данных: справочники, роли, шаблоны и разделы плана
@@ -499,9 +506,13 @@ export const createApi = ({ repo, connection, secret, now = () => new Date(), wi
   };
   /** Данные; пустая база получает справочники по умолчанию, без тестовых данных. */
   const load = async (): Promise<Data> => {
-    const data = (await repo.read()) ?? await repo.update((cur) => cur ?? initialData());
+    let data = (await repo.read()) ?? await repo.update((cur) => cur ?? initialData());
+    if (data.vacationTypesVersion !== 1) data = await repo.update((cur) => {
+      const current = cur ?? initialData();
+      return current.vacationTypesVersion === 1 ? current : { ...current, dictionaries: addDefaultVacationTypes(current.dictionaries ?? DEFAULT_DICTIONARIES), vacationTypesVersion: 1 };
+    });
     // Проверки сотрудников (исполнители, отсутствия, нормы) — по актуальному составу из базы.
-    syncStaff(data.users ?? DEFAULT_USERS, data.units ?? DEFAULT_UNITS);
+    syncStaff(data.users ?? DEFAULT_USERS, data.units ?? DEFAULT_UNITS, data.dictionaries ?? DEFAULT_DICTIONARIES);
     syncCategories(data.dictionaries ?? DEFAULT_DICTIONARIES);
     return normalizeData(data);
   };

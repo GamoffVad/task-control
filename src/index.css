@@ -845,6 +845,9 @@ td.name { color: var(--ink); font-weight: 600; }
 }
 .chip.cat { border: 1px solid rgb(var(--c-rgb) / var(--cal-event-edge)); background: var(--cal-event-surface); }
 .chip.cat:hover { background: rgb(var(--c-rgb) / var(--cal-event-mix-hover)); border-color: var(--c); }
+/* Личные заметки отличаются от остальных задач и в сетке, и в месячном виде. */
+.cal-event.cat.calendar-local-note, .chip.cat.calendar-local-note { background-image: repeating-linear-gradient(135deg, transparent 0 7px, rgb(var(--c-rgb) / 0.14) 7px 9px); }
+.cal-event.cat.calendar-local-note:hover, .chip.cat.calendar-local-note:hover { background-image: repeating-linear-gradient(135deg, transparent 0 7px, rgb(var(--c-rgb) / 0.14) 7px 9px); }
 .cal-event.cat.overdue, .chip.cat.overdue { border-color: var(--danger); }
 .cal-event.done, .chip.cat.done { opacity: 1; }
 .cal-event.overdue .t, .chip.cat.overdue .num { color: var(--danger); font-weight: 500; }
@@ -1588,7 +1591,8 @@ a.label:hover { color: var(--accent); }
 .tetris-page [role="tabpanel"][hidden] { display: none; }
 .tt-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; order: 1; width: 100%; min-width: 0; }
 .tt-tools[hidden] { display: none; }
-.tt-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.tt-actions { display: flex; align-items: center; gap: 8px; flex: none; margin-left: auto; order: 2; }
+.tt-actions[hidden] { display: none; }
 .tt-actions .icon-btn, .file-export { width: 44px; height: 44px; flex: none; padding: 0; }
 .tt-actions .btn--primary { background: var(--accent); color: var(--sheet); border-color: var(--accent); }
 .tt-actions .btn--primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
@@ -1603,6 +1607,7 @@ a.label:hover { color: var(--accent); }
   .tt-title { flex: none; }
   .tt-sub { display: none; }
   .tt-tools { order: 0; width: auto; flex: 1 1 auto; flex-wrap: nowrap; gap: 12px; }
+  .tt-actions { order: 0; margin-left: 0; }
   .tt-brush-tools { flex-wrap: nowrap; gap: 8px; flex: none; }
   .tt-brush-choice { width: clamp(10rem, 12vw, 16rem); }
   .tt-group { flex: 1 1 9rem; width: auto; max-width: 210px; gap: 6px; }

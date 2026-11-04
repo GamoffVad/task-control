@@ -68,14 +68,13 @@ export const Absences = () => {
   const year = month.getFullYear();
   const balanceDate = today >= monthStart && today <= monthEnd ? today : month;
 
-  // Тот же порядок, что в дереве «Сотрудники»: группы, затем сотрудники каждой группы.
+  // Единый порядок по должности во всех подразделениях.
   const { people, staffGroup, allPeople } = useMemo(() => {
-    const staffOrder = new Map(department.groups.flatMap((g) => g.employeeIds).map((id, index) => [id, index]));
     return { allPeople: [...employees], staffGroup: new Map(department.groups.flatMap((g) => g.employeeIds.map((id) => [id, g.id] as const))),
-      people: [...groupMembers(group)].sort((a, b) => (staffOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (staffOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER)) };
+      people: [...groupMembers(group)] };
     // syncStaff обновляет живые employees/department при изменении этих двух наборов.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [group, state.users, state.units]);
+  }, [group, state.users, state.units, state.dictionaries]);
   const clashes = useMemo(() => findClashes(state.tasks, state.absences), [state.tasks, state.absences]);
   // Исполнитель видит пересечения только по своим задачам.
   const myClashes = manager ? clashes : clashes.filter((c) => c.employeeId === me);
@@ -211,14 +210,6 @@ export const Absences = () => {
             />
           </div>
           {brush.tools}
-          <div className="tt-actions">
-            <button type="button" className="icon-btn file-export" aria-label="Выгрузить в Excel" data-tip="Выгрузить в Excel" onClick={exportExcel}>
-              <Icon.Excel size={22} />
-            </button>
-            <button type="button" className="icon-btn btn--primary" aria-label={manager ? 'Событие' : 'Заявка на событие'} data-tip={manager ? 'Создать событие' : 'Подать заявку на событие'} onClick={() => create(me)}>
-              <Icon.Plus size={20} />
-            </button>
-          </div>
         </div>
         <div className="seg tt-tabs" role="tablist" aria-label="Раздел Тетриса" onKeyDown={(e) => {
           if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
@@ -229,6 +220,14 @@ export const Absences = () => {
           document.getElementById(`tt-tab-${next}`)?.focus();
         }}>
           {TETRIS_TABS.map((item) => <button key={item.id} type="button" role="tab" id={`tt-tab-${item.id}`} data-label={item.label} aria-controls={`tt-panel-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} onClick={() => selectTab(item.id)}><span className="seg-label">{item.label}</span></button>)}
+        </div>
+        <div className="tt-actions" hidden={tab !== 'graph'}>
+            <button type="button" className="icon-btn file-export" aria-label="Выгрузить в Excel" data-tip="Выгрузить в Excel" onClick={exportExcel}>
+              <Icon.Excel size={22} />
+            </button>
+            <button type="button" className="icon-btn btn--primary" aria-label={manager ? 'Событие' : 'Заявка на событие'} data-tip={manager ? 'Создать событие' : 'Подать заявку на событие'} onClick={() => create(me)}>
+              <Icon.Plus size={20} />
+            </button>
         </div>
       </div>
 

@@ -30,10 +30,10 @@ export const scopeOf = (employeeId: number, users: ManagedUser[], units: Unit[],
 export const inScope = (scope: Scope, employeeId: number): boolean => scope === null || scope.has(employeeId);
 
 /** Задача видна, если хотя бы один её исполнитель входит в область видимости. */
-export const taskVisible = (task: Pick<Task, 'assigneeIds'>, scope: Scope): boolean =>
-  scope === null || task.assigneeIds.some((id) => scope.has(id));
+export const taskVisible = (task: Pick<Task, 'assigneeIds' | 'local'>, scope: Scope, viewerId?: number): boolean =>
+  task.local ? viewerId !== undefined && task.assigneeIds.length === 1 && task.assigneeIds[0] === viewerId : scope === null || task.assigneeIds.some((id) => scope.has(id));
 
-export const visibleTasks = (tasks: Task[], scope: Scope): Task[] => (scope === null ? tasks : tasks.filter((task) => taskVisible(task, scope)));
+export const visibleTasks = (tasks: Task[], scope: Scope, viewerId?: number): Task[] => tasks.filter((task) => taskVisible(task, scope, viewerId));
 
 /** Записи отчётов — только по сотрудникам из области видимости: отчёт недели остаётся, чужие строки в нём скрыты. */
 export const visibleReports = (reports: Report[], scope: Scope): Report[] =>

@@ -4,7 +4,7 @@ import { AbsencePanel } from '../components/AbsencePanel';
 import { useTaskEditor } from '../components/taskEditor';
 import { PeriodPicker } from '../components/ui';
 import { FilterCard } from '../kit';
-import { department, employeeById, fullName, initials, shortName } from '../lib/data';
+import { department, employees, employeeById, fullName, initials, shortName } from '../lib/data';
 import { fmtDate, fmtNum, PERIOD_LABELS, plural } from '../lib/dates';
 import { employeeScoreContext, entriesInPeriod, isOverdue } from '../lib/logic';
 import { isManager } from '../lib/permissions';
@@ -53,34 +53,24 @@ export const Employees = () => {
     <div className="split split--300 employees-layout">
       <aside className="panel employee-directory" aria-label="Структура подразделения">
         <span className="caps">{department.name}</span>
-        {department.groups.filter((g) => g.employeeIds.some((eid) => inScope(scope, eid))).map((g) => (
-          <div className="tree-group" key={g.id}>
-            <span className="caps" style={{ color: 'var(--ink-4)' }}>{g.name}</span>
-            {g.employeeIds.filter((eid) => inScope(scope, eid)).map((eid) => {
-              const e = employeeById.get(eid)!;
-              const c = counts.get(eid);
-              return (
-                <Link key={eid} to={`/employees/${eid}`} className={`tree-row${eid === selected ? ' active' : ''}`} aria-current={eid === selected ? 'page' : undefined}>
-                  <span className="avatar">{initials(eid)}</span>
-                  <span className="grow">
-                    {shortName(eid)}
-                    {(() => {
-                      // Сегодня отсутствует — красная точка у фамилии, подробности в подсказке.
-                      const a = absenceInPeriod(state.absences, eid, new Date(), new Date());
-                      return a && <AbsentTag absence={a} from={new Date()} dot focusable={false} />;
-                    })()}
-                    <span className="sub">{e.position}</span>
-                  </span>
-                  {c?.overdue ? (
-                    <span className="meta danger" data-tip="Просрочено">{c.overdue}!</span>
-                  ) : (
-                    <span className="meta" data-tip="В работе">{c?.open ?? 0}</span>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-        ))}
+        <div className="tree-group">
+          {employees.filter((e) => inScope(scope, e.id)).map((e) => {
+            const eid = e.id;
+            const c = counts.get(eid);
+            const group = department.groups.find((g) => g.employeeIds.includes(eid));
+            return (
+              <Link key={eid} to={`/employees/${eid}`} className={`tree-row${eid === selected ? ' active' : ''}`} aria-current={eid === selected ? 'page' : undefined}>
+                <span className="avatar">{initials(eid)}</span>
+                <span className="grow">
+                  {shortName(eid)}
+                  {(() => { const a = absenceInPeriod(state.absences, eid, new Date(), new Date()); return a && <AbsentTag absence={a} from={new Date()} dot focusable={false} />; })()}
+                  <span className="sub">{e.position}{group && group.id !== 'unit-none' ? ` · ${group.name}` : ''}</span>
+                </span>
+                {c?.overdue ? <span className="meta danger" data-tip="Просрочено">{c.overdue}!</span> : <span className="meta" data-tip="В работе">{c?.open ?? 0}</span>}
+              </Link>
+            );
+          })}
+        </div>
         {scope === null && state.users.some((account) => !employeeById.has(account.employeeId)) && <div className="tree-group">
           <span className="caps" style={{ color: 'var(--ink-4)' }}>Active Directory</span>
           {state.users.filter((account) => !employeeById.has(account.employeeId)).map((account) => {
@@ -138,7 +128,7 @@ const EmployeeCard = ({ id }: { id: number }) => {
         <div className="page-title page-title--employee">
           <p className="caps" style={{ margin: '0 0 6px' }}>{group?.name ?? 'Active Directory'}</p>
           <h1>{managed?.fullName ?? fullName(id)}</h1>
-          <p className="subtitle">{managed?.position || e?.position || 'Сотрудник'}{state.user?.employeeId === id && ' · это Вы'}</p>
+          <p className="subtitle">{managed?.position || e?.position || 'Сотрудник'}{managed?.rank && ` · ${managed.rank}`}{state.user?.employeeId === id && ' · это Вы'}</p>
           {(() => {
             // Сотрудник сегодня отсутствует — метка после ФИО и должности.
             const a = absenceInPeriod(state.absences, id, new Date(), new Date());

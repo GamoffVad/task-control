@@ -106,6 +106,7 @@ if object_id(N'dbo.tc_tasks', N'U') is null create table dbo.tc_tasks (
     [row_id] nvarchar(64) null,
     [category] nvarchar(64) null,
     [assignee_ids] nvarchar(max) not null constraint df_tc_tasks_assignee_ids default '[]',
+    [local] bit not null constraint df_tc_tasks_local default 0,
     [trip_absence_ids] nvarchar(max) null,
     [start_at] datetimeoffset(3) not null constraint df_tc_tasks_start_at default sysdatetimeoffset(),
     [end_at] datetimeoffset(3) not null constraint df_tc_tasks_end_at default sysdatetimeoffset(),
@@ -130,6 +131,9 @@ if col_length('dbo.tc_tasks', 'category') is null alter table dbo.tc_tasks add [
 GO
 
 if col_length('dbo.tc_tasks', 'assignee_ids') is null alter table dbo.tc_tasks add [assignee_ids] nvarchar(max) not null constraint df_tc_tasks_assignee_ids default '[]'
+GO
+
+if col_length('dbo.tc_tasks', 'local') is null alter table dbo.tc_tasks add [local] bit not null constraint df_tc_tasks_local default 0
 GO
 
 if col_length('dbo.tc_tasks', 'trip_absence_ids') is null alter table dbo.tc_tasks add [trip_absence_ids] nvarchar(max) null
@@ -270,7 +274,8 @@ if object_id(N'dbo.tc_dictionaries', N'U') is null create table dbo.tc_dictionar
     [dictionary] nvarchar(64) not null constraint df_tc_dictionaries_dictionary default '',
     [code] nvarchar(64) not null constraint df_tc_dictionaries_code default '',
     [title] nvarchar(256) not null constraint df_tc_dictionaries_title default '',
-    [color] nvarchar(32) null)
+    [color] nvarchar(32) null,
+    [sort_order] int null)
 GO
 
 if col_length('dbo.tc_dictionaries', 'dictionary') is null alter table dbo.tc_dictionaries add [dictionary] nvarchar(64) not null constraint df_tc_dictionaries_dictionary default ''
@@ -283,6 +288,9 @@ if col_length('dbo.tc_dictionaries', 'title') is null alter table dbo.tc_diction
 GO
 
 if col_length('dbo.tc_dictionaries', 'color') is null alter table dbo.tc_dictionaries add [color] nvarchar(32) null
+GO
+
+if col_length('dbo.tc_dictionaries', 'sort_order') is null alter table dbo.tc_dictionaries add [sort_order] int null
 GO
 
 if not exists (select 1 from sys.indexes where name = 'tc_dictionaries_kind_code' and object_id = object_id(N'dbo.tc_dictionaries'))
@@ -315,6 +323,7 @@ if object_id(N'dbo.tc_users', N'U') is null create table dbo.tc_users (
     [windows_login] nvarchar(128) not null constraint df_tc_users_login default '',
     [full_name] nvarchar(256) not null constraint df_tc_users_full_name default '',
     [position] nvarchar(256) not null constraint df_tc_users_position default '',
+    [rank] nvarchar(256) not null constraint df_tc_users_rank default '',
     [unit_id] nvarchar(64) null)
 GO
 
@@ -340,6 +349,9 @@ if col_length('dbo.tc_users', 'full_name') is null alter table dbo.tc_users add 
 GO
 
 if col_length('dbo.tc_users', 'position') is null alter table dbo.tc_users add [position] nvarchar(256) not null constraint df_tc_users_position default ''
+GO
+
+if col_length('dbo.tc_users', 'rank') is null alter table dbo.tc_users add [rank] nvarchar(256) not null constraint df_tc_users_rank default ''
 GO
 
 if col_length('dbo.tc_users', 'unit_id') is null alter table dbo.tc_users add [unit_id] nvarchar(64) null

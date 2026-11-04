@@ -61,6 +61,7 @@ export const TABLES: SchemaTable[] = [
       { name: 'row_id', type: 'nvarchar(64)', nullable: true },
       { name: 'category', type: 'nvarchar(64)', nullable: true },
       { name: 'assignee_ids', type: 'nvarchar(max)', default: "'[]'" },
+      { name: 'local', type: 'bit', default: '0' },
       { name: 'trip_absence_ids', type: 'nvarchar(max)', nullable: true },
       { name: 'start_at', type: 'datetimeoffset(3)', default: NOW_SQL },
       { name: 'end_at', type: 'datetimeoffset(3)', default: NOW_SQL },
@@ -133,6 +134,7 @@ export const TABLES: SchemaTable[] = [
       { name: 'code', type: 'nvarchar(64)', default: "''" },
       { name: 'title', type: 'nvarchar(256)', default: "''" },
       { name: 'color', type: 'nvarchar(32)', nullable: true },
+      { name: 'sort_order', type: 'int', nullable: true },
     ],
     // Сравнение без учёта регистра обеспечивает параметр сортировки базы, поэтому lower() не нужен.
     indexes: [{ name: 'tc_dictionaries_kind_code', columns: '[dictionary], [code]', unique: true }],
@@ -161,6 +163,7 @@ export const TABLES: SchemaTable[] = [
       { name: 'windows_login', type: 'nvarchar(128)', default: "''" },
       { name: 'full_name', type: 'nvarchar(256)', default: "''" },
       { name: 'position', type: 'nvarchar(256)', default: "''" },
+      { name: 'rank', type: 'nvarchar(256)', default: "''" },
       { name: 'unit_id', type: 'nvarchar(64)', nullable: true },
     ],
     // Фильтрованному индексу нужен QUOTED_IDENTIFIER ON: через драйвер он включён,
@@ -351,6 +354,7 @@ const readAll = async (q: Q): Promise<Data | null> => {
   const templatesReady = await isReady(q, 'templates-ready');
   const accessReady = await isReady(q, 'access-ready');
   const accessVersion = await meta(q, 'access-version');
+  const vacationTypesVersion = await meta(q, 'vacation-types-version');
   const authentication = await meta(q, 'authentication-settings');
   const scoring = await meta(q, 'scoring-settings');
   const vacationSettings = await meta(q, 'vacation-settings');
@@ -382,7 +386,7 @@ const readAll = async (q: Q): Promise<Data | null> => {
 
   return {
     tasks: tasks.map((x) => {
-      const t = x as unknown as { id: string; title: string; row_id: string | null; category: string | null; assignee_ids: string; trip_absence_ids: string | null; start_at: Date; end_at: Date; doc_name: string; doc_number: string; result: string; done: boolean; score: number | null; done_at: Date | null };
+      const t = x as unknown as { id: string; title: string; row_id: string | null; category: string | null; assignee_ids: string; local: boolean; trip_absence_ids: string | null; start_at: Date; end_at: Date; doc_name: string; doc_number: string; result: string; done: boolean; score: number | null; done_at: Date | null };
       const trips = json<string[]>(t.trip_absence_ids, []);
       return {
         id: t.id,
@@ -390,6 +394,7 @@ const readAll = async (q: Q): Promise<Data | null> => {
         rowId: t.row_id,
         category: t.category,
         assigneeIds: json<number[]>(t.assignee_ids, []),
+        ...(t.local ? { local: true } : {}),
         ...(trips.length ? { tripAbsenceIds: trips } : {}),
         start: iso(t.start_at)!,
         end: iso(t.end_at)!,
@@ -427,8 +432,8 @@ const readAll = async (q: Q): Promise<Data | null> => {
     }),
     dictionaries: dictionariesReady
       ? dictionaries.map((x) => {
-          const d = x as unknown as { id: string; dictionary: DictionaryEntry['dictionary']; code: string; title: string; color: string | null };
-          return { id: d.id, dictionary: d.dictionary, code: d.code, title: d.title, ...(d.color ? { color: d.color } : {}) } as DictionaryEntry;
+          const d = x as unknown as { id: string; dictionary: DictionaryEntry['dictionary']; code: string; title: string; color: string | null; sort_order: number | null };
+          return { id: d.id, dictionary: d.dictionary, code: d.code, title: d.title, ...(d.color ? { color: d.color } : {}), ...(d.sort_order != null ? { order: d.sort_order } : {}) } as DictionaryEntry;
         })
       : DEFAULT_DICTIONARIES,
     planRows: planRowsReady
@@ -442,8 +447,8 @@ const readAll = async (q: Q): Promise<Data | null> => {
     // Сотрудники — ровно то, что в tc_users: пустая таблица — пустой список, демонстрационные не подставляются.
     // Без единого администратора сервер сам добавит того, кто публиковал приложение (server/app.ts).
     users: users.map((x) => {
-      const u = x as unknown as { employee_id: number; email: string; full_name: string; position: string; windows_login: string; role: ManagedUser['role']; active: boolean; hidden: boolean; annual_vacation_days: number | null; unit_id: string | null };
-      return { employeeId: u.employee_id, email: u.email, fullName: u.full_name, position: u.position, windowsLogin: u.windows_login || u.email.split('@')[0], role: u.role, active: u.active, ...(u.hidden ? { hidden: true } : {}), ...(u.annual_vacation_days != null ? { annualVacationDays: u.annual_vacation_days } : {}), ...(u.unit_id ? { unitId: u.unit_id } : {}) } as ManagedUser;
+      const u = x as unknown as { employee_id: number; email: string; full_name: string; position: string; rank: string; windows_login: string; role: ManagedUser['role']; active: boolean; hidden: boolean; annual_vacation_days: number | null; unit_id: string | null };
+      return { employeeId: u.employee_id, email: u.email, fullName: u.full_name, position: u.position, rank: u.rank || '', windowsLogin: u.windows_login || u.email.split('@')[0], role: u.role, active: u.active, ...(u.hidden ? { hidden: true } : {}), ...(u.annual_vacation_days != null ? { annualVacationDays: u.annual_vacation_days } : {}), ...(u.unit_id ? { unitId: u.unit_id } : {}) } as ManagedUser;
     }),
     templates: templatesReady
       ? templates.map((x) => {
@@ -464,6 +469,7 @@ const readAll = async (q: Q): Promise<Data | null> => {
     scoring: scoring ? JSON.parse(scoring) : { ...DEFAULT_SCORING },
     // Отметка версии прав: без неё общий код дописывал бы их администратору при каждом чтении.
     ...(accessVersion ? { accessVersion } : {}),
+    ...(vacationTypesVersion ? { vacationTypesVersion: Number(vacationTypesVersion) } : {}),
   };
 };
 
@@ -486,10 +492,10 @@ const TASKS: Table<Task> = {
       q,
       'tc_tasks',
       '[id] = @v1',
-      '[title]=@v2, [row_id]=@v3, [category]=@v4, [assignee_ids]=@v5, [start_at]=@v6, [end_at]=@v7, [doc_name]=@v8, [doc_number]=@v9, [result]=@v10, [done]=@v11, [score]=@v12, [done_at]=@v13, [trip_absence_ids]=@v14',
-      '[id],[title],[row_id],[category],[assignee_ids],[start_at],[end_at],[doc_name],[doc_number],[result],[done],[score],[done_at],[trip_absence_ids]',
-      '@v1,@v2,@v3,@v4,@v5,@v6,@v7,@v8,@v9,@v10,@v11,@v12,@v13,@v14',
-      [S(t.id, 64), S(t.title), S(t.rowId, 64), S(t.category, 64), J(t.assigneeIds), DT(t.start), DT(t.end), S(t.docName), S(t.docNumber), S(t.result), BIT(t.done), NUM(t.score), DT(t.doneAt), J(t.tripAbsenceIds ?? [])],
+      '[title]=@v2, [row_id]=@v3, [category]=@v4, [assignee_ids]=@v5, [start_at]=@v6, [end_at]=@v7, [doc_name]=@v8, [doc_number]=@v9, [result]=@v10, [done]=@v11, [score]=@v12, [done_at]=@v13, [trip_absence_ids]=@v14, [local]=@v15',
+      '[id],[title],[row_id],[category],[assignee_ids],[start_at],[end_at],[doc_name],[doc_number],[result],[done],[score],[done_at],[trip_absence_ids],[local]',
+      '@v1,@v2,@v3,@v4,@v5,@v6,@v7,@v8,@v9,@v10,@v11,@v12,@v13,@v14,@v15',
+      [S(t.id, 64), S(t.title), S(t.rowId, 64), S(t.category, 64), J(t.assigneeIds), DT(t.start), DT(t.end), S(t.docName), S(t.docNumber), S(t.result), BIT(t.done), NUM(t.score), DT(t.doneAt), J(t.tripAbsenceIds ?? []), BIT(t.local ?? false)],
     ),
   remove: (q, t) => run(q, 'delete from dbo.tc_tasks where [id] = @v1', [S(t.id, 64)]),
 };
@@ -565,10 +571,10 @@ const DICTIONARIES: Table<DictionaryEntry> = {
       q,
       'tc_dictionaries',
       '[id] = @v1',
-      '[dictionary]=@v2, [code]=@v3, [title]=@v4, [color]=@v5',
-      '[id],[dictionary],[code],[title],[color]',
-      '@v1,@v2,@v3,@v4,@v5',
-      [S(entry.id, 64), S(entry.dictionary, 64), S(entry.code, 64), S(entry.title, 256), S(entry.color ?? null, 32)],
+      '[dictionary]=@v2, [code]=@v3, [title]=@v4, [color]=@v5, [sort_order]=@v6',
+      '[id],[dictionary],[code],[title],[color],[sort_order]',
+      '@v1,@v2,@v3,@v4,@v5,@v6',
+      [S(entry.id, 64), S(entry.dictionary, 64), S(entry.code, 64), S(entry.title, 256), S(entry.color ?? null, 32), I(entry.order ?? null)],
     ),
   remove: (q, entry) => run(q, 'delete from dbo.tc_dictionaries where [id] = @v1', [S(entry.id, 64)]),
 };
@@ -587,10 +593,10 @@ const USERS: Table<ManagedUser> = {
       q,
       'tc_users',
       '[employee_id] = @v1',
-      '[email]=@v2, [full_name]=@v3, [position]=@v4, [windows_login]=@v5, [role]=@v6, [active]=@v7, [unit_id]=@v8, [hidden]=@v9, [annual_vacation_days]=@v10',
-      '[employee_id],[email],[full_name],[position],[windows_login],[role],[active],[unit_id],[hidden],[annual_vacation_days]',
-      '@v1,@v2,@v3,@v4,@v5,@v6,@v7,@v8,@v9,@v10',
-      [I(user.employeeId), S(user.email, 256), S(user.fullName, 256), S(user.position, 256), S(user.windowsLogin, 128), S(user.role, 32), BIT(user.active), S(user.unitId ?? null, 64), BIT(user.hidden ?? false), I(user.annualVacationDays ?? null)],
+      '[email]=@v2, [full_name]=@v3, [position]=@v4, [windows_login]=@v5, [role]=@v6, [active]=@v7, [unit_id]=@v8, [hidden]=@v9, [annual_vacation_days]=@v10, [rank]=@v11',
+      '[employee_id],[email],[full_name],[position],[windows_login],[role],[active],[unit_id],[hidden],[annual_vacation_days],[rank]',
+      '@v1,@v2,@v3,@v4,@v5,@v6,@v7,@v8,@v9,@v10,@v11',
+      [I(user.employeeId), S(user.email, 256), S(user.fullName, 256), S(user.position, 256), S(user.windowsLogin, 128), S(user.role, 32), BIT(user.active), S(user.unitId ?? null, 64), BIT(user.hidden ?? false), I(user.annualVacationDays ?? null), S(user.rank ?? '', 256)],
     ),
   remove: (q, user) => run(q, 'delete from dbo.tc_users where [employee_id] = @v1', [I(user.employeeId)]),
 };
@@ -887,6 +893,7 @@ export const createMssqlRepo = (settings: MssqlSettings): Repo => {
           for (const role of next.roles) await ROLES.upsert(tx, role);
           await setMeta(tx, 'access-version', ACCESS_VERSION);
         }
+        if (next.vacationTypesVersion === 1) await setMeta(tx, 'vacation-types-version', '1');
         if (stable(before.scoring ?? DEFAULT_SCORING) !== stable(next.scoring ?? DEFAULT_SCORING)) await setMeta(tx, 'scoring-settings', JSON.stringify(next.scoring ?? DEFAULT_SCORING));
         if (stable(before.authentication) !== stable(next.authentication)) await setMeta(tx, 'authentication-settings', JSON.stringify(next.authentication));
         if (stable(before.vacationSettings) !== stable(next.vacationSettings)) await setMeta(tx, 'vacation-settings', JSON.stringify(next.vacationSettings ?? { resetMonth: 1, resetDay: 1 }));

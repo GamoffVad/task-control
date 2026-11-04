@@ -20,6 +20,7 @@ const NONE: TaskAccess = { plan: false, execution: false, score: false, delete: 
 
 export const taskAccess = (u: User | null, task: Task | null): TaskAccess => {
   if (!u) return NONE;
+  if (task?.local) return task.assigneeIds.length === 1 && task.assigneeIds[0] === u.employeeId ? { plan: true, execution: true, score: false, delete: true } : NONE;
   if (hasPermission(u, 'tasks.plan')) return {
     plan: true,
     execution: hasPermission(u, 'tasks.execute'),

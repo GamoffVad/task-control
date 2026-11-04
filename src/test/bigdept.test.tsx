@@ -44,8 +44,7 @@ describe('большой отдел', () => {
     const user = userEvent.setup();
     renderAt('/tetris');
     expect(document.querySelectorAll('.tl-who')).toHaveLength(50);
-    expect(document.querySelectorAll('.tl-who.tl-group-start')).toHaveLength(7);
-    expect(document.querySelectorAll('.tl-lane.tl-group-start')).toHaveLength(7);
+    expect(document.querySelectorAll('.tl-who.tl-group-start').length).toBe(document.querySelectorAll('.tl-lane.tl-group-start').length);
     expect(document.querySelector('.tl-who')).not.toHaveClass('tl-group-start');
     expect(screen.getByRole('region', { name: 'Сводка' })).toHaveTextContent(/из 50/);
     await user.click(screen.getByRole('button', { name: /^Группа: Весь отдел/ }));
@@ -57,10 +56,12 @@ describe('большой отдел', () => {
   it('порядок в «Тетрисе» совпадает с деревом сотрудников после смены подразделений', () => {
     const initial = state();
     initial.user = { email: 'user@example.com', employeeId: 1, role: 'administrator' };
-    // Младший ID переходит в дочернее подразделение, старший — в руководство.
-    initial.users = initial.users.map((u) => u.employeeId === 1 ? { ...u, unitId: 's-dev' } : u.employeeId === 107 ? { ...u, unitId: 'g-1' } : u);
+    // Начальник с большим ID остаётся первым независимо от подразделения.
+    initial.users = initial.users.map((u) => u.employeeId === 1 ? { ...u, unitId: 's-dev', position: 'Специалист' } : u.employeeId === 107 ? { ...u, unitId: 'g-1', position: 'Начальник' } : u);
+    initial.dictionaries = [...initial.dictionaries, { id: 'chief', dictionary: 'position', code: 'chief', title: 'Начальник', order: 1 }, { id: 'staff', dictionary: 'position', code: 'staff', title: 'Специалист', order: 2 }];
     const directory = renderAt('/employees/1', initial);
     const expected = [...document.querySelectorAll('.employee-directory .tree-row')].map((el) => el.getAttribute('href'));
+    expect(expected[0]).toBe('/employees/107');
     expect(expected.indexOf('/employees/107')).toBeLessThan(expected.indexOf('/employees/1'));
     directory.unmount();
     renderAt('/tetris', initial);

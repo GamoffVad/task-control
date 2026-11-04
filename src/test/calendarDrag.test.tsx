@@ -38,11 +38,12 @@ const eventTask = (): Task => ({
 const eventButton = () => document.querySelector<HTMLButtonElement>('[data-calendar-task="drag-task"]')!;
 const savedTask = () => loadState().tasks.find((task) => task.id === 'drag-task')!;
 
-const setup = (view: CalendarView = 'week', executor = false, task: Task | Task[] = eventTask()) => {
+const setup = (view: CalendarView = 'week', executor = false, task: Task | Task[] = eventTask(), enableMovement = true) => {
   storeCalendarView(view, executor ? 3 : 1);
   render(<StoreProvider initial={{ ...createSeed(), tasks: Array.isArray(task) ? task : [task], user: { email: 'test@example.com', employeeId: executor ? 3 : 1, role: executor ? 'executor' : 'administrator' } }}>
     <MemoryRouter initialEntries={['/calendar']}><AppRoutes /></MemoryRouter>
   </StoreProvider>);
+  if (enableMovement && !executor) fireEvent.click(screen.getByRole('button', { name: 'Перемещение карточек' }));
   const zones = [...document.querySelectorAll<HTMLElement>('[data-calendar-day]')];
   zones.forEach((zone, index) => {
     vi.spyOn(zone, 'getBoundingClientRect').mockReturnValue({ x: index * 100, y: 0, left: index * 100, top: 0, right: (index + 1) * 100, bottom: 840, width: 100, height: 840, toJSON: () => ({}) });
@@ -55,6 +56,10 @@ const setup = (view: CalendarView = 'week', executor = false, task: Task | Task[
 const pointer = (x: number, y: number, pointerType = 'mouse') => ({ button: 0, buttons: 1, isPrimary: true, pointerId: 1, pointerType, clientX: x, clientY: y });
 
 describe('статус и изменение периода в календаре', () => {
+  it.each(['day', 'week', 'month'] as const)('выделяет личную заметку штриховкой в виде %s', (view) => {
+    setup(view, false, { ...eventTask(), local: true, assigneeIds: [1], rowId: null, category: null }, false);
+    expect(eventButton()).toHaveClass('calendar-local-note');
+  });
   it('растягивает окончание по реальному времени после адаптивного расширения строк', () => {
     const task = { ...eventTask(), end: new Date(2026, 8, 17, 9, 30).toISOString() };
     const [zone] = setup('day', false, task), source = eventButton();
@@ -250,6 +255,28 @@ const navigationGeometry = () => {
 };
 
 describe('перенос задач в календаре', () => {
+  it('блокирует перенос и изменение периода до включения и снова блокирует при открытии', () => {
+    setup('week', false, eventTask(), false);
+    const toggle = screen.getByRole('button', { name: 'Перемещение карточек' });
+    const source = eventButton();
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(source).not.toHaveClass('calendar-movable');
+    expect(source.querySelector('[data-calendar-resize]')).toBeNull();
+    fireEvent.pointerDown(source, pointer(350, 135));
+    fireEvent.pointerMove(source, pointer(450, 180));
+    flushFrame();
+    fireEvent.pointerUp(source, pointer(450, 180));
+    fireEvent.keyDown(source, { key: 'ArrowRight', altKey: true });
+    expect(savedTask().start).toBe(eventTask().start);
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(eventButton()).toHaveClass('calendar-movable');
+    cleanup();
+    setup('week', false, eventTask(), false);
+    expect(screen.getByRole('button', { name: 'Перемещение карточек' })).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(eventButton());
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
   it.each([
     ['day', 1], ['day', -1], ['week', 1], ['week', -1], ['month', 1], ['month', -1],
   ] as const)('продолжает перенос в виде %s после переключения у края %s', (view, direction) => {

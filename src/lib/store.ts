@@ -68,8 +68,10 @@ export const useStore = (options?: { includeHidden?: boolean }): StoreCtx => {
   const ctx = useContext(StoreContext);
   const includeHidden = options?.includeHidden;
   const displayed = useMemo(() => {
-    if (!ctx || includeHidden) return ctx;
-    const state = displayState(ctx.state);
+    if (!ctx) return ctx;
+    const visibleTasks = ctx.state.tasks.filter((task) => !task.local || (task.assigneeIds.length === 1 && task.assigneeIds[0] === ctx.state.user?.employeeId));
+    const privateState = visibleTasks.length === ctx.state.tasks.length ? ctx.state : { ...ctx.state, tasks: visibleTasks };
+    const state = includeHidden ? privateState : displayState(privateState);
     if (state === ctx.state) return ctx;
     return { ...ctx, state, dispatch: (action: import('./reducer').Action) => {
       if (action.type === 'saveTask' && action.draft.id) {

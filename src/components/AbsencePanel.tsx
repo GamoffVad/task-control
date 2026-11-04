@@ -88,6 +88,7 @@ export const AbsencePanel = ({ id }: { id: number }) => {
           <div className="bal-keys">
             <span>за дежурства <span className="num">{b.dayoff.accrued - calendarEnt.dayoffAccrued}</span> + вручную <span className="num">{calendarEnt.dayoffAccrued}</span></span>
             <span>использовано <span className="num">{b.dayoff.used}</span></span>
+            <span>Остаток обнуляется 1 января.</span>
             {b.dayoff.requested > 0 && <span className="amber">в заявках <span className="num">{b.dayoff.requested}</span></span>}
           </div>
         </div>

@@ -16,6 +16,8 @@ import { applyTheme, useTheme, type Theme } from '../lib/theme';
 import { DEFAULT_DICTIONARIES } from '../lib/seed';
 import { useStore } from '../lib/store';
 import type { WindowsCheck } from '../lib/api';
+import { sortUsersByPosition } from '../lib/data';
+import { newId } from '../lib/reducer';
 import type { AppearanceSettings, DictionaryEntry, DictionaryKind, DirectoryUser, DocumentTemplate, ManagedUser, ScoringSettings, TemplateScope, Permission, PlanRow, Role, Unit, UnitKind } from '../lib/types';
 import { isDepartmentLeadership, PARENT_KIND, UNIT_KINDS, unitKindLabel, unitPath, unitTree, unitWithDescendants } from '../lib/units';
 import { unitOf } from '../lib/data';
@@ -47,6 +49,8 @@ const ROLE_OPTIONS: { value: Role; label: string }[] = [
 const REQUIRED_ADMIN_PERMISSIONS: Permission[] = ['admin.access', 'users.manage', 'roles.manage'];
 const canAdminister = (role: Role, roles: ReturnType<typeof useStore>['state']['roles']) => REQUIRED_ADMIN_PERMISSIONS.every((permission) => permissionsFor(role, roles).includes(permission));
 const DICTIONARIES: { value: DictionaryKind; label: string; hint: string }[] = [
+  { value: 'position', label: 'Должности', hint: 'Добавляйте должности от старшей к младшей. Порядок можно изменить в карточке значения.' },
+  { value: 'rank', label: 'Звания', hint: 'Добавляйте звания от старшего к младшему. Порядок можно изменить в карточке значения.' },
   { value: 'taskCategory', label: 'Категории задач', hint: 'Обозначения для классификации задач.' },
   { value: 'absenceType', label: 'Виды отсутствий', hint: 'Причины отсутствия сотрудников.' },
   { value: 'vacationType', label: 'Типы отпусков', hint: 'Выбираются при оформлении каждого отпуска. Все типы уменьшают общий остаток дней отпуска.' },
@@ -102,7 +106,7 @@ const UsersTab = ({ state, dispatch }: TabProps) => {
       type: 'saveManagedUser', employeeId: editing.employeeId, role: draft.role, active: draft.active, hidden: draft.hidden,
       annualVacationDays: Number(draft.annualVacationDays),
       ...(hasPermission(state.user, 'entitlements.manage') && draft.dayoffAccrued !== undefined ? { dayoffAccrued: Number(draft.dayoffAccrued) } : {}),
-      windowsLogin: draft.windowsLogin, unitId: draft.unitId, fullName: draft.fullName, position: draft.position, email: draft.email,
+      windowsLogin: draft.windowsLogin, unitId: draft.unitId, fullName: draft.fullName, position: draft.position, rank: draft.rank, email: draft.email,
     });
     setEditing(null);
   };
@@ -115,7 +119,7 @@ const UsersTab = ({ state, dispatch }: TabProps) => {
       <table className="admin-table admin-users-table">
         <caption className="sr-only">Пользователи и назначенные роли</caption>
         <thead><tr><th scope="col">Пользователь</th><th scope="col">Подразделение</th><th scope="col">Учётная запись</th><th scope="col">Windows-логин</th><th scope="col">Роль</th><th scope="col">Доступ</th><th scope="col" className="admin-actions-head">Действие</th></tr></thead>
-        <tbody>{state.users.map((account) => {
+        <tbody>{sortUsersByPosition(state.users, state.dictionaries).map((account) => {
           const protectedAccount = account.active && canAdminister(account.role, state.roles) && !state.users.some((other) => other.employeeId !== account.employeeId && other.active && canAdminister(other.role, state.roles));
           const currentAccount = state.user?.employeeId === account.employeeId;
           return <tr key={account.employeeId}>
@@ -189,7 +193,7 @@ const VacationsTab = ({ state, dispatch }: TabProps) => {
 };
 
 /** Поля сотрудника: одинаковые в добавлении и редактировании. */
-type PersonDraft = { fullName: string; position: string; email: string; windowsLogin: string; unitId: string; role: Role; active: boolean; hidden: boolean; annualVacationDays: string; dayoffAccrued?: string };
+type PersonDraft = { fullName: string; position: string; rank: string; email: string; windowsLogin: string; unitId: string; role: Role; active: boolean; hidden: boolean; annualVacationDays: string; dayoffAccrued?: string };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -207,7 +211,13 @@ const checkPerson = (draft: PersonDraft, users: ManagedUser[], employeeId: numbe
 };
 
 /** Общие поля сотрудника. Все доступны для правки независимо от способа входа и настройки Active Directory. */
-const PersonFields = ({ draft, set, units, disabledRole, nameSlot, dayoffSlot }: { draft: PersonDraft; set: <K extends keyof PersonDraft>(key: K, value: PersonDraft[K]) => void; units: Unit[]; disabledRole?: boolean; nameSlot?: ReactNode; dayoffSlot?: ReactNode }) => (
+const PersonFields = ({ draft, set, units, disabledRole, nameSlot, dayoffSlot }: { draft: PersonDraft; set: <K extends keyof PersonDraft>(key: K, value: PersonDraft[K]) => void; units: Unit[]; disabledRole?: boolean; nameSlot?: ReactNode; dayoffSlot?: ReactNode }) => {
+  const { state } = useStore();
+  const options = (kind: 'position' | 'rank', current: string) => {
+    const values = state.dictionaries.filter((d) => d.dictionary === kind).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.title.localeCompare(b.title, 'ru'));
+    return [{ value: '', label: 'Не указано' }, ...(current && !values.some((d) => d.title === current) ? [{ value: current, label: `${current} (прежнее значение)` }] : []), ...values.map((d) => ({ value: d.title, label: d.title }))];
+  };
+  return (
   <>
     {nameSlot ?? (
       <label className="field"><span className="caps">ФИО</span>
@@ -215,9 +225,10 @@ const PersonFields = ({ draft, set, units, disabledRole, nameSlot, dayoffSlot }:
       </label>
     )}
     <div className="field-row">
-      <label className="field"><span className="caps">Должность</span>
-        <TextInput value={draft.position} onChange={(e) => set('position', e.target.value)} placeholder="Ведущий специалист" maxLength={200} />
-      </label>
+      <div className="field"><span className="caps">Должность</span><Select<string> variant="light" label="Должность" value={draft.position} options={options('position', draft.position)} onChange={(v) => set('position', v)} /></div>
+      <div className="field"><span className="caps">Звание</span><Select<string> variant="light" label="Звание" value={draft.rank} options={options('rank', draft.rank)} onChange={(v) => set('rank', v)} /></div>
+    </div>
+    <div className="field-row">
       <label className="field"><span className="caps">Электронная почта</span>
         <TextInput value={draft.email} onChange={(e) => set('email', e.target.value)} placeholder="ivanov@example.com" maxLength={200} />
       </label>
@@ -242,6 +253,7 @@ const PersonFields = ({ draft, set, units, disabledRole, nameSlot, dayoffSlot }:
     </div>
   </>
 );
+};
 
 const EditUserDialog = ({ account, users, units, protectedAccount, onClose, onSave }: { account: ManagedUser; users: ManagedUser[]; units: Unit[]; protectedAccount: boolean; onClose: () => void; onSave: (draft: PersonDraft) => void }) => {
   const { state } = useStore({ includeHidden: true });
@@ -251,6 +263,7 @@ const EditUserDialog = ({ account, users, units, protectedAccount, onClose, onSa
   const [draft, setDraft] = useState<PersonDraft>({
     fullName: account.fullName,
     position: account.position,
+    rank: account.rank ?? '',
     email: account.email,
     windowsLogin: account.windowsLogin,
     unitId: unitOf(account) ?? '',
@@ -296,7 +309,7 @@ const DeleteUserDialog = ({ account, onClose, onConfirm }: { account: ManagedUse
 </Dialog>;
 
 const AddUserDialog = ({ users, units, directoryAvailable, onClose, onSave }: { users: ManagedUser[]; units: Unit[]; directoryAvailable: boolean; onClose: () => void; onSave: (account: ManagedUser) => void }) => {
-  const [draft, setDraft] = useState<PersonDraft>({ fullName: '', position: '', email: '', windowsLogin: '', unitId: '', role: 'executor', active: true, hidden: false, annualVacationDays: '28' });
+  const [draft, setDraft] = useState<PersonDraft>({ fullName: '', position: '', rank: '', email: '', windowsLogin: '', unitId: '', role: 'executor', active: true, hidden: false, annualVacationDays: '28' });
   const [error, setError] = useState('');
   const set = <K extends keyof PersonDraft>(key: K, value: PersonDraft[K]) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -304,7 +317,7 @@ const AddUserDialog = ({ users, units, directoryAvailable, onClose, onSave }: { 
   };
   // Поиск в каталоге только заполняет поля; без Active Directory сотрудник заводится вручную.
   const select = (user: DirectoryUser) => {
-    setDraft((prev) => ({ ...prev, fullName: user.fullName, position: user.position, email: user.email, windowsLogin: user.login }));
+    setDraft((prev) => ({ ...prev, fullName: user.fullName, email: user.email, windowsLogin: user.login }));
     setError('');
   };
   const submit = () => {
@@ -315,6 +328,7 @@ const AddUserDialog = ({ users, units, directoryAvailable, onClose, onSave }: { 
       employeeId,
       fullName: draft.fullName.trim(),
       position: draft.position.trim(),
+      rank: draft.rank.trim(),
       windowsLogin: draft.windowsLogin.trim(),
       email: draft.email.trim(),
       role: draft.role,
@@ -477,7 +491,7 @@ const ScoringTab = ({ state, dispatch }: TabProps) => {
 
     <h3 className="admin-subhead">Отдельные сотрудники</h3>
     <ul className="scoring-people">
-      {[...state.users].sort((a, b) => a.fullName.localeCompare(b.fullName, 'ru')).map((user) => (
+      {sortUsersByPosition(state.users, state.dictionaries).map((user) => (
         <li key={user.employeeId}>
           <Checkbox
             checked={excludedPeople.has(user.employeeId) || byUnit.has(user.employeeId)}
@@ -750,7 +764,8 @@ const DictionariesTab = ({ state, dispatch }: TabProps) => {
   const [deleting, setDeleting] = useState<DictionaryEntry | null>(null);
   const info = DICTIONARIES.find((item) => item.value === dictionary)!;
   const withColor = hasDictionaryColor(dictionary);
-  const entries = useMemo(() => state.dictionaries.filter((entry) => entry.dictionary === dictionary).sort((a, b) => a.title.localeCompare(b.title, 'ru')), [state.dictionaries, dictionary]);
+  const ordered = dictionary === 'position' || dictionary === 'rank';
+  const entries = useMemo(() => state.dictionaries.filter((entry) => entry.dictionary === dictionary).sort((a, b) => ordered ? (a.order ?? 0) - (b.order ?? 0) || a.title.localeCompare(b.title, 'ru') : a.title.localeCompare(b.title, 'ru')), [state.dictionaries, dictionary]);
   return <div className="admin-grid">
     <aside className="admin-directory" aria-label="Справочники"><p className="caps">Справочники</p><div className="admin-directory-list" role="list">{DICTIONARIES.map((item) => <button key={item.value} type="button" role="listitem" aria-pressed={item.value === dictionary} onClick={() => { setDictionary(item.value); setEditing(null); }}><span>{item.label}</span><small className="num">{state.dictionaries.filter((entry) => entry.dictionary === item.value).length}</small></button>)}</div></aside>
     <div className="admin-content">
@@ -759,15 +774,15 @@ const DictionariesTab = ({ state, dispatch }: TabProps) => {
         <div className="admin-users-actions"><span className="faint num">{entries.length} знач.</span><Button variant="primary" icon={<Icon.Plus size={15} />} onClick={() => setEditing('new')}>Добавить значение</Button></div>
       </div>
       <div className="table-scroll admin-table-wrap"><table className="admin-table"><caption className="sr-only">Значения справочника «{info.label}»</caption>
-        <thead><tr><th scope="col">Название</th><th scope="col">Код</th>{withColor && <th scope="col">Цвет</th>}<th scope="col" className="admin-actions-head">Действие</th></tr></thead>
+        <thead><tr><th scope="col">Название</th>{ordered ? <th scope="col">Порядок</th> : <th scope="col">Код</th>}{withColor && <th scope="col">Цвет</th>}<th scope="col" className="admin-actions-head">Действие</th></tr></thead>
         <tbody>
           {entries.map((entry) => <tr key={entry.id}>
             <td><b>{entry.title}</b></td>
-            <td><span className="num muted">{entry.code}</span></td>
+            <td><span className="num muted">{ordered ? entry.order : entry.code}</span></td>
             {withColor && <td>{entry.color ? <span className="num"><i className="admin-swatch" style={{ background: entry.color }} aria-hidden />{entry.color}</span> : <span className="num muted"><i className="admin-swatch" style={{ background: dictionary === 'vacationType' ? 'var(--abs-vacation)' : dictionary === 'dutyType' ? 'var(--abs-duty)' : `var(${dictionaryColorName(dictionary, entry.code)})` }} aria-hidden />по умолчанию</span>}</td>}
             <td className="admin-icon-actions">
               <button type="button" className="admin-icon-action" onClick={() => setEditing(entry)} aria-label={`Изменить значение ${entry.title}`} data-tip="Изменить"><Icon.Edit size={15} /></button>
-              <button type="button" className="admin-icon-action danger" disabled={dutyDictionaryInUse(entry, state.dictionaries, state.absences) || entry.dictionary === 'vacationType' && (entries.length <= 1 || state.absences.some((a) => a.type === 'vacation' && vacationTypeCode(a, state.dictionaries) === entry.code))} onClick={() => setDeleting(entry)} aria-label={`Удалить значение ${entry.title}`} data-tip={entry.dictionary === 'absenceType' || entry.dictionary === 'dutyType' || entry.dictionary === 'vacationType' ? 'Системное, используемое или последнее обязательное значение удалить нельзя' : 'Удалить'}><Icon.Trash size={15} /></button>
+              <button type="button" className="admin-icon-action danger" disabled={(entry.dictionary === 'position' && state.users.some((u) => u.position === entry.title)) || (entry.dictionary === 'rank' && state.users.some((u) => u.rank === entry.title)) || dutyDictionaryInUse(entry, state.dictionaries, state.absences) || entry.dictionary === 'vacationType' && (entries.length <= 1 || state.absences.some((a) => a.type === 'vacation' && vacationTypeCode(a, state.dictionaries) === entry.code))} onClick={() => setDeleting(entry)} aria-label={`Удалить значение ${entry.title}`} data-tip={entry.dictionary === 'absenceType' || entry.dictionary === 'dutyType' || entry.dictionary === 'vacationType' ? 'Системное, используемое или последнее обязательное значение удалить нельзя' : 'Удалить'}><Icon.Trash size={15} /></button>
             </td>
           </tr>)}
           {entries.length === 0 && <tr><td colSpan={withColor ? 4 : 3} className="admin-empty">Значений пока нет. Нажмите «Добавить значение».</td></tr>}
@@ -780,9 +795,11 @@ const DictionariesTab = ({ state, dispatch }: TabProps) => {
 };
 
 /** Форма значения справочника: код, название и цвет события/категории. */
-const DictionaryDialog = ({ entry, kind, label, entries, onClose, onSave }: { entry?: DictionaryEntry; kind: DictionaryKind; label: string; entries: DictionaryEntry[]; onClose: () => void; onSave: (draft: { id?: string; dictionary: DictionaryKind; code: string; title: string; color?: string }) => void }) => {
+const DictionaryDialog = ({ entry, kind, label, entries, onClose, onSave }: { entry?: DictionaryEntry; kind: DictionaryKind; label: string; entries: DictionaryEntry[]; onClose: () => void; onSave: (draft: { id?: string; dictionary: DictionaryKind; code: string; title: string; color?: string; order?: number }) => void }) => {
   const { state } = useStore();
-  const [code, setCode] = useState(entry?.code ?? '');
+  const ordered = kind === 'position' || kind === 'rank';
+  const [code, setCode] = useState(entry?.code ?? (ordered ? newId('value') : ''));
+  const [order, setOrder] = useState(String(entry?.order ?? Math.max(0, ...entries.map((e) => e.order ?? 0)) + 1));
   const [title, setTitle] = useState(entry?.title ?? '');
   // Без сохранённого цвета — текущий цвет вида по умолчанию, чтобы сохранение ничего не перекрасило.
   const parentType = kind === 'vacationType' ? 'vacation' : kind === 'dutyType' ? 'duty' : null;
@@ -793,14 +810,16 @@ const DictionaryDialog = ({ entry, kind, label, entries, onClose, onSave }: { en
     const c = code.trim();
     const t = title.trim();
     if (!c || !t) return setError('Заполните код и название.');
+    if (ordered && (!Number.isInteger(Number(order)) || Number(order) < 1 || Number(order) > 1000000)) return setError('Укажите порядок от 1 до 1000000.');
+    if (ordered && entries.some((item) => item.id !== entry?.id && item.title.toLowerCase() === t.toLowerCase())) return setError('Такое название уже есть в справочнике.');
     if (entries.some((item) => item.id !== entry?.id && item.code.toLowerCase() === c.toLowerCase())) return setError('В этом справочнике такой код уже есть.');
-    onSave({ ...(entry ? { id: entry.id } : {}), dictionary: kind, code: c, title: t, ...(withColor ? { color } : {}) });
+    onSave({ ...(entry ? { id: entry.id } : {}), dictionary: kind, code: c, title: t, ...(withColor ? { color } : {}), ...(ordered ? { order: Number(order) } : {}) });
   };
   return <Dialog title={entry ? 'Изменить значение' : 'Добавить значение'} context={entry ? `${label} · ${entry.title}` : label} onClose={onClose}>
     <form className="form-stack" onSubmit={(event) => { event.preventDefault(); submit(); }} noValidate>
       <div className="field-row">
         <label className="field"><span className="caps">Название</span><TextInput value={title} onChange={(event) => { setTitle(event.target.value); setError(''); }} placeholder="Название значения" maxLength={160} invalid={!!error} /></label>
-        <div className="field"><label className="caps" htmlFor="dict-code">Код</label><TextInput id="dict-code" value={code} readOnly={kind === 'absenceType' && !!entry && systemEvent(entry.code)} onChange={(event) => { setCode(event.target.value); setError(''); }} placeholder="internal-review" maxLength={48} mono invalid={!!error} aria-describedby="dict-code-hint" /><span className="field-hint" id="dict-code-hint">{kind === 'absenceType' && !!entry && systemEvent(entry.code) ? 'Системный код: определяет правила расчёта и не меняется.' : 'Связывает значение с данными. При смене кода события обновятся автоматически.'}</span></div>
+        {ordered ? <label className="field"><span className="caps">Порядок</span><TextInput inputMode="numeric" value={order} onChange={(event) => setOrder(event.target.value)} /><span className="field-hint">Меньший номер — выше в списке.</span></label> : <div className="field"><label className="caps" htmlFor="dict-code">Код</label><TextInput id="dict-code" value={code} readOnly={kind === 'absenceType' && !!entry && systemEvent(entry.code)} onChange={(event) => { setCode(event.target.value); setError(''); }} placeholder="internal-review" maxLength={48} mono invalid={!!error} aria-describedby="dict-code-hint" /><span className="field-hint" id="dict-code-hint">{kind === 'absenceType' && !!entry && systemEvent(entry.code) ? 'Системный код: определяет правила расчёта и не меняется.' : 'Связывает значение с данными. При смене кода события обновятся автоматически.'}</span></div>}
       </div>
       {withColor && <div className="field"><span className="caps">Цвет</span><ColorPicker value={color} onChange={(value) => { setColor(value); setError(''); }} label={kind === 'absenceType' ? 'Цвет вида отсутствия' : kind === 'dutyType' ? 'Цвет вида дежурства' : kind === 'vacationType' ? 'Цвет типа отпуска' : 'Цвет категории'} /><span className="field-hint">В тёмной теме цвет автоматически высветляется.</span></div>}
       {error && <p className="field-error" role="alert">{error}</p>}

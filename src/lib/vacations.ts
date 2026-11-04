@@ -4,6 +4,18 @@ import type { Absence, DictionaryEntry, Entitlement, ManagedUser, VacationSettin
 export const DEFAULT_VACATION_SETTINGS: VacationSettings = { resetMonth: 1, resetDay: 1 };
 export const DEFAULT_VACATION_DAYS = 28;
 export const DEFAULT_VACATION_TYPE: DictionaryEntry = { id: 'dict-vacation-annual', dictionary: 'vacationType', code: 'annual', title: 'Ежегодный отпуск' };
+export const ADDITIONAL_VACATION_TYPES: DictionaryEntry[] = [
+  { id: 'dict-vacation-previous-year', dictionary: 'vacationType', code: 'previous-year', title: 'Отпуск за прошлый год' },
+  { id: 'dict-vacation-veteran', dictionary: 'vacationType', code: 'veteran', title: 'Ветеранский отпуск' },
+];
+/** Однократное пополнение существующего справочника без замены пользовательских значений. */
+export const addDefaultVacationTypes = (entries: DictionaryEntry[]): DictionaryEntry[] => {
+  const result = entries.some((e) => e.dictionary === 'vacationType') ? [...entries] : [...entries, { ...DEFAULT_VACATION_TYPE }];
+  for (const value of ADDITIONAL_VACATION_TYPES) {
+    if (!result.some((e) => e.id === value.id || e.dictionary === value.dictionary && (e.code.toLowerCase() === value.code.toLowerCase() || e.title.toLowerCase() === value.title.toLowerCase()))) result.push({ ...value });
+  }
+  return result;
+};
 export const validVacationSettings = (s: VacationSettings) => Number.isInteger(s.resetMonth) && s.resetMonth >= 1 && s.resetMonth <= 12 && Number.isInteger(s.resetDay) && s.resetDay >= 1 && s.resetDay <= new Date(2000, s.resetMonth, 0).getDate();
 export const validVacationDays = (n: number) => Number.isInteger(n) && n >= 0 && n <= 366;
 export const normalizeVacationSettings = (s?: VacationSettings): VacationSettings => s && validVacationSettings(s) ? s : DEFAULT_VACATION_SETTINGS;

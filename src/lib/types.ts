@@ -38,6 +38,7 @@ export type ManagedUser = {
   email: string;
   fullName: string;
   position: string;
+  rank?: string;
   /** UPN or DOMAIN\\login supplied by a trusted Windows-auth proxy. */
   windowsLogin: string;
   employeeId: number;
@@ -181,6 +182,8 @@ export type Task = {
   rowId: string | null;
   category: Category | null;
   assigneeIds: number[];
+  /** Личная заметка, видимая только единственному исполнителю. */
+  local?: boolean;
   /** Конкретные командировки исполнителей; одна поездка на каждого исполнителя. */
   tripAbsenceIds?: string[];
   /** ISO-дата начала. */
@@ -305,7 +308,7 @@ export type WeeklyPeriod = { startDay: number; endDay: number };
 export type PeriodSettings = { planning: WeeklyPeriod; reporting: WeeklyPeriod };
 
 /** Редактируемое значение одного из системных справочников. */
-export type DictionaryKind = 'taskCategory' | 'absenceType' | 'taskStatus' | 'vacationType' | 'dutyType';
+export type DictionaryKind = 'taskCategory' | 'absenceType' | 'taskStatus' | 'vacationType' | 'dutyType' | 'position' | 'rank';
 
 export type DictionaryEntry = {
   id: string;
@@ -314,10 +317,11 @@ export type DictionaryEntry = {
   title: string;
   /** Цвет значения (#RRGGBB): виды отсутствий — полосы «Тетриса», точки у фамилий; категории задач — карточки Календаря. */
   color?: string;
+  order?: number;
 };
 
 export type AppState = {
-  version: 5;
+  version: 6;
   tasks: Task[];
   reports: Report[];
   messages: Message[];
@@ -352,6 +356,7 @@ export type Data = Omit<AppState, 'version' | 'user' | 'planRows' | 'units' | 't
    * права, добавленные после выпуска базы. SQL Server держит ту же отметку в tc_meta.
    */
   accessVersion?: string;
+  vacationTypesVersion?: number;
   /** Журнал уведомлений — только на сервере. */
   notices?: Notice[];
 };

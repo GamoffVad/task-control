@@ -24,6 +24,8 @@ export const DEFAULT_DICTIONARIES: DictionaryEntry[] = [
   { id: 'dict-status-planned', dictionary: 'taskStatus', code: 'planned', title: 'В работе' },
   { id: 'dict-status-done', dictionary: 'taskStatus', code: 'done', title: 'Выполнено' },
   { id: 'dict-vacation-annual', dictionary: 'vacationType', code: 'annual', title: 'Ежегодный отпуск' },
+  { id: 'dict-vacation-previous-year', dictionary: 'vacationType', code: 'previous-year', title: 'Отпуск за прошлый год' },
+  { id: 'dict-vacation-veteran', dictionary: 'vacationType', code: 'veteran', title: 'Ветеранский отпуск' },
 ];
 
 type SeedTask = [
@@ -107,7 +109,7 @@ export const createSeed = (now: Date = new Date()): AppState => {
   };
 
   return {
-    version: 5,
+    version: 6,
     tasks,
     reports: [...createSeedReports(now), lastReport],
     messages: createSeedMessages(now),

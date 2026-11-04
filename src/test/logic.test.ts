@@ -389,7 +389,7 @@ describe('хранилище', () => {
       scores: { '1.1': 9 },
     };
     const m = migrate(v1 as never);
-    expect(m.version).toBe(5);
+    expect(m.version).toBe(6);
     expect(m.absences).toEqual([]);
     expect(m.tasks.map((t) => [t.score, t.category])).toEqual([[9, null], [null, null]]);
     expect(m.user?.role).toBe('executor');

@@ -46,6 +46,17 @@ describe('дежурства и накопленные отгулы', () => {
     expect(dutyDayoffs([a], 3, 2022, NOW)).toBe(1);
     expect(dutyDayoffs([a], 3, 2023, NOW)).toBe(1);
   });
+  it('обнуляет прошлогодние ручные отгулы и отгулы за дежурства 1 января, сохраняя историю', () => {
+    const duties = [duty({ from: '2022-12-30', to: '2023-01-02' })];
+    const entitlements = [{ employeeId: 3, year: 2022, vacationDays: 28, carriedOver: 0, dayoffAccrued: 4 }];
+    const oldYear = balanceFor(duties, entitlements, 3, 2022, new Date(2022, 11, 31, 12));
+    const newYear = balanceFor(duties, entitlements, 3, 2023, new Date(2023, 0, 1, 12));
+    expect(oldYear.dayoff).toMatchObject({ accrued: 5, left: 5 });
+    // В воскресенье 1 января начисляется только новое дежурство.
+    expect(newYear.dayoff).toMatchObject({ accrued: 1, left: 1 });
+    expect(balanceFor([], entitlements, 3, 2023, new Date(2023, 0, 1, 12)).dayoff.left).toBe(0);
+    expect(balanceFor(duties, entitlements, 3, 2022, new Date(2023, 0, 1, 12)).dayoff.left).toBe(5);
+  });
   it('согласование, изменение, отмена и удаление пересчитывают баланс без изменения ручной нормы', () => {
     let state = initial();
     state = reducer(state, { type: 'saveAbsence', draft: { ...duty({ status: 'request' }), id: undefined }, now: NOW });

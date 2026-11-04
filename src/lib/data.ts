@@ -22,12 +22,18 @@ const toEmployee = (u: ManagedUser): Employee => {
 export const unitOf = (u: Pick<ManagedUser, 'employeeId' | 'unitId'>): string | undefined => u.unitId ?? DEFAULT_UNIT_OF[u.employeeId];
 
 let staffKey = '';
-export const syncStaff = (users: ManagedUser[], units: Unit[]) => {
-  const key = JSON.stringify([users.map((u) => [u.employeeId, u.fullName, u.position, u.role, u.active, u.hidden, unitOf(u)]), units]);
+export const sortUsersByPosition = (users: ManagedUser[], dictionaries: DictionaryEntry[]): ManagedUser[] => {
+  const positions = new Map(dictionaries.filter((d) => d.dictionary === 'position').map((d) => [d.title, d.order ?? Number.MAX_SAFE_INTEGER]));
+  return [...users].sort((a, b) => (positions.get(a.position) ?? Number.MAX_SAFE_INTEGER) - (positions.get(b.position) ?? Number.MAX_SAFE_INTEGER) || a.employeeId - b.employeeId);
+};
+
+export const syncStaff = (users: ManagedUser[], units: Unit[], dictionaries: DictionaryEntry[] = []) => {
+  const key = JSON.stringify([users.map((u) => [u.employeeId, u.fullName, u.position, u.role, u.active, u.hidden, unitOf(u)]), units, dictionaries.filter((d) => d.dictionary === 'position')]);
   if (key === staffKey) return;
   staffKey = key;
-  const list = [...users].sort((x, y) => x.employeeId - y.employeeId).map(toEmployee);
-  const shownUsers = users.filter((user) => !user.hidden);
+  const sortedUsers = sortUsersByPosition(users, dictionaries);
+  const list = sortedUsers.map(toEmployee);
+  const shownUsers = sortedUsers.filter((user) => !user.hidden);
   const shownIds = new Set(shownUsers.map((user) => user.employeeId));
   employees.splice(0, employees.length, ...list.filter((employee) => shownIds.has(employee.id)));
   employeeById.clear();
@@ -42,10 +48,10 @@ export const syncStaff = (users: ManagedUser[], units: Unit[]) => {
   sections.sort((x, y) => order(x.id) - order(y.id));
   const groups = sections.map((sec) => {
     const inside = unitWithDescendants(units, sec.id);
-    return { id: sec.id, name: sec.name, employeeIds: shownUsers.filter((u) => inside.has(unitOf(u) ?? '')).map((u) => u.employeeId).sort((x, y) => x - y) };
+    return { id: sec.id, name: sec.name, employeeIds: shownUsers.filter((u) => inside.has(unitOf(u) ?? '')).map((u) => u.employeeId) };
   });
   const grouped = new Set(groups.flatMap((g) => g.employeeIds));
-  const rest = shownUsers.filter((u) => !grouped.has(u.employeeId)).map((u) => u.employeeId).sort((x, y) => x - y);
+  const rest = shownUsers.filter((u) => !grouped.has(u.employeeId)).map((u) => u.employeeId);
   if (rest.length) groups.push({ id: 'unit-none', name: 'Без отделения', employeeIds: rest });
   department.groups = groups.filter((g) => g.employeeIds.length > 0);
 };

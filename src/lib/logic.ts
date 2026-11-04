@@ -74,7 +74,7 @@ export const buildReportEntries = (state: Pick<AppState, 'tasks'> & { planRows?:
   const rows = state.planRows ?? planRows;
   const entries: ReportEntry[] = [];
   for (const t of tasksInWeek(state.tasks, weekStart, periodEnd)) {
-    if (!t.done || !t.rowId) continue;
+    if (t.local || !t.done || !t.rowId) continue;
     const row = rows.find((item) => item.id === t.rowId);
     if (!row || row.isHeader) continue;
     for (const assigneeId of t.assigneeIds) {
@@ -251,7 +251,7 @@ export const validateTask = (d: TaskDraft): TaskErrors => {
   if (!d.title.trim()) errors.title = 'Введите название задачи.';
   if (new Date(d.end) < new Date(d.start)) errors.end = 'Окончание раньше начала: исправьте дату или время.';
   if (d.assigneeIds.length === 0) errors.assigneeIds = 'Выберите хотя бы одного исполнителя.';
-  if (d.done && !d.result.trim()) errors.done = 'Чтобы отметить исполнение, опишите результат.';
+  if (d.done && !d.local && !d.result.trim()) errors.done = 'Чтобы отметить исполнение, опишите результат.';
   if (d.score !== null && !(Number.isFinite(d.score) && d.score >= MIN_SCORE && d.score <= MAX_SCORE)) {
     errors.score = 'Баллы — число от 0,1 до 15.';
   }

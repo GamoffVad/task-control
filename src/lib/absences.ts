@@ -93,6 +93,7 @@ export const balanceFor = (absences: Absence[], entitlements: Entitlement[], emp
   const periodYear = vacationYear(options.referenceDate ?? new Date(year, today.getMonth(), today.getDate()), options.settings);
   const period = vacationPeriod(periodYear, options.settings);
   const ent = entitlementFor(entitlements, employeeId, periodYear, options.users);
+  // Отгулы считаются только за календарный год: прошлогодний остаток не переносится.
   const calendarEnt = entitlementFor(entitlements, employeeId, year, options.users);
   const mine = absences.filter((a) => a.employeeId === employeeId && isActive(a));
   const t = startOfDay(today);

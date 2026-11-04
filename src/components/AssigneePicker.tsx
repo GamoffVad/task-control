@@ -23,7 +23,8 @@ export function AssigneePicker({
 }) {
   const [query, setQuery] = useState('');
   const listId = useId();
-  const sorted = (ids: number[]) => [...new Set(ids)].sort((a, b) => a - b);
+  const choiceOrder = new Map(choices.map((e, index) => [e.id, index]));
+  const sorted = (ids: number[]) => [...new Set(ids)].sort((a, b) => (choiceOrder.get(a) ?? Number.MAX_SAFE_INTEGER) - (choiceOrder.get(b) ?? Number.MAX_SAFE_INTEGER) || a - b);
   const toggle = (id: number) => onChange((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : sorted([...prev, id])));
 
   // Имена берём из переданного списка: в нём могут быть сотрудники, которых нет в демоданных.
@@ -47,7 +48,7 @@ export function AssigneePicker({
   const chips = (
     <div className="picked" aria-live="polite">
       {selected.length === 0 && <span className="muted">Никто не выбран</span>}
-      {selected.map((id) => {
+      {sorted(selected).map((id) => {
         const mark = absence?.(id);
         return (
           <span key={id} className={`person-chip${mark ? ' absent' : ''}`} data-tip={mark ? `${full(id)} — ${mark} в день срока` : full(id)}>
@@ -75,40 +76,20 @@ export function AssigneePicker({
         </span>
       </div>
       <div className="picker-list" id={listId}>
-        {grouped.length === 0 && <div className="empty">Никого не найдено</div>}
-        {grouped.map((g) => {
+        {found.length === 0 && <div className="empty">Никого не найдено</div>}
+        {grouped.length > 1 && <div className="picker-group-head">{grouped.map((g) => {
           const ids = g.people.map((e) => e.id);
           const all = ids.every((id) => selected.includes(id));
-          return (
-            <div key={g.id} className="picker-group" role="group" aria-label={g.name}>
-              {grouped.length > 1 || department.groups.length > 1 ? (
-                <div className="picker-group-head">
-                  <span className="caps">{g.name}</span>
-                  {ids.length > 1 && (
-                    <button
-                      type="button"
-                      className="picker-all"
-                      onClick={() => onChange((prev) => (all ? prev.filter((id) => !ids.includes(id)) : sorted([...prev, ...ids])))}
-                    >
-                      {all ? 'снять группу' : 'выбрать группу'}
-                    </button>
-                  )}
-                </div>
-              ) : null}
-              <div className="check-grid">
-                {g.people.map((e) => {
-                  const mark = absence?.(e.id);
-                  return (
-                    <Checkbox key={e.id} checked={selected.includes(e.id)} onChange={() => toggle(e.id)}>
-                      {short(e.id)}
-                      {mark && <em className="picker-absent"> · {mark}</em>}
-                    </Checkbox>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
+          return ids.length > 1 && <button key={g.id} type="button" className="picker-all" onClick={() => onChange((prev) => all ? prev.filter((id) => !ids.includes(id)) : sorted([...prev, ...ids]))}>{all ? 'Снять' : 'Выбрать'}: {g.name}</button>;
+        })}</div>}
+        <div className="check-grid">
+          {found.map((e) => {
+            const mark = absence?.(e.id);
+            return <Checkbox key={e.id} checked={selected.includes(e.id)} onChange={() => toggle(e.id)}>
+              {short(e.id)}{mark && <em className="picker-absent"> · {mark}</em>}
+            </Checkbox>;
+          })}
+        </div>
       </div>
     </div>
   );

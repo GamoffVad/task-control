@@ -15,7 +15,7 @@ import { applyAbsenceStroke, type AbsenceStroke } from './absenceBrush';
 import type { Absence, AbsenceStatus, AppearanceSettings, AppState, ChatRead, AuthenticationMode, Data, DictionaryEntry, DictionaryKind, Entitlement, ManagedUser, Message, Permission, PlanRow, Role, RoleDefinition, ScoringSettings, Task, TemplateScope, Unit, UnitKind, User } from './types';
 import { DEFAULT_UNIT_OF, DEFAULT_UNITS, PARENT_KIND } from './units';
 import { DEFAULT_TEMPLATES, parseTemplate, templateScope } from './templates';
-import { normalizeVacationSettings, validVacationDays, validVacationSettings, vacationTypeCode, vacationTypes, vacationYear, withVacationTypes } from './vacations';
+import { addDefaultVacationTypes, normalizeVacationSettings, validVacationDays, validVacationSettings, vacationTypeCode, vacationTypes, vacationYear, withVacationTypes } from './vacations';
 import type { VacationSettings } from './types';
 import { dutyDictionaryInUse, dutyTypeCode, dutyTypes, eventTypeExists, systemEvent, withDutyTypes } from './eventTypes';
 import { hasDictionaryColor } from './eventPresentation';
@@ -27,6 +27,7 @@ export type DictionaryDraft = {
   code: string;
   title: string;
   color?: string;
+  order?: number;
 };
 
 /** Цвет значения справочника: только #RRGGBB, иначе цвета нет. */
@@ -63,7 +64,7 @@ export type Action =
   | { type: 'deleteDictionary'; id: string }
   | { type: 'savePlanRow'; draft: PlanRowDraft }
   | { type: 'deletePlanRow'; id: string }
-  | { type: 'saveManagedUser'; employeeId: number; role: Role; active: boolean; hidden?: boolean; annualVacationDays?: number; dayoffAccrued?: number; windowsLogin?: string; unitId?: string; fullName?: string; position?: string; email?: string; now?: Date }
+  | { type: 'saveManagedUser'; employeeId: number; role: Role; active: boolean; hidden?: boolean; annualVacationDays?: number; dayoffAccrued?: number; windowsLogin?: string; unitId?: string; fullName?: string; position?: string; rank?: string; email?: string; now?: Date }
   | { type: 'saveUnit'; draft: UnitDraft }
   | { type: 'saveTemplate'; draft: { id?: string; name: string; body: string; scope: TemplateScope } }
   | { type: 'deleteTemplate'; id: string }
@@ -130,8 +131,11 @@ const applyDraft = (user: User | null, existing: Task | undefined, draft: TaskDr
   const access = taskAccess(user, existing ?? null);
   // Задачу вне своей области видимости не изменить, а исполнителей можно назначать только из неё
   // (оставить уже назначенных вне области можно: иначе правка видимой задачи была бы невозможна).
-  if (existing && !taskVisible(existing, scope)) return null;
+  if (existing && !taskVisible(existing, scope, user?.employeeId)) return null;
   // (Исполнитель и так создаёт задачу только себе — его список подменяется ниже.)
+  if (!existing && draft.local) return user ? { ...draft, local: true, rowId: null, category: null, assigneeIds: [user.employeeId], score: null, tripAbsenceIds: [] } : null;
+  if (existing && !!draft.local !== !!existing.local) return null;
+  if (existing?.local) return access.plan ? { ...draft, local: true, rowId: null, category: null, assigneeIds: existing.assigneeIds, score: null, tripAbsenceIds: [] } : null;
   if (access.plan && isManager(user) && scope !== null && !draft.assigneeIds.every((id) => scope.has(id) || existing?.assigneeIds.includes(id))) return null;
   if (!existing) {
     if (!access.plan) return null;
@@ -178,6 +182,7 @@ export const reducer = (state: AppState, action: Action): AppState => {
     case 'saveTask': {
       const now = action.now ?? new Date();
       const existing = action.draft.id ? state.tasks.find((t) => t.id === action.draft.id) : undefined;
+      if (action.draft.id && !existing) return state;
       const allowed = applyDraft(state.user, existing, action.draft, userScope(state));
       if (!allowed) return state;
       let working = state;
@@ -205,11 +210,11 @@ export const reducer = (state: AppState, action: Action): AppState => {
       const tasks = existing ? state.tasks.map((t) => (t.id === task.id ? task : t)) : [...state.tasks, task];
       return { ...working, tasks };
     }
-    case 'deleteTask':
-      if (!hasPermission(state.user, 'tasks.delete')) return state;
-      // Удалить можно только то, что видишь.
-      if (!taskVisible(state.tasks.find((t) => t.id === action.id) ?? { assigneeIds: [] }, userScope(state))) return state;
+    case 'deleteTask': {
+      const target = state.tasks.find((t) => t.id === action.id);
+      if (!target || !taskVisible(target, userScope(state), state.user?.employeeId) || !taskAccess(state.user, target).delete) return state;
       return { ...state, tasks: state.tasks.filter((t) => t.id !== action.id) };
+    }
     case 'submitReport': {
       if (!hasPermission(state.user, 'reports.view') || !hasPermission(state.user, 'tasks.plan')) return state;
       const now = action.now ?? new Date();
@@ -265,7 +270,7 @@ export const reducer = (state: AppState, action: Action): AppState => {
         if (!change) return task;
         const before = !!task.tripAbsenceIds?.includes(absence.id), after = change.linked;
         if (before === after) return task;
-        if (!taskVisible(task, userScope(state)) || !taskAccess(state.user, task).plan
+        if (!taskVisible(task, userScope(state), state.user?.employeeId) || !taskAccess(state.user, task).plan
           || (after && (absence.type !== 'trip' || absence.status === 'rejected' || !task.assigneeIds.includes(absence.employeeId)))) { denied = true; return task; }
         const ids = after ? selectTaskTrip(task, absence.employeeId, absence.id, saved.absences) : (task.tripAbsenceIds ?? []).filter((id) => id !== absence.id);
         const { tripAbsenceIds: _links, ...base } = task;
@@ -314,6 +319,7 @@ export const reducer = (state: AppState, action: Action): AppState => {
       const code = draft.code.trim().replace(/\s+/g, '-').slice(0, 48);
       const title = draft.title.trim().slice(0, 160);
       if (!code || !title) return state;
+      if ((draft.dictionary === 'position' || draft.dictionary === 'rank') && (draft.order !== undefined && (!Number.isInteger(draft.order) || draft.order < 1 || draft.order > 1000000) || state.dictionaries.some((e) => e.id !== draft.id && e.dictionary === draft.dictionary && e.title.toLowerCase() === title.toLowerCase()))) return state;
       const existing = draft.id ? state.dictionaries.find((entry) => entry.id === draft.id) : undefined;
       if (draft.id && !existing) return state;
       if (existing && existing.dictionary !== draft.dictionary) return state;
@@ -325,7 +331,9 @@ export const reducer = (state: AppState, action: Action): AppState => {
       );
       if (duplicate) return state;
       const color = hasDictionaryColor(draft.dictionary) ? normalizeColor(draft.color) : undefined;
-      const entry: DictionaryEntry = { id: existing?.id ?? newId('dict'), dictionary: draft.dictionary, code, title, ...(color ? { color } : {}) };
+      const ordered = draft.dictionary === 'position' || draft.dictionary === 'rank';
+      const order = ordered ? (draft.order ?? existing?.order ?? Math.max(0, ...state.dictionaries.filter((e) => e.dictionary === draft.dictionary).map((e) => e.order ?? 0)) + 1) : undefined;
+      const entry: DictionaryEntry = { id: existing?.id ?? newId('dict'), dictionary: draft.dictionary, code, title, ...(color ? { color } : {}), ...(order !== undefined ? { order } : {}) };
       const dictionaries = existing
         ? state.dictionaries.map((item) => (item.id === entry.id ? entry : item))
         : [...state.dictionaries, entry];
@@ -335,12 +343,14 @@ export const reducer = (state: AppState, action: Action): AppState => {
         if (existing.dictionary === 'dutyType' && a.type === 'duty' && dutyTypeCode(a, state.dictionaries) === existing.code) return { ...a, dutyType: code };
         return a;
       });
-      return { ...state, dictionaries, absences };
+      const users = existing && existing.title !== title && ordered ? state.users.map((u) => existing.dictionary === 'position' && u.position === existing.title ? { ...u, position: title } : existing.dictionary === 'rank' && u.rank === existing.title ? { ...u, rank: title } : u) : state.users;
+      return { ...state, dictionaries, absences, users };
     }
     case 'deleteDictionary': {
       if (!hasPermission(state.user, 'dictionaries.manage') || !state.dictionaries.some((entry) => entry.id === action.id)) return state;
       const entry = state.dictionaries.find((e) => e.id === action.id)!;
       if (dutyDictionaryInUse(entry, state.dictionaries, state.absences)) return state;
+      if (entry.dictionary === 'position' && state.users.some((u) => u.position === entry.title) || entry.dictionary === 'rank' && state.users.some((u) => u.rank === entry.title)) return state;
       if (entry.dictionary === 'vacationType' && (vacationTypes(state.dictionaries).length <= 1 || state.absences.some((a) => a.type === 'vacation' && vacationTypeCode(a, state.dictionaries) === entry.code))) return state;
       return { ...state, dictionaries: state.dictionaries.filter((entry) => entry.id !== action.id) };
     }
@@ -394,10 +404,13 @@ export const reducer = (state: AppState, action: Action): AppState => {
       // независимо от способа входа и наличия Active Directory.
       const fullName = (action.fullName ?? current.fullName).trim().slice(0, 200);
       const position = (action.position ?? current.position).trim().slice(0, 200);
+      const rank = (action.rank ?? current.rank ?? '').trim().slice(0, 200);
+      if (action.position !== undefined && position !== current.position && position && !state.dictionaries.some((d) => d.dictionary === 'position' && d.title === position)) return state;
+      if (action.rank !== undefined && rank !== (current.rank ?? '') && rank && !state.dictionaries.some((d) => d.dictionary === 'rank' && d.title === rank)) return state;
       const email = (action.email ?? current.email).trim().toLowerCase().slice(0, 200);
       if (!fullName || !email) return state;
       if (state.users.some((item) => item.employeeId !== action.employeeId && item.email.toLowerCase() === email)) return state;
-      const users = state.users.map((item) => item.employeeId === action.employeeId ? { ...item, role: action.role, active: action.active, hidden: action.hidden ?? item.hidden ?? false, ...(action.annualVacationDays !== undefined ? { annualVacationDays: action.annualVacationDays } : {}), windowsLogin, unitId, fullName, position, email } : item);
+      const users = state.users.map((item) => item.employeeId === action.employeeId ? { ...item, role: action.role, active: action.active, hidden: action.hidden ?? item.hidden ?? false, ...(action.annualVacationDays !== undefined ? { annualVacationDays: action.annualVacationDays } : {}), windowsLogin, unitId, fullName, position, rank, email } : item);
       const hasAdmin = users.some((item) => item.active && ['admin.access', 'users.manage', 'roles.manage'].every((permission) => permissionsFor(item.role, state.roles).includes(permission as Permission)));
       if (!hasAdmin) return state;
       const user = effectiveUser(state.user, users, state.roles);
@@ -426,6 +439,7 @@ export const reducer = (state: AppState, action: Action): AppState => {
       const login = account.windowsLogin.trim().slice(0, 128);
       const fullName = account.fullName.trim().slice(0, 200);
       const email = account.email.trim().toLowerCase().slice(0, 200);
+      if (account.position && !state.dictionaries.some((d) => d.dictionary === 'position' && d.title === account.position) || account.rank && !state.dictionaries.some((d) => d.dictionary === 'rank' && d.title === account.rank)) return state;
       if (!fullName || !login || !Number.isInteger(account.employeeId) || account.employeeId < 1) return state;
       if (state.users.some((item) => item.employeeId === account.employeeId || item.windowsLogin.toLowerCase() === login.toLowerCase())) return state;
       if (account.unitId && !state.units.some((u) => u.id === account.unitId)) return state;
@@ -557,7 +571,7 @@ type Stored = {
 export const isStored = (v: unknown): v is Stored =>
   typeof v === 'object' &&
   v !== null &&
-  [1, 2, 3, 4, 5].includes((v as Stored).version) &&
+  [1, 2, 3, 4, 5, 6].includes((v as Stored).version) &&
   Array.isArray((v as Stored).tasks) &&
   Array.isArray((v as Stored).reports) &&
   Array.isArray((v as Stored).messages);
@@ -573,7 +587,7 @@ export const migrate = (s: Stored): AppState => {
     ? { ...role, permissions: [...role.permissions, 'authentication.manage' as Permission] }
     : role);
   const state: AppState = {
-    version: 5,
+    version: 6,
     tasks: s.tasks.map((t) => ({
       ...t,
       category: t.category ?? null,
@@ -588,7 +602,7 @@ export const migrate = (s: Stored): AppState => {
     vacationSettings: normalizeVacationSettings(s.vacationSettings),
     periodSettings: normalizePeriodSettings(s.periodSettings),
     planRows: sortedPlanRows(s.planRows ?? planRows),
-    dictionaries: withDutyTypes(withVacationTypes(s.dictionaries ?? DEFAULT_DICTIONARIES)),
+    dictionaries: withDutyTypes(withVacationTypes(s.version < 6 ? addDefaultVacationTypes(s.dictionaries ?? DEFAULT_DICTIONARIES) : (s.dictionaries ?? DEFAULT_DICTIONARIES))),
     users,
     roles: s.periodSettings === undefined ? withAddedPermissions(roles) : roles,
     authentication: s.authentication ?? { ...DEFAULT_AUTHENTICATION },
@@ -620,6 +634,7 @@ export const toData = (s: AppState): Data => ({
   authentication: s.authentication,
   scoring: s.scoring,
   accessVersion: ACCESS_VERSION,
+  vacationTypesVersion: 1,
 });
 
 export const fromData = (d: Data, user: User | null): AppState => {
@@ -632,5 +647,5 @@ export const fromData = (d: Data, user: User | null): AppState => {
     return { ...account, windowsLogin: account.windowsLogin || account.email.split('@')[0], fullName: account.fullName || (employee ? `${employee.lastname} ${employee.name} ${employee.patronymic}` : account.windowsLogin), position: account.position || employee?.position || '', unitId: account.unitId ?? DEFAULT_UNIT_OF[account.employeeId] };
   });
   const { notices: _notices, accessVersion: _accessVersion, ...rest } = d;
-  return { version: 5, ...rest, chatReads: d.chatReads ?? [], units: d.units ?? DEFAULT_UNITS.map((u) => ({ ...u })), templates: (d.templates ?? DEFAULT_TEMPLATES).map((t) => ({ ...t, scope: templateScope(t) })), planRows: sortedPlanRows(d.planRows ?? planRows), dictionaries: withDutyTypes(withVacationTypes(d.dictionaries ?? DEFAULT_DICTIONARIES)), vacationSettings: normalizeVacationSettings(d.vacationSettings), periodSettings: normalizePeriodSettings(d.periodSettings), users: normalizedUsers, roles, authentication: d.authentication ?? { ...DEFAULT_AUTHENTICATION }, scoring: d.scoring ?? { ...DEFAULT_SCORING }, appearance: normalizeAppearance(undefined), user: effectiveUser(user, normalizedUsers, roles) };
+  return { version: 6, ...rest, chatReads: d.chatReads ?? [], units: d.units ?? DEFAULT_UNITS.map((u) => ({ ...u })), templates: (d.templates ?? DEFAULT_TEMPLATES).map((t) => ({ ...t, scope: templateScope(t) })), planRows: sortedPlanRows(d.planRows ?? planRows), dictionaries: withDutyTypes(withVacationTypes(d.dictionaries ?? DEFAULT_DICTIONARIES)), vacationSettings: normalizeVacationSettings(d.vacationSettings), periodSettings: normalizePeriodSettings(d.periodSettings), users: normalizedUsers, roles, authentication: d.authentication ?? { ...DEFAULT_AUTHENTICATION }, scoring: d.scoring ?? { ...DEFAULT_SCORING }, appearance: normalizeAppearance(undefined), user: effectiveUser(user, normalizedUsers, roles) };
 };

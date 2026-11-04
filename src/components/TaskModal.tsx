@@ -101,7 +101,7 @@ const TaskModal = ({ task, defaults, context, onClose }: OpenArgs & { onClose: (
     });
   };
 
-  const setResult = (value: string) => setDraft((d) => ({ ...d, result: value, done: value.trim() ? d.done : false }));
+  const setResult = (value: string) => setDraft((d) => ({ ...d, result: value, done: value.trim() || d.local ? d.done : false }));
 
   const base = baseScore(draft.rowId, state.planRows);
   const effectiveScore = draft.score ?? base;
@@ -188,6 +188,13 @@ const TaskModal = ({ task, defaults, context, onClose }: OpenArgs & { onClose: (
             </p>
           )}
 
+          <div className="field">
+            <Checkbox checked={!!draft.local} disabled={!isNew} onChange={(checked) => {
+              setDraft((d) => ({ ...d, local: checked, ...(checked ? { rowId: null, category: null, score: null, assigneeIds: user ? [user.employeeId] : [], tripAbsenceIds: [] } : {}) }));
+              if (checked) { setTripMode(false); setPendingTrips([]); setTripError(undefined); }
+            }}>Локальная задача (заметка)</Checkbox>
+            <span className="field-hint">Видна только вам, вне плана и без баллов. Тип можно выбрать только при создании.</span>
+          </div>
           <div className="task-grid">
             <div className="task-col">
               {/* Многострочное название: растягивается на свободную высоту колонки, чтобы вставлять формулировки из плана. */}
@@ -224,10 +231,10 @@ const TaskModal = ({ task, defaults, context, onClose }: OpenArgs & { onClose: (
                 </label>
               </div>
               {errors.end && <span className="field-error">{errors.end}</span>}
-              <TaskTripsField draft={draft} absences={allTrips} enabled={tripMode} readOnly={!access.plan} error={tripError}
+              {!draft.local && <TaskTripsField draft={draft} absences={allTrips} enabled={tripMode} readOnly={!access.plan} error={tripError}
                 onEnabled={(enabled) => { setTripMode(enabled); setTripError(undefined); if (!enabled) { set('tripAbsenceIds', []); setPendingTrips([]); } }}
                 onChange={(ids) => { set('tripAbsenceIds', ids); setTripError(undefined); }} onCreate={setCreatingTrip}
-                canCreate={(id) => absenceAccess(user, null).edit && (hasPermission(user, 'absences.manage') || id === user?.employeeId)} />
+                canCreate={(id) => absenceAccess(user, null).edit && (hasPermission(user, 'absences.manage') || id === user?.employeeId)} />}
               {absentees.length > 0 && (
                 <p className="warn-note" role="note">
                   <b>Срок приходится на отсутствие исполнителя.</b>{' '}
@@ -239,7 +246,7 @@ const TaskModal = ({ task, defaults, context, onClose }: OpenArgs & { onClose: (
               <div className="field-row">
                 <div className="field">
                   <span className="caps">Раздел планирования</span>
-                  <Select<string> variant="light" label="Раздел планирования" value={draft.rowId ?? ''} options={rowOptions} onChange={(v) => set('rowId', v || null)} disabled={!access.plan} />
+                  <Select<string> variant="light" label="Раздел планирования" value={draft.rowId ?? ''} options={rowOptions} onChange={(v) => set('rowId', v || null)} disabled={!access.plan || !!draft.local} />
                 </div>
                 <div className="field">
                   <span className="caps">Категория</span>
@@ -252,7 +259,7 @@ const TaskModal = ({ task, defaults, context, onClose }: OpenArgs & { onClose: (
                         value={draft.category ?? ''}
                         options={categoryOptions}
                         onChange={(v) => set('category', v || null)}
-                        disabled={!access.plan}
+                        disabled={!access.plan || !!draft.local}
                       />
                     </div>
                   </div>
@@ -279,7 +286,7 @@ const TaskModal = ({ task, defaults, context, onClose }: OpenArgs & { onClose: (
                   choices={assigneeChoices}
                   selected={draft.assigneeIds.filter((id) => assigneeChoices.some((employee) => employee.id === id))}
                   onChange={(update) => setDraft((d) => ({ ...d, assigneeIds: update(d.assigneeIds) }))}
-                  readOnly={!access.plan || user?.role === 'executor'}
+                  readOnly={!access.plan || !!draft.local || user?.role === 'executor'}
                   absence={(id) => {
                     if (draft.done) return null;
                     const a = absentees.find((item) => item.id === id)?.a;
@@ -301,12 +308,12 @@ const TaskModal = ({ task, defaults, context, onClose }: OpenArgs & { onClose: (
                     readOnly={!access.execution}
                   />
                 </div>
-                <Checkbox tone="ok" checked={draft.done} disabled={!access.execution || !draft.result.trim()} onChange={(v) => set('done', v)}>
-                  {draft.result.trim() ? (draft.done ? 'Исполнено' : 'Отметить как исполненное') : 'Отметка доступна после описания результата'}
+                <Checkbox tone="ok" checked={draft.done} disabled={!access.execution || (!draft.local && !draft.result.trim())} onChange={(v) => set('done', v)}>
+                  {draft.local || draft.result.trim() ? (draft.done ? 'Исполнено' : 'Отметить как исполненное') : 'Отметка доступна после описания результата'}
                 </Checkbox>
                 {errors.done && <span className="field-error">{errors.done}</span>}
                 {/* Баллы видит и меняет только руководитель; исполнитель видит свои баллы в карточке сотрудника. */}
-                {access.score && (
+                {access.score && !draft.local && (
                   <div className="field" style={{ marginTop: 10 }}>
                     <label className="caps" htmlFor="task-score">Баллы за исполнение</label>
                     {base === null ? (

@@ -29,6 +29,7 @@ BEGIN TRY
     [row_id] nvarchar(64) null,
     [category] nvarchar(64) null,
     [assignee_ids] nvarchar(max) not null constraint df_tc_tasks_assignee_ids default ''[]'',
+    [local] bit not null constraint df_tc_tasks_local default 0,
     [trip_absence_ids] nvarchar(max) null,
     [start_at] datetimeoffset(3) not null constraint df_tc_tasks_start_at default sysdatetimeoffset(),
     [end_at] datetimeoffset(3) not null constraint df_tc_tasks_end_at default sysdatetimeoffset(),
@@ -48,6 +49,8 @@ BEGIN TRY
   EXEC(N'if col_length(''dbo.tc_tasks'', ''category'') is null alter table dbo.tc_tasks add [category] nvarchar(64) null');
 
   EXEC(N'if col_length(''dbo.tc_tasks'', ''assignee_ids'') is null alter table dbo.tc_tasks add [assignee_ids] nvarchar(max) not null constraint df_tc_tasks_assignee_ids default ''[]''');
+
+  EXEC(N'if col_length(''dbo.tc_tasks'', ''local'') is null alter table dbo.tc_tasks add [local] bit not null constraint df_tc_tasks_local default 0');
 
   EXEC(N'if col_length(''dbo.tc_tasks'', ''trip_absence_ids'') is null alter table dbo.tc_tasks add [trip_absence_ids] nvarchar(max) null');
 
@@ -152,7 +155,8 @@ BEGIN TRY
     [dictionary] nvarchar(64) not null constraint df_tc_dictionaries_dictionary default '''',
     [code] nvarchar(64) not null constraint df_tc_dictionaries_code default '''',
     [title] nvarchar(256) not null constraint df_tc_dictionaries_title default '''',
-    [color] nvarchar(32) null)');
+    [color] nvarchar(32) null,
+    [sort_order] int null)');
 
   EXEC(N'if col_length(''dbo.tc_dictionaries'', ''dictionary'') is null alter table dbo.tc_dictionaries add [dictionary] nvarchar(64) not null constraint df_tc_dictionaries_dictionary default ''''');
 
@@ -161,6 +165,8 @@ BEGIN TRY
   EXEC(N'if col_length(''dbo.tc_dictionaries'', ''title'') is null alter table dbo.tc_dictionaries add [title] nvarchar(256) not null constraint df_tc_dictionaries_title default ''''');
 
   EXEC(N'if col_length(''dbo.tc_dictionaries'', ''color'') is null alter table dbo.tc_dictionaries add [color] nvarchar(32) null');
+
+  EXEC(N'if col_length(''dbo.tc_dictionaries'', ''sort_order'') is null alter table dbo.tc_dictionaries add [sort_order] int null');
 
   EXEC(N'if not exists (select 1 from sys.indexes where name = ''tc_dictionaries_kind_code'' and object_id = object_id(N''dbo.tc_dictionaries''))
      create unique index tc_dictionaries_kind_code on dbo.tc_dictionaries ([dictionary], [code])');
@@ -187,6 +193,7 @@ BEGIN TRY
     [windows_login] nvarchar(128) not null constraint df_tc_users_login default '''',
     [full_name] nvarchar(256) not null constraint df_tc_users_full_name default '''',
     [position] nvarchar(256) not null constraint df_tc_users_position default '''',
+    [rank] nvarchar(256) not null constraint df_tc_users_rank default '''',
     [unit_id] nvarchar(64) null)');
 
   EXEC(N'if col_length(''dbo.tc_users'', ''email'') is null alter table dbo.tc_users add [email] nvarchar(256) not null constraint df_tc_users_email default ''''');
@@ -204,6 +211,8 @@ BEGIN TRY
   EXEC(N'if col_length(''dbo.tc_users'', ''full_name'') is null alter table dbo.tc_users add [full_name] nvarchar(256) not null constraint df_tc_users_full_name default ''''');
 
   EXEC(N'if col_length(''dbo.tc_users'', ''position'') is null alter table dbo.tc_users add [position] nvarchar(256) not null constraint df_tc_users_position default ''''');
+
+  EXEC(N'if col_length(''dbo.tc_users'', ''rank'') is null alter table dbo.tc_users add [rank] nvarchar(256) not null constraint df_tc_users_rank default ''''');
 
   EXEC(N'if col_length(''dbo.tc_users'', ''unit_id'') is null alter table dbo.tc_users add [unit_id] nvarchar(64) null');
 

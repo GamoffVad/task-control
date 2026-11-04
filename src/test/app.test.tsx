@@ -61,6 +61,31 @@ describe('вход', () => {
   });
 });
 
+describe('личная заметка', () => {
+  it('создаётся для себя и позволяет отметить выполнение и удалить', async () => {
+    renderAt('/calendar', executorIn());
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Новая задача' }));
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Локальная задача (заметка)' }));
+    await user.type(within(dialog).getByLabelText('Название'), 'Моя личная заметка');
+    expect(within(dialog).getByRole('button', { name: /^Раздел планирования:/ })).toBeDisabled();
+    await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }));
+    const note = loadState().tasks.find((t) => t.title === 'Моя личная заметка')!;
+    expect(note).toMatchObject({ local: true, rowId: null, category: null, assigneeIds: [3] });
+    await user.click(document.querySelector(`[data-calendar-task="${note.id}"]`)!);
+    const edit = screen.getByRole('dialog');
+    expect(within(edit).getByRole('checkbox', { name: 'Локальная задача (заметка)' })).toBeDisabled();
+    await user.click(within(edit).getByRole('checkbox', { name: 'Отметить как исполненное' }));
+    await user.click(within(edit).getByRole('button', { name: 'Сохранить' }));
+    expect(loadState().tasks.find((t) => t.id === note.id)?.done).toBe(true);
+    await user.click(document.querySelector(`[data-calendar-task="${note.id}"]`)!);
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Удалить' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Точно удалить?' }));
+    expect(loadState().tasks.find((t) => t.id === note.id)).toBeUndefined();
+  }, 15000);
+});
+
 describe('разделы', () => {
   it('в демонстрационной версии настройки SQL недоступны и указано хранение в браузере', async () => {
     renderAt('/admin');
@@ -838,7 +863,9 @@ describe('тема', () => {
 describe('администрирование', () => {
   it('администратор управляет пользователями, словарями и позициями плана, исполнитель не открывает раздел', async () => {
     const user = userEvent.setup();
-    const { unmount } = renderAt('/admin');
+    const adminState = loggedIn();
+    adminState.dictionaries.push({ id: 'pos-chief', dictionary: 'position', code: 'chief', title: 'Главный специалист', order: 1 });
+    const { unmount } = renderAt('/admin', adminState);
     expect(screen.getByRole('heading', { name: 'Администрирование' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Администрирование' })).toBeInTheDocument();
 
@@ -862,9 +889,8 @@ describe('администрирование', () => {
     const fullName = within(editDialog).getByLabelText('ФИО');
     await user.clear(fullName);
     await user.type(fullName, 'Сидоров Дмитрий Евгеньевич-Второй');
-    const position = within(editDialog).getByLabelText('Должность');
-    await user.clear(position);
-    await user.type(position, 'Главный специалист');
+    await user.click(within(editDialog).getByRole('button', { name: /^Должность:/ }));
+    await user.click(within(editDialog).getByRole('option', { name: 'Главный специалист' }));
     await user.click(within(editDialog).getByRole('button', { name: 'Сохранить' }));
     expect(screen.getByText('sidorov-ad')).toBeInTheDocument();
     expect(screen.getByText('Сидоров Дмитрий Евгеньевич-Второй')).toBeInTheDocument();

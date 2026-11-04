@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { PeriodPicker } from '../components/ui';
 import { FilterCard, PageHeader } from '../kit';
-import { department, employeeById, shortName } from '../lib/data';
+import { department, employees, employeeById, shortName } from '../lib/data';
 import { fmtDate, fmtDayMonth, fmtNum, PERIOD_LABELS, periodStart, plural, points } from '../lib/dates';
 import { entriesInPeriod, kpiByDirection, kpiByEmployee, reportWeek, summarize, type ScoringContext } from '../lib/logic';
 import { useStore } from '../lib/store';
@@ -26,6 +26,8 @@ export const Kpi = () => {
   const scope = useScope();
   // Начальник отделения видит показатели своего подразделения: баллы остальных ему не показываются (в отчётах их строки скрыты).
   const rows = useMemo(() => kpiByEmployee(state.reports, period, now, ctx).filter((r) => inScope(scope, r.employeeId)), [state.reports, period, now, ctx, scope]);
+  const positionOrder = new Map(employees.map((employee, index) => [employee.id, index]));
+  const displayRows = [...rows].sort((a, b) => (positionOrder.get(a.employeeId) ?? Infinity) - (positionOrder.get(b.employeeId) ?? Infinity));
   const directions = useMemo(() => (state.scoring.byDirection ? kpiByDirection(state.reports, period, now, ctx).filter((d) => scope === null || department.groups.find((g) => g.id === d.id)?.employeeIds.some((id) => scope.has(id))) : []), [state.reports, period, now, ctx, state.scoring.byDirection, scope]);
   // Итоги считаются по правилам оценки: исключённые сотрудники в них не входят.
   const summary = useMemo(() => summarize(new Map(rows.map((r) => [r.employeeId, r.total])), ctx), [rows, ctx]);
@@ -135,14 +137,14 @@ export const Kpi = () => {
             <span className="caps">баллы · задачи</span>
           </div>
           {total === 0 && <p className="empty">За выбранный период нет отправленных отчётов.</p>}
-          {rows.map((r, i) => (
+          {displayRows.map((r) => (
             <div className={`hbar-row${r.excluded ? ' hbar-row--muted' : ''}`} key={r.employeeId}>
               <Link className="label" to={`/employees/${r.employeeId}`}>
                 {shortName(r.employeeId)}
                 <span className="pos">{r.excluded ? 'вне оценки' : employeeById.get(r.employeeId)?.position}</span>
               </Link>
               <div className="bar-track" aria-hidden>
-                <div className={`bar-fill${i === 0 && r.total > 0 && !r.excluded ? ' lead' : ''}`} style={{ transform: `scaleX(${r.total / max})` }} />
+                <div className={`bar-fill${leader?.employeeId === r.employeeId && r.total > 0 && !r.excluded ? ' lead' : ''}`} style={{ transform: `scaleX(${r.total / max})` }} />
               </div>
               <div className="val">
                 {fmtNum(r.total)}

@@ -60,6 +60,7 @@ export const detectEvents = (before: Data, after: Data, actor: User, timeZone = 
   const oldTasks = new Map(before.tasks.map((t) => [t.id, t]));
   const deadline = (t: Task) => `Срок: ${fmt(t.end, true, timeZone)}`;
   for (const t of after.tasks) {
+    if (t.local) continue;
     const was = oldTasks.get(t.id);
     const added = others(t.assigneeIds.filter((id) => !was?.assigneeIds.includes(id)), me);
     if (added.length) {

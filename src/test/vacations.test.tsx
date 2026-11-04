@@ -58,12 +58,12 @@ describe('отпускной период и индивидуальная нор
 
   it('не меняет карточку при неверном начислении или отсутствии права на нормы', () => {
     const state = initial();
-    const action = { type: 'saveManagedUser', employeeId: 3, role: 'executor', active: true, position: 'Изменено', now: NOW } as const;
+    const action = { type: 'saveManagedUser', employeeId: 3, role: 'executor', active: true, fullName: 'Изменено Имя', now: NOW } as const;
     for (const dayoffAccrued of [-1, 1.5, NaN, Infinity, 3001]) expect(reducer(state, { ...action, dayoffAccrued })).toBe(state);
     // Управление сотрудниками само по себе не даёт права менять начисления.
     const limited: AppState = { ...state, user: { ...state.user!, permissions: ['users.manage'] } };
     expect(reducer(limited, { ...action, dayoffAccrued: 5 })).toBe(limited);
-    expect(reducer(limited, action).users[2].position).toBe('Изменено');
+    expect(reducer(limited, action).users[2].fullName).toBe('Изменено Имя');
   });
   it('сбрасывает остаток точно в выбранную дату и сохраняет историю', () => {
     const absences = [absence('2026-04-10', '2026-04-20')];
@@ -128,6 +128,14 @@ describe('отпускной период и индивидуальная нор
     expect(next.entitlements.find((e) => e.year === 2025)).toMatchObject({ vacationDays: 40, carriedOver: 5, dayoffAccrued: 2 });
     expect(next.entitlements.find((e) => e.year === 2026)?.dayoffAccrued).toBe(9);
     expect(next.users[2].annualVacationDays).toBe(40);
+  });
+
+  it('один раз добавляет типы отпусков в старое хранилище и сохраняет удаление', () => {
+    const old = { ...initial(), version: 5, dictionaries: initial().dictionaries.filter((d) => d.dictionary !== 'vacationType' || d.code === 'annual') };
+    const migrated = migrate(old);
+    expect(migrated.dictionaries.filter((d) => d.dictionary === 'vacationType').map((d) => d.title)).toEqual(['Ежегодный отпуск', 'Отпуск за прошлый год', 'Ветеранский отпуск']);
+    const removed = reducer(migrated, { type: 'deleteDictionary', id: 'dict-vacation-veteran' });
+    expect(migrate(removed).dictionaries.some((d) => d.code === 'veteran')).toBe(false);
   });
 
   it('мигрирует старое хранилище и сохраняет настройки при повторной загрузке', () => {
@@ -207,10 +215,10 @@ describe('настройки отпусков в интерфейсе', () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: /Редактировать пользователя Сидоров/ }));
     expect(screen.getByLabelText(/Отгулы, начисленные вручную/)).toBeDisabled();
-    await user.clear(screen.getByLabelText('Должность'));
-    await user.type(screen.getByLabelText('Должность'), 'Инженер');
+    await user.clear(screen.getByLabelText('ФИО'));
+    await user.type(screen.getByLabelText('ФИО'), 'Сидоров Иван');
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
-    expect(loadState().users.find((u) => u.employeeId === 3)?.position).toBe('Инженер');
+    expect(loadState().users.find((u) => u.employeeId === 3)?.fullName).toBe('Сидоров Иван');
   });
   it('сохраняет норму в редактировании сотрудника и проверяет ввод', async () => {
     render(<StoreProvider initial={initial()}><MemoryRouter initialEntries={['/admin']}><AppRoutes /></MemoryRouter></StoreProvider>);

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode, type PointerEvent } from 
 import { useTaskEditor } from '../components/taskEditor';
 import { TaskTripLabel } from '../components/TaskTripLabel';
 import { EmployeeFilter, GroupFilter } from '../components/ui';
-import { FilterCard, MultiSelect, PageHeader, SearchField, Segmented, Select, Stepper } from '../kit';
+import { Button, FilterCard, MultiSelect, PageHeader, SearchField, Segmented, Select, Stepper } from '../kit';
 import { Icon } from '../components/Icons';
 import { CATEGORIES, categoryLabel, groupMembers, shortName, unitOf } from '../lib/data';
 import { catColor, useCategoryOptions, type CatKey } from '../lib/categories';
@@ -109,7 +109,8 @@ export const Calendar = () => {
   const [now, setNow] = useState(() => new Date());
   const clashes = useClashes();
   const [moveMessage, setMoveMessage] = useState('');
-  const canMove = (task: Task) => taskAccess(state.user, task).plan;
+  const [movementEnabled, setMovementEnabled] = useState(false);
+  const canMove = (task: Task) => movementEnabled && taskAccess(state.user, task).plan;
   const moveTask = (task: Task, start: Date) => {
     if (!canMove(task) || start.getTime() === new Date(task.start).getTime()) return;
     dispatch({ type: 'saveTask', draft: { ...task, ...movedTaskDates(task, start) } });
@@ -176,7 +177,7 @@ export const Calendar = () => {
   };
   const interactionNote = resizing && drop
     ? `Новый период: ${fmtDateTime(drop.start)} – ${fmtDateTime(drop.end)}`
-    : moveMessage || 'Переносите задачу за середину, меняйте период за края. У края календаря — смена дня/недели/месяца. Escape — отмена.';
+    : !movementEnabled ? 'Перемещение карточек заблокировано. Включите его в шапке календаря.' : moveMessage || 'Переносите задачу за середину, меняйте период за края. У края календаря — смена дня/недели/месяца. Escape — отмена.';
 
   return (
     <div className={`calendar-layout${draggingId ? ' calendar-dragging' : ''}${resizing ? ' calendar-resizing' : ''}`} ref={root} tabIndex={-1} {...dragEvents}>
@@ -194,6 +195,10 @@ export const Calendar = () => {
               <span className="caps">Вид</span>
               <Segmented label="Вид календаря" value={view} options={VIEWS} onChange={setView} />
             </div>
+            {manager && <div className="tool">
+              <span className="caps">Перемещение карточек</span>
+              <Button aria-label="Перемещение карточек" aria-pressed={movementEnabled} onClick={() => { setMovementEnabled((enabled) => !enabled); setMoveMessage(''); }}>{movementEnabled ? 'Разрешено' : 'Заблокировано'}</Button>
+            </div>}
           </>
         }
         actions={
@@ -352,7 +357,7 @@ const DayColumn = ({ day, tasks, now, clashes, drag, heights, onCreate, onOpen }
         <button
           key={task.id}
           type="button"
-          className={`cal-event cat${stateClass(task, now)}${clashes.some((c) => c.task.id === task.id) ? ' absent' : ''}${drag.canMove(task) ? ' calendar-movable' : ''}${drag.draggingId === task.id ? ' calendar-moving' : ''}`}
+          className={`cal-event cat${task.local ? ' calendar-local-note' : ''}${stateClass(task, now)}${clashes.some((c) => c.task.id === task.id) ? ' absent' : ''}${drag.canMove(task) ? ' calendar-movable' : ''}${drag.draggingId === task.id ? ' calendar-moving' : ''}`}
           data-calendar-task={task.id}
           data-calendar-top={top}
           data-calendar-duration={height}
@@ -451,7 +456,7 @@ const MonthView = ({ cursor, tasks, now, clashes, drag, onCreate, onOpen }: {
                   <button
                     key={t.id}
                     type="button"
-                    className={`chip cat${stateClass(t, now)}${clashes.some((c) => c.task.id === t.id) ? ' absent' : ''}${drag.canMove(t) ? ' calendar-movable' : ''}${drag.draggingId === t.id ? ' calendar-moving' : ''}`}
+                    className={`chip cat${t.local ? ' calendar-local-note' : ''}${stateClass(t, now)}${clashes.some((c) => c.task.id === t.id) ? ' absent' : ''}${drag.canMove(t) ? ' calendar-movable' : ''}${drag.draggingId === t.id ? ' calendar-moving' : ''}`}
                     data-calendar-task={t.id}
                     draggable={false}
                     onPointerDown={(event) => drag.onStart(event, t)}

@@ -161,6 +161,15 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
     expect(back.planRows).toEqual(seed.planRows);
   });
 
+  it('сохраняет признак личной заметки при чтении из базы', async () => {
+    const before = (await repo.read())!;
+    const note = { ...before.tasks[0], id: 'private-note-test', local: true, assigneeIds: [3], rowId: null, category: null, score: null };
+    try {
+      await repo.update((data) => ({ ...data!, tasks: [...data!.tasks, note] }));
+      expect((await repo.read())!.tasks.find((t) => t.id === note.id)).toMatchObject({ local: true, assigneeIds: [3] });
+    } finally { await repo.update(() => before); }
+  });
+
   it('сохраняет явное включение и отключение руководства подразделения после переподключения', async () => {
     const before = (await repo.read())!;
     try {

@@ -61,6 +61,41 @@ const withApi = async (options: Partial<Parameters<typeof createApi>[0]> & { rep
 };
 
 describe('API', () => {
+  it('личная заметка доступна только владельцу, не попадает в отчёты и не меняет тип', async () => {
+    const original = (await repo.read())!;
+    repo = createMemoryRepo(undefined, { ...original, tasks: [], notices: [] });
+    const owner = await login('sidorov');
+    const admin = await login('user');
+    const manager = await login('petrov');
+    const { id: _id, doneAt: _doneAt, ...base } = original.tasks[0];
+    const draft = { ...base, title: 'Личная заметка', local: true, assigneeIds: [3], rowId: null, category: null, score: null, result: '', done: false, tripAbsenceIds: [] };
+    const send = (token: string, action: unknown) => call('/api/action', { method: 'POST', token, body: { action } });
+    const created = await send(owner, { type: 'saveTask', draft });
+    expect(created.status).toBe(200);
+    const note = created.json.data!.tasks.find((t) => t.title === 'Личная заметка')!;
+    expect(note).toMatchObject({ local: true, rowId: null, category: null, assigneeIds: [3] });
+    for (const token of [admin, manager]) {
+      expect((await call('/api/state', { token })).json.data!.tasks.some((t) => t.id === note.id)).toBe(false);
+      expect((await send(token, { type: 'deleteTask', id: note.id })).status).toBe(403);
+      expect((await send(token, { type: 'saveTask', draft: { ...note, title: 'Подмена' } })).status).toBe(403);
+    }
+    expect((await send(owner, { type: 'saveTask', draft: { ...note, local: false } })).status).toBe(403);
+    expect((await send(owner, { type: 'saveTask', draft: { ...note, done: true, result: '' } })).status).toBe(200);
+    expect((await repo.read())!.notices).toEqual([]);
+    expect((await send(owner, { type: 'deleteTask', id: note.id })).status).toBe(200);
+    expect((await repo.read())!.tasks).toHaveLength(0);
+  });
+
+  it('однократно дополняет старый справочник типов отпусков', async () => {
+    const old = (await repo.read())!;
+    repo = createMemoryRepo(undefined, { ...old, vacationTypesVersion: undefined, dictionaries: old.dictionaries.filter((d) => d.dictionary !== 'vacationType' || d.code === 'annual') });
+    const admin = await login('user');
+    expect((await repo.read())!.dictionaries.filter((d) => d.dictionary === 'vacationType').map((d) => d.code)).toEqual(['annual', 'previous-year', 'veteran']);
+    const deleted = await call('/api/action', { method: 'POST', token: admin, body: { action: { type: 'deleteDictionary', id: 'dict-vacation-veteran' } } });
+    expect(deleted.status).toBe(200);
+    await call('/api/state', { token: admin });
+    expect((await repo.read())!.dictionaries.some((d) => d.code === 'veteran')).toBe(false);
+  });
   it('сохраняет связи поездок, валидирует подмены и разрешает правку после удаления поездки', async () => {
     const data = (await repo.read())!;
     const base = { ...data.tasks[0], id: 'trip-work', assigneeIds: [3], tripAbsenceIds: undefined,
@@ -313,6 +348,7 @@ describe('API', () => {
     const found = await call('/api/directory-users?q=Кудр', { token: admin });
     expect(found.status).toBe(200);
     expect((found.json as { users: unknown[] }).users[0]).toMatchObject({ fullName: 'Кудрявцев Олег Игоревич', login: 'kudryavtsev.oi' });
+    expect((await call('/api/action', { method: 'POST', token: admin, body: { action: { type: 'saveDictionary', draft: { dictionary: 'position', code: 'engineer', title: 'Инженер', order: 1 } } } })).status).toBe(200);
     const account = { employeeId: 1001, fullName: 'Кудрявцев Олег Игоревич', position: 'Инженер', windowsLogin: 'kudryavtsev.oi', email: 'kudryavtsev.oi@example.com', role: 'executor', active: true };
     const added = await call('/api/action', { method: 'POST', token: admin, body: { action: { type: 'addManagedUser', account } } });
     expect(added.status).toBe(200);

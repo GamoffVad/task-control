@@ -17,7 +17,7 @@ type Mode = 'local' | 'remote';
 /** Режим по умолчанию: в тестах и при VITE_BACKEND=local — данные в браузере, иначе — база на сервере. */
 const defaultMode = (): Mode => (import.meta.env.MODE === 'test' || import.meta.env.VITE_BACKEND === 'local' ? 'local' : 'remote');
 
-const emptyState = (user: User | null): AppState => ({ version: 5, tasks: [], reports: [], messages: [], chatReads: [], absences: [], entitlements: [], planRows: planRows.map((row) => ({ ...row })), dictionaries: DEFAULT_DICTIONARIES, users: DEFAULT_USERS, roles: DEFAULT_ROLES, units: DEFAULT_UNITS.map((u) => ({ ...u })), templates: DEFAULT_TEMPLATES.map((t) => ({ ...t })), authentication: { ...DEFAULT_AUTHENTICATION }, scoring: { ...DEFAULT_SCORING }, appearance: loadAppearance(user?.employeeId), user });
+const emptyState = (user: User | null): AppState => ({ version: 6, tasks: [], reports: [], messages: [], chatReads: [], absences: [], entitlements: [], planRows: planRows.map((row) => ({ ...row })), dictionaries: DEFAULT_DICTIONARIES, users: DEFAULT_USERS, roles: DEFAULT_ROLES, units: DEFAULT_UNITS.map((u) => ({ ...u })), templates: DEFAULT_TEMPLATES.map((t) => ({ ...t })), authentication: { ...DEFAULT_AUTHENTICATION }, scoring: { ...DEFAULT_SCORING }, appearance: loadAppearance(user?.employeeId), user });
 
 const BAD_LOGIN = 'Неверный логин или пароль. Проверьте данные и повторите вход.';
 const REFRESH_MS = 60_000;
@@ -46,7 +46,7 @@ const LocalStore = ({ children, initial }: { children: ReactNode; initial?: AppS
   const searchDirectory = useCallback(async (query: string): Promise<DirectoryUser[]> => searchDemoDirectory(query), []);
   const sync: Sync = useMemo(() => ({ mode: 'local', loading: false, saving: false, syncedAt: null, error: null }), []);
   // Состав сотрудников и отделений — из пользователей и подразделений (до отрисовки экранов).
-  syncStaff(state.users, state.units);
+  syncStaff(state.users, state.units, state.dictionaries);
   syncCategories(state.dictionaries);
   const value = useMemo(() => ({ state, dispatch, signIn, signInWindows, windowsAuthAvailable: false, authenticationReady: true, directoryAvailable: true, searchDirectory, sync, reload: () => undefined, fetchNotices: null, checkWindows: null }), [state, signIn, signInWindows, searchDirectory, sync]);
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
@@ -189,7 +189,7 @@ const RemoteStore = ({ children }: { children: ReactNode }) => {
     return api.windowsCheck(token);
   }, []);
 
-  syncStaff(state.users, state.units);
+  syncStaff(state.users, state.units, state.dictionaries);
   syncCategories(state.dictionaries);
   const value = useMemo(() => ({ state, dispatch, signIn, signInWindows, windowsAuthAvailable, authenticationReady, directoryAvailable, searchDirectory, sync, reload: () => void load(), fetchNotices, checkWindows }), [state, dispatch, signIn, signInWindows, windowsAuthAvailable, authenticationReady, directoryAvailable, searchDirectory, sync, load, fetchNotices, checkWindows]);
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
