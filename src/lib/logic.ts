@@ -28,12 +28,12 @@ export const taskStart = (t: Task): Date => new Date(t.start);
 export const isOverdue = (t: Task, now: Date = new Date()): boolean =>
   !t.done && deadlineBucket(taskEnd(t), now) === 'overdue';
 
-export const overdueTasks = (tasks: Task[], now: Date = new Date()): Task[] => tasks.filter((t) => isOverdue(t, now));
+export const overdueTasks = (tasks: Task[], now: Date = new Date()): Task[] => tasks.filter((t) => !t.local && isOverdue(t, now));
 
 /** Задачи плановой недели по строке и сотруднику. */
 export const tasksInWeek = (tasks: Task[], weekStart: Date, periodEnd?: Date): Task[] => {
   const { from, to } = periodEnd ? { from: startOfDay(weekStart), to: addDays(startOfDay(periodEnd), 1) } : planWeekRange(weekStart);
-  return tasks.filter((t) => inRange(taskEnd(t), from, to));
+  return tasks.filter((t) => !t.local && inRange(taskEnd(t), from, to));
 };
 
 export const cellKey = (rowId: string, employeeId: number) => `${rowId}|${employeeId}`;
@@ -61,7 +61,7 @@ export const bucketize = (
 ): Record<DeadlineBucket, Task[]> => {
   const out: Record<DeadlineBucket, Task[]> = { overdue: [], today: [], week: [], nextWeek: [], month: [], quarter: [], later: [] };
   for (const t of tasks) {
-    if (t.done && !opts.includeDone) continue;
+    if (t.local || (t.done && !opts.includeDone)) continue;
     if (employeeId !== null && !t.assigneeIds.includes(employeeId)) continue;
     out[deadlineBucket(taskEnd(t), now)].push(t);
   }

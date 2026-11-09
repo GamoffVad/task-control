@@ -62,10 +62,23 @@ describe('вход', () => {
 });
 
 describe('личная заметка', () => {
+  it.each(['/control', '/planning', '/tetris', '/employees/1'])('не показывает заметку в разделе %s', (path) => {
+    const state = loggedIn();
+    state.tasks = [{ ...state.tasks[0], id: 'private-note', title: 'Только моя заметка', local: true, assigneeIds: [1], rowId: null, category: null }];
+    renderAt(path, state);
+    expect(screen.queryByText('Только моя заметка')).not.toBeInTheDocument();
+  });
+  it('показывает заметку владельцу в календаре', () => {
+    const state = loggedIn();
+    state.tasks = [{ ...state.tasks[0], id: 'private-note', title: 'Только моя заметка', local: true, assigneeIds: [1], rowId: null, category: null, start: new Date(2026, 8, 17, 10).toISOString(), end: new Date(2026, 8, 17, 11).toISOString() }];
+    renderAt('/calendar', state);
+    expect(screen.getByText('Только моя заметка')).toBeInTheDocument();
+  });
+
   it('создаётся для себя и позволяет отметить выполнение и удалить', async () => {
     renderAt('/calendar', executorIn());
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: 'Новая задача' }));
+    await user.click(document.querySelector<HTMLElement>('.cal-slot, .month-cell')!);
     const dialog = screen.getByRole('dialog');
     await user.click(within(dialog).getByRole('checkbox', { name: 'Локальная задача (заметка)' }));
     await user.type(within(dialog).getByLabelText('Название'), 'Моя личная заметка');
@@ -157,7 +170,7 @@ describe('задачи', () => {
   it('создаёт задачу из календаря и проверяет форму', async () => {
     const user = userEvent.setup();
     renderAt('/calendar');
-    await user.click(screen.getByRole('button', { name: /Новая задача/ }));
+    await user.click(document.querySelector<HTMLElement>('.cal-slot, .month-cell')!);
     const dialog = screen.getByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: /Сохранить/ }));
     expect(within(dialog).getByText('Введите название задачи.')).toBeInTheDocument();
@@ -331,7 +344,7 @@ describe('категории из словаря', () => {
     expect(screen.getByRole('option', { name: 'План отдела' })).toBeInTheDocument();
     await user.keyboard('{Escape}');
     // В окне задачи — в выпадающем списке категории.
-    await user.click(screen.getByRole('button', { name: /Новая задача/ }));
+    await user.click(document.querySelector<HTMLElement>('.cal-slot, .month-cell')!);
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^Категория:/ }));
     expect(screen.getByRole('option', { name: 'План отдела' })).toBeInTheDocument();
     unmount();
@@ -761,7 +774,7 @@ describe('календарь: поиск и категории', () => {
   it('задаёт категорию в карточке задачи', async () => {
     const user = userEvent.setup();
     renderAt('/calendar');
-    await user.click(screen.getByRole('button', { name: /Новая задача/ }));
+    await user.click(document.querySelector<HTMLElement>('.cal-slot, .month-cell')!);
     const dialog = screen.getByRole('dialog');
     await user.type(within(dialog).getByLabelText('Название'), 'Доклад о ходе работ');
     await user.click(within(dialog).getByRole('button', { name: /^Категория:/ }));
@@ -1002,7 +1015,7 @@ describe('баллы', () => {
   it('у задачи вне плана поле баллов пустое и неактивно, категория — «Иное»', async () => {
     const user = userEvent.setup();
     renderAt('/calendar');
-    await user.click(screen.getByRole('button', { name: /Новая задача/ }));
+    await user.click(document.querySelector<HTMLElement>('.cal-slot, .month-cell')!);
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).getByRole('button', { name: /^Раздел планирования: Вне плана/ })).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: /^Категория: Иное/ })).toBeInTheDocument();
@@ -1014,9 +1027,24 @@ describe('баллы', () => {
 
   it('исполнитель видит свои баллы в карточке сотрудника', () => {
     renderAt('/employees/3', executorIn());
+    fireEvent.click(screen.getByRole('tab', { name: 'Задачи' }));
     expect(screen.getByText('Баллы')).toBeInTheDocument();
     expect(screen.getByText('К среднему по отделу')).toBeInTheDocument();
     expect(screen.getByText('Вклад в баллы отдела')).toBeInTheDocument();
+  });
+});
+
+describe('вкладки карточки сотрудника', () => {
+  it('открывает задачи по умолчанию и переключает задачи и события', () => {
+    renderAt('/employees/3', executorIn());
+    expect(screen.getByRole('tab', { name: 'Задачи' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('region', { name: 'Отсутствия сотрудника' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Запланированные задачи' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Исполненные задачи' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Отсутствия сотрудника' })).not.toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Задачи' }), { key: 'ArrowRight' });
+    expect(screen.getByRole('tab', { name: 'События' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('region', { name: 'Отсутствия сотрудника' })).toBeInTheDocument();
   });
 });
 
@@ -1159,7 +1187,7 @@ describe('отсутствия', () => {
   it('создаёт отсутствие и предупреждает о задачах в этот период', async () => {
     const user = userEvent.setup();
     renderAt('/tetris');
-    await user.click(screen.getByRole('button', { name: /^Событие$/ }));
+    await user.click(screen.getAllByRole('button', { name: /^Новое событие:/ })[0]);
     const dialog = screen.getByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: /^Сотрудник:/ }));
     await user.click(within(dialog).getByRole('option', { name: 'Кузнецов М.П.' }));
@@ -1173,7 +1201,7 @@ describe('отсутствия', () => {
   it('перенос первого дня события двигает последний, сохраняя длительность', async () => {
     const user = userEvent.setup();
     renderAt('/tetris');
-    await user.click(screen.getByRole('button', { name: /^Событие$/ }));
+    await user.click(screen.getAllByRole('button', { name: /^Новое событие:/ })[0]);
     const dialog = screen.getByRole('dialog');
     fireEvent.change(within(dialog).getByLabelText('С'), { target: { value: '2026-10-05' } });
     const to = within(dialog).getByLabelText('По (включительно)');
@@ -1191,7 +1219,7 @@ describe('отсутствия', () => {
   it('последний день раньше первого — ошибка видна сразу, сохранить нельзя', async () => {
     const user = userEvent.setup();
     renderAt('/tetris');
-    await user.click(screen.getByRole('button', { name: /^Событие$/ }));
+    await user.click(screen.getAllByRole('button', { name: /^Новое событие:/ })[0]);
     const dialog = screen.getByRole('dialog');
     fireEvent.change(within(dialog).getByLabelText('С'), { target: { value: '2026-10-05' } });
     fireEvent.change(within(dialog).getByLabelText('По (включительно)'), { target: { value: '2026-10-01' } });
@@ -1205,7 +1233,7 @@ describe('отсутствия', () => {
   it('не даёт пересечь два отсутствия одного сотрудника', async () => {
     const user = userEvent.setup();
     renderAt('/tetris');
-    await user.click(screen.getByRole('button', { name: /^Событие$/ }));
+    await user.click(screen.getAllByRole('button', { name: /^Новое событие:/ })[0]);
     const dialog = screen.getByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: /^Сотрудник:/ }));
     await user.click(within(dialog).getByRole('option', { name: 'Петров В.С.' }));
@@ -1218,7 +1246,7 @@ describe('отсутствия', () => {
   it('исполнитель подаёт заявку только на себя', async () => {
     const user = userEvent.setup();
     renderAt('/tetris', executorIn());
-    await user.click(screen.getByRole('button', { name: /Заявка на событие/ }));
+    await user.click(screen.getAllByRole('button', { name: /^Новое событие: Сидоров Д\.Е\./ })[0]);
     const dialog = screen.getByRole('dialog');
     expect(within(dialog).queryByRole('button', { name: /^Сотрудник:/ })).not.toBeInTheDocument();
     fireEvent.change(within(dialog).getByLabelText('С'), { target: { value: '2026-10-05' } });
@@ -1238,8 +1266,9 @@ describe('отсутствия', () => {
   it('карточка сотрудника показывает остатки, руководитель меняет нормы', async () => {
     const user = userEvent.setup();
     renderAt('/employees/2');
+    await user.click(screen.getByRole('tab', { name: 'События' }));
     const panel = screen.getByRole('region', { name: 'Отсутствия сотрудника' });
-    expect(within(panel).getByText(/осталось|остался/)).toBeInTheDocument();
+    expect(within(panel).getAllByText(/осталось|остался/).length).toBeGreaterThan(0);
     await user.click(within(panel).getByRole('button', { name: /изменить$/ }));
     const input = within(panel).getByLabelText('Перенесено');
     await user.clear(input);

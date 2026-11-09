@@ -73,13 +73,15 @@ export const unitPath = (units: Unit[], id: string | undefined): Unit[] => {
   return path;
 };
 
-/** Подразделения деревом: родитель, затем дети по названию. */
+export const compareUnitOrder = (a: Unit, b: Unit): number => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER);
+
+/** Подразделения деревом: родитель, затем дети по порядку и названию. */
 export const unitTree = (units: Unit[]): { unit: Unit; depth: number }[] => {
   const out: { unit: Unit; depth: number }[] = [];
   const walk = (parent: string | null, depth: number) =>
     units
       .filter((u) => u.parentId === parent)
-      .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+      .sort((a, b) => compareUnitOrder(a, b) || a.name.localeCompare(b.name, 'ru'))
       .forEach((u) => {
         out.push({ unit: u, depth });
         walk(u.id, depth + 1);

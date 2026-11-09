@@ -27,7 +27,7 @@ export const TetrisRow = memo(({ employee: e, groupStart, days, today, balanceDa
   const manager = isManager(state.user), me = state.user?.employeeId;
   const monthStart = days[0], monthEnd = days[days.length - 1], year = monthStart.getFullYear();
   const name = shortName(e.id), showBal = manager || e.id === me, canAdd = showBal;
-  const bal = useMemo(() => balanceFor(state.absences, state.entitlements, e.id, year, today, { users: state.users, settings: state.vacationSettings, referenceDate: balanceDate }), [state.absences, state.entitlements, state.users, state.vacationSettings, e.id, year, today, balanceDate]);
+  const bal = useMemo(() => balanceFor(state.absences, state.entitlements, e.id, year, today, { users: state.users, settings: state.vacationSettings, dictionaries: state.dictionaries, referenceDate: balanceDate }), [state.absences, state.entitlements, state.users, state.vacationSettings, state.dictionaries, e.id, year, today, balanceDate]);
   const bars = absences.flatMap((a) => {
     const start = new Date(`${a.from}T00:00`), end = absenceEnd(a);
     if (end < monthStart || start > monthEnd) return [];

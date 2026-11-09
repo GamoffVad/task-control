@@ -3,7 +3,6 @@ import { useTaskEditor } from '../components/taskEditor';
 import { TaskTripLabel } from '../components/TaskTripLabel';
 import { EmployeeFilter, GroupFilter } from '../components/ui';
 import { Button, FilterCard, MultiSelect, PageHeader, SearchField, Segmented, Select, Stepper } from '../kit';
-import { Icon } from '../components/Icons';
 import { CATEGORIES, categoryLabel, groupMembers, shortName, unitOf } from '../lib/data';
 import { catColor, useCategoryOptions, type CatKey } from '../lib/categories';
 import {
@@ -195,19 +194,12 @@ export const Calendar = () => {
               <span className="caps">Вид</span>
               <Segmented label="Вид календаря" value={view} options={VIEWS} onChange={setView} />
             </div>
-            {manager && <div className="tool">
-              <span className="caps">Перемещение карточек</span>
-              <Button aria-label="Перемещение карточек" aria-pressed={movementEnabled} onClick={() => { setMovementEnabled((enabled) => !enabled); setMoveMessage(''); }}>{movementEnabled ? 'Разрешено' : 'Заблокировано'}</Button>
-            </div>}
           </>
         }
-        actions={
-          <>
-            <button type="button" className="btn icon-btn btn--primary page-icon-action" aria-label="Новая задача" data-tip="Новая задача" onClick={() => create(nextQuarter())}>
-              <Icon.Plus size={22} />
-            </button>
-          </>
-        }
+        actions={manager && <div className="calendar-movement">
+          <span className="caps">Перемещение карточек</span>
+          <Button aria-label="Перемещение карточек" aria-pressed={movementEnabled} onClick={() => { setMovementEnabled((enabled) => !enabled); setMoveMessage(''); }}>{movementEnabled ? 'Разрешено' : 'Заблокировано'}</Button>
+        </div>}
       />
       <div className="filters calendar-filters">
         <FilterCard label="Подразделение">
@@ -304,12 +296,6 @@ export const Calendar = () => {
       </div>
     </div>
   );
-};
-
-const nextQuarter = () => {
-  const d = new Date();
-  d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0);
-  return d;
 };
 
 type CalendarDrag = {

@@ -1,4 +1,5 @@
 import { TextInput } from '../kit';
+import { Pagination, usePagination } from './Pagination';
 import { useState } from 'react';
 import { absenceDays, balanceFor, dutyDayoffs, entitlementFor, fmtSpan, travelDays } from '../lib/absences';
 import { ABSENCE_STATUS_LABELS, absenceType } from '../lib/data';
@@ -24,7 +25,7 @@ export const AbsencePanel = ({ id }: { id: number }) => {
   const year = new Date().getFullYear();
   const periodYear = vacationYear(new Date(), state.vacationSettings);
   const period = vacationPeriod(periodYear, state.vacationSettings);
-  const b = balanceFor(state.absences, state.entitlements, id, year, new Date(), { users: state.users, settings: state.vacationSettings });
+  const b = balanceFor(state.absences, state.entitlements, id, year, new Date(), { users: state.users, settings: state.vacationSettings, dictionaries: state.dictionaries });
   const ent = entitlementFor(state.entitlements, id, periodYear, state.users);
   const calendarEnt = entitlementFor(state.entitlements, id, year, state.users);
   const weekendDuties = dutyDayoffs(state.absences, id, year);
@@ -33,6 +34,7 @@ export const AbsencePanel = ({ id }: { id: number }) => {
   const list = state.absences
     .filter((a) => a.employeeId === id && (a.type === 'vacation' ? new Date(`${a.from}T00:00:00`) <= period.to && new Date(`${a.to ?? a.from}T00:00:00`) >= period.from : a.from <= `${year}-12-31` && (a.to ?? `${year}-12-31`) >= `${year}-01-01`))
     .sort((a, b) => b.from.localeCompare(a.from));
+  const eventPages = usePagination(list);
 
   if (!manager && !own) return null;
 
@@ -41,7 +43,7 @@ export const AbsencePanel = ({ id }: { id: number }) => {
     const num = (v: string) => Math.max(0, Math.round(Number(v.replace(',', '.')) || 0));
     dispatch({
       type: 'saveEntitlement',
-      entitlement: { employeeId: id, year: periodYear, vacationDays: num(norms.vacationDays), carriedOver: num(norms.carriedOver), dayoffAccrued: num(norms.dayoffAccrued) },
+      entitlement: { ...ent, employeeId: id, year: periodYear, vacationDays: num(norms.vacationDays), carriedOver: num(norms.carriedOver), dayoffAccrued: num(norms.dayoffAccrued) },
       dayoffYear: year,
     });
     setNorms(null);
@@ -56,7 +58,7 @@ export const AbsencePanel = ({ id }: { id: number }) => {
       <div className="bal-grid">
         <div className="bal-block" style={absColor('vacation')}>
           <div className="top">
-            <span className="caps">Ежегодный отпуск</span>
+            <span className="caps">Отпуска</span>
             <span className="num faint" style={{ fontSize: 12 }}>из {b.vacation.total} дн.</span>
           </div>
           <div className={`big${b.vacation.left < 0 ? ' bad' : ''}`}>
@@ -66,8 +68,15 @@ export const AbsencePanel = ({ id }: { id: number }) => {
             <i className="used" style={{ width: pct(b.vacation.used, b.vacation.total) }} />
             <i className="plan" style={{ width: pct(b.vacation.current + b.vacation.planned, b.vacation.total) }} />
           </div>
+          <div className="vacation-types" aria-label="Остатки по типам отпуска">
+            {Object.entries(b.vacationByType).map(([code, item]) => <div className="vacation-type" key={code}>
+              <strong>{state.dictionaries.find((d) => d.dictionary === 'vacationType' && d.code === code)?.title ?? code}</strong>
+              <span>норма <b className="num">{item.total}</b> · использовано <b className="num">{item.used}</b> · идёт и запланировано <b className="num">{item.current + item.planned}</b>{item.requested > 0 && <> · в заявках <b className="num">{item.requested}</b></>}</span>
+              <span>осталось <b className="num">{item.left}</b> дн.</span>
+            </div>)}
+          </div>
           <div className="bal-keys">
-            <span>норма <span className="num">{ent.vacationDays}</span> + перенесено <span className="num">{ent.carriedOver}</span></span>
+            <span>норма <span className="num">{b.vacation.total}</span></span>
             <span>период <span className="num">{vacationPeriodLabel(periodYear, state.vacationSettings)}</span></span>
             <span>использовано <span className="num">{b.vacation.used}</span></span>
             <span>идёт и запланировано <span className="num">{b.vacation.current + b.vacation.planned}</span></span>
@@ -126,7 +135,7 @@ export const AbsencePanel = ({ id }: { id: number }) => {
       </div>
       {list.length === 0 && <p className="empty">За расчётный период событий нет.</p>}
       <ul className="list">
-        {list.map((a) => (
+        {eventPages.items.map((a) => (
           <li key={a.id} style={{ ...absColor(a, state.dictionaries), borderLeftColor: 'var(--c)' }}>
             <button type="button" className="t" onClick={() => setEditing({ absence: a })}>
               {a.type === 'vacation' ? vacationTypeTitle(a, state.dictionaries) : a.type === 'duty' ? dutyTypeTitle(a, state.dictionaries) : absenceType(a.type).full}
@@ -141,6 +150,7 @@ export const AbsencePanel = ({ id }: { id: number }) => {
           </li>
         ))}
       </ul>
+      <Pagination label="Страницы событий" page={eventPages.page} pages={eventPages.pages} onChange={eventPages.setPage} />
 
       {manager && (
         <div className="norms">

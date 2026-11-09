@@ -1,5 +1,5 @@
 import { DEFAULT_USERS } from './access';
-import { DEFAULT_UNIT_OF, DEFAULT_UNITS, MAIN_DEPARTMENT_ID, unitWithDescendants } from './units';
+import { compareUnitOrder, DEFAULT_UNIT_OF, DEFAULT_UNITS, MAIN_DEPARTMENT_ID, unitWithDescendants } from './units';
 import type { AbsenceStatus, AbsenceType, Category, Department, DictionaryEntry, Employee, ManagedUser, PlanRow, Role, Unit } from './types';
 import { eventTypes, SYSTEM_EVENT_TYPES } from './eventTypes';
 
@@ -45,7 +45,7 @@ export const syncStaff = (users: ManagedUser[], units: Unit[], dictionaries: Dic
   const sections = units.filter((u) => u.parentId === dept?.id).sort((x, y) => x.name.localeCompare(y.name, 'ru'));
   // Порядок отделений: как в справочнике по умолчанию, новые — по алфавиту в конце.
   const order = (id: string) => { const i = DEFAULT_UNITS.findIndex((u) => u.id === id); return i < 0 ? 999 : i; };
-  sections.sort((x, y) => order(x.id) - order(y.id));
+  sections.sort((x, y) => compareUnitOrder(x, y) || order(x.id) - order(y.id));
   const groups = sections.map((sec) => {
     const inside = unitWithDescendants(units, sec.id);
     return { id: sec.id, name: sec.name, employeeIds: shownUsers.filter((u) => inside.has(unitOf(u) ?? '')).map((u) => u.employeeId) };

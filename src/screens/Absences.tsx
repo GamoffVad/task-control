@@ -68,10 +68,20 @@ export const Absences = () => {
   const year = month.getFullYear();
   const balanceDate = today >= monthStart && today <= monthEnd ? today : month;
 
-  // Единый порядок по должности во всех подразделениях.
+  // Подразделения идут целыми группами; внутри — общий порядок должностей.
   const { people, staffGroup, allPeople } = useMemo(() => {
-    return { allPeople: [...employees], staffGroup: new Map(department.groups.flatMap((g) => g.employeeIds.map((id) => [id, g.id] as const))),
-      people: [...groupMembers(group)] };
+    const allPeople = [...employees];
+    const staffGroup = new Map(department.groups.flatMap((g) => g.employeeIds.map((id) => [id, g.id] as const)));
+    if (group !== 'all') return { allPeople, staffGroup, people: [...groupMembers(group)] };
+    const positionOrder = new Map(state.dictionaries.filter((d) => d.dictionary === 'position').map((d) => [d.title, d.order ?? Number.MAX_SAFE_INTEGER]));
+    const buckets = department.groups.map((g, index) => {
+      const members = allPeople.filter((person) => staffGroup.get(person.id) === g.id);
+      const highest = Math.min(Number.MAX_SAFE_INTEGER, ...members.map((person) => positionOrder.get(person.position) ?? Number.MAX_SAFE_INTEGER));
+      return { index, highest, members, order: state.units.find((unit) => unit.id === g.id)?.order ?? Number.MAX_SAFE_INTEGER };
+    }).filter((bucket) => bucket.members.length);
+    buckets.sort((a, b) => a.order - b.order || a.highest - b.highest || a.index - b.index);
+    const ungrouped = allPeople.filter((person) => !staffGroup.has(person.id));
+    return { allPeople, staffGroup, people: [...buckets.flatMap((bucket) => bucket.members), ...ungrouped] };
     // syncStaff обновляет живые employees/department при изменении этих двух наборов.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [group, state.users, state.units, state.dictionaries]);
@@ -107,7 +117,7 @@ export const Absences = () => {
   const previewAbsences = useMemo(() => brush.preview && !brush.preview.error ? brush.preview.absences.filter((a) => isActive(a) && !hidden.has(a.type)) : null, [brush.preview, hidden]);
   const tasksByEmployee = useMemo(() => {
     const byEmployee = new Map<number, Task[]>(), end = addDays(monthEnd, 1);
-    for (const t of state.tasks) if (new Date(t.end) >= monthStart && new Date(t.end) < end) for (const employeeId of new Set(t.assigneeIds)) {
+    for (const t of state.tasks) if (!t.local && new Date(t.end) >= monthStart && new Date(t.end) < end) for (const employeeId of new Set(t.assigneeIds)) {
       const list = byEmployee.get(employeeId) ?? [];
       list.push(t); byEmployee.set(employeeId, list);
     }
@@ -157,13 +167,13 @@ export const Absences = () => {
       days,
       people,
       absences: state.absences.filter((a) => !hidden.has(a.type)),
-      tasks: state.tasks,
+      tasks: state.tasks.filter((task) => !task.local),
       dictionaries: state.dictionaries,
       vacationPeriodLabel: vacationPeriodLabel(vacationYear(balanceDate, state.vacationSettings), state.vacationSettings),
       types: ABSENCE_TYPES.map((t) => ({ key: t.key, label: t.label, full: t.full })),
       balance: (employeeId) => {
         if (!manager && employeeId !== me) return null;
-        const bal = balanceFor(state.absences, state.entitlements, employeeId, year, today, { users: state.users, settings: state.vacationSettings, referenceDate: balanceDate });
+        const bal = balanceFor(state.absences, state.entitlements, employeeId, year, today, { users: state.users, settings: state.vacationSettings, dictionaries: state.dictionaries, referenceDate: balanceDate });
         return { vacation: bal.vacation.left, dayoff: bal.dayoff.left };
       },
       clashes,
@@ -179,10 +189,17 @@ export const Absences = () => {
 
   return (
     <div className="tetris-page">
+      <h1 className="sr-only">Тетрис</h1>
       <div className="tt-head">
-        <div className="tt-title">
-          <h1>Тетрис</h1>
-          <span className="tt-sub">график событий отдела</span>
+        <div className="seg tt-tabs" role="tablist" aria-label="Раздел Тетриса" onKeyDown={(e) => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+          e.preventDefault();
+          const index = e.key === 'Home' ? 0 : e.key === 'End' ? 1 : tab === 'graph' ? 1 : 0;
+          const next = TETRIS_TABS[index].id;
+          selectTab(next);
+          document.getElementById(`tt-tab-${next}`)?.focus();
+        }}>
+          {TETRIS_TABS.map((item) => <button key={item.id} type="button" role="tab" id={`tt-tab-${item.id}`} data-label={item.label} aria-controls={`tt-panel-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} onClick={() => selectTab(item.id)}><span className="seg-label">{item.label}</span></button>)}
         </div>
         <div className="tt-tools" hidden={tab !== 'graph'}>
           <Stepper
@@ -211,22 +228,9 @@ export const Absences = () => {
           </div>
           {brush.tools}
         </div>
-        <div className="seg tt-tabs" role="tablist" aria-label="Раздел Тетриса" onKeyDown={(e) => {
-          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
-          e.preventDefault();
-          const index = e.key === 'Home' ? 0 : e.key === 'End' ? 1 : tab === 'graph' ? 1 : 0;
-          const next = TETRIS_TABS[index].id;
-          selectTab(next);
-          document.getElementById(`tt-tab-${next}`)?.focus();
-        }}>
-          {TETRIS_TABS.map((item) => <button key={item.id} type="button" role="tab" id={`tt-tab-${item.id}`} data-label={item.label} aria-controls={`tt-panel-${item.id}`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} onClick={() => selectTab(item.id)}><span className="seg-label">{item.label}</span></button>)}
-        </div>
         <div className="tt-actions" hidden={tab !== 'graph'}>
             <button type="button" className="icon-btn file-export" aria-label="Выгрузить в Excel" data-tip="Выгрузить в Excel" onClick={exportExcel}>
               <Icon.Excel size={22} />
-            </button>
-            <button type="button" className="icon-btn btn--primary" aria-label={manager ? 'Событие' : 'Заявка на событие'} data-tip={manager ? 'Создать событие' : 'Подать заявку на событие'} onClick={() => create(me)}>
-              <Icon.Plus size={20} />
             </button>
         </div>
       </div>

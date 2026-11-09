@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router';
 import { Icon } from '../components/Icons';
 import { ImageViewer, type ViewerImage } from '../components/ImageViewer';
 import { PageHeader, SearchField } from '../kit';
@@ -102,9 +101,6 @@ export const Info = () => {
                 <Icon.Download size={15} /> Инструкция по публикации в IIS
               </a>
             )}
-            <Link className="btn" to="/kit">
-              Библиотека компонентов
-            </Link>
           </>
         }
       />

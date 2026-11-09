@@ -67,6 +67,8 @@ export type Unit = {
   parentId: string | null;
   kind: UnitKind;
   name: string;
+  /** Порядок среди подразделений одного родителя. */
+  order?: number;
   /** Руководство отдела: руководители этого отделения видят весь родительский отдел. */
   managesParent?: boolean;
 };
@@ -296,6 +298,8 @@ export type Entitlement = {
   vacationDays: number;
   /** Перенесено с прошлого года. */
   carriedOver: number;
+  /** Нормы дополнительных типов отпуска для этого периода, по коду из справочника. */
+  vacationTypeDays?: Record<string, number>;
   /** Накоплено отгулов за переработку, рабочих дней. */
   dayoffAccrued: number;
 };

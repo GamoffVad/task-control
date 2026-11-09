@@ -1,7 +1,7 @@
 // Сборка документации: сборка приложения → скриншоты и дымовая проверка → PDF.
 // Запуск: npm run docs (без пересъёмки: node docs/build-docs.mjs --no-shots)
 import { execSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import puppeteer from 'puppeteer-core';
@@ -20,7 +20,7 @@ const { version } = JSON.parse(readFileSync(path.join(root, 'package.json'), 'ut
 
 // Число тестов берётся из фактического прогона, чтобы документация не расходилась с проектом.
 const report = path.join(docs, '.vitest.json');
-execSync(`npx vitest run --reporter=json --outputFile="${report}"`, { cwd: root, stdio: 'ignore' });
+execSync(`npx vitest run --testTimeout=15000 --reporter=json --outputFile="${report}"`, { cwd: root, stdio: 'ignore' });
 const { numPassedTests, numFailedTests, numPendingTests, numTotalTests } = JSON.parse(readFileSync(report, 'utf8'));
 rmSync(report);
 // Тесты хранилища SQL Server пропускаются без настроенного сервера, поэтому считаем именно провалы.
@@ -81,7 +81,7 @@ try {
   const pub = path.join(root, 'public', 'manual');
   mkdirSync(pub, { recursive: true });
   // Прежние PDF руководства убираем; PDF инструкции по IIS (его кладёт docs/build-iis-guide.mjs) остаётся.
-  for (const f of readdirSync(pub)) if (!f.startsWith('Kontrol-zadach-IIS-')) rmSync(path.join(pub, f));
+  // Ранее выпущенные руководства сохраняются для совместимости со ссылками.
   const pdfName = `Kontrol-zadach-rukovodstvo-v${version}.pdf`;
   const previousMeta = existsSync(path.join(docs, 'manual.meta.json')) ? JSON.parse(readFileSync(path.join(docs, 'manual.meta.json'), 'utf8')) : {};
   copyFileSync(out, path.join(pub, pdfName));

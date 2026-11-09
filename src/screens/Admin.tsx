@@ -24,7 +24,7 @@ import { unitOf } from '../lib/data';
 import { dutyDictionaryInUse, systemEvent } from '../lib/eventTypes';
 import { dictionaryColorName, hasDictionaryColor } from '../lib/eventPresentation';
 import { entitlementFor, validDayoffAccrued } from '../lib/absences';
-import { annualVacationDays, normalizeVacationSettings, validVacationDays, vacationPeriodLabel, vacationTypeCode, vacationYear } from '../lib/vacations';
+import { annualVacationCode, previousVacationCode, annualVacationDays, normalizeVacationSettings, validVacationDays, vacationPeriodLabel, vacationTypeCode, vacationYear } from '../lib/vacations';
 
 type Tab = 'users' | 'units' | 'roles' | 'authentication' | 'database' | 'scoring' | 'appearance' | 'dictionaries' | 'planRows' | 'templates' | 'vacations' | 'periods';
 const ALL_TABS: { value: Tab; label: string; permission: Permission }[] = [
@@ -105,6 +105,7 @@ const UsersTab = ({ state, dispatch }: TabProps) => {
     dispatch({
       type: 'saveManagedUser', employeeId: editing.employeeId, role: draft.role, active: draft.active, hidden: draft.hidden,
       annualVacationDays: Number(draft.annualVacationDays),
+      ...(draft.vacationTypeDays ? { vacationTypeDays: draft.vacationTypeDays } : {}),
       ...(hasPermission(state.user, 'entitlements.manage') && draft.dayoffAccrued !== undefined ? { dayoffAccrued: Number(draft.dayoffAccrued) } : {}),
       windowsLogin: draft.windowsLogin, unitId: draft.unitId, fullName: draft.fullName, position: draft.position, rank: draft.rank, email: draft.email,
     });
@@ -193,7 +194,7 @@ const VacationsTab = ({ state, dispatch }: TabProps) => {
 };
 
 /** Поля сотрудника: одинаковые в добавлении и редактировании. */
-type PersonDraft = { fullName: string; position: string; rank: string; email: string; windowsLogin: string; unitId: string; role: Role; active: boolean; hidden: boolean; annualVacationDays: string; dayoffAccrued?: string };
+type PersonDraft = { fullName: string; position: string; rank: string; email: string; windowsLogin: string; unitId: string; role: Role; active: boolean; hidden: boolean; annualVacationDays: string; vacationTypeDays?: Record<string, number>; dayoffAccrued?: string };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -211,7 +212,7 @@ const checkPerson = (draft: PersonDraft, users: ManagedUser[], employeeId: numbe
 };
 
 /** Общие поля сотрудника. Все доступны для правки независимо от способа входа и настройки Active Directory. */
-const PersonFields = ({ draft, set, units, disabledRole, nameSlot, dayoffSlot }: { draft: PersonDraft; set: <K extends keyof PersonDraft>(key: K, value: PersonDraft[K]) => void; units: Unit[]; disabledRole?: boolean; nameSlot?: ReactNode; dayoffSlot?: ReactNode }) => {
+const PersonFields = ({ draft, set, units, disabledRole, nameSlot, dayoffSlot, vacationSlot }: { draft: PersonDraft; set: <K extends keyof PersonDraft>(key: K, value: PersonDraft[K]) => void; units: Unit[]; disabledRole?: boolean; nameSlot?: ReactNode; dayoffSlot?: ReactNode; vacationSlot?: ReactNode }) => {
   const { state } = useStore();
   const options = (kind: 'position' | 'rank', current: string) => {
     const values = state.dictionaries.filter((d) => d.dictionary === kind).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.title.localeCompare(b.title, 'ru'));
@@ -219,6 +220,7 @@ const PersonFields = ({ draft, set, units, disabledRole, nameSlot, dayoffSlot }:
   };
   return (
   <>
+    {vacationSlot && <h3 className="employee-form-heading">Сотрудник</h3>}
     {nameSlot ?? (
       <label className="field"><span className="caps">ФИО</span>
         <TextInput value={draft.fullName} onChange={(e) => set('fullName', e.target.value)} placeholder="Иванов Алексей Борисович" maxLength={200} />
@@ -228,6 +230,7 @@ const PersonFields = ({ draft, set, units, disabledRole, nameSlot, dayoffSlot }:
       <div className="field"><span className="caps">Должность</span><Select<string> variant="light" label="Должность" value={draft.position} options={options('position', draft.position)} onChange={(v) => set('position', v)} /></div>
       <div className="field"><span className="caps">Звание</span><Select<string> variant="light" label="Звание" value={draft.rank} options={options('rank', draft.rank)} onChange={(v) => set('rank', v)} /></div>
     </div>
+    {vacationSlot && <h3 className="employee-form-heading">Учётная запись</h3>}
     <div className="field-row">
       <label className="field"><span className="caps">Электронная почта</span>
         <TextInput value={draft.email} onChange={(e) => set('email', e.target.value)} placeholder="ivanov@example.com" maxLength={200} />
@@ -244,13 +247,11 @@ const PersonFields = ({ draft, set, units, disabledRole, nameSlot, dayoffSlot }:
     <div className="field"><span className="caps">Роль</span>
       <Select<Role> value={draft.role} options={ROLE_OPTIONS} disabled={disabledRole} label="Роль сотрудника" onChange={(v) => set('role', v)} />
     </div>
-    <div className={dayoffSlot ? 'employee-balances' : undefined}>
-    <label className="field"><span className="caps">Дней отпуска в год</span>
+    {vacationSlot ?? <label className="field"><span className="caps">Дней отпуска в год</span>
       <TextInput inputMode="numeric" maxLength={3} mono value={draft.annualVacationDays} onChange={(e) => set('annualVacationDays', e.target.value)} />
       <span className="field-hint">Индивидуальная ежегодная норма без дней на дорогу. Дни на дорогу указываются при оформлении каждого отпуска.</span>
-    </label>
+    </label>}
     {dayoffSlot}
-    </div>
   </>
 );
 };
@@ -260,6 +261,11 @@ const EditUserDialog = ({ account, users, units, protectedAccount, onClose, onSa
   const dayoffYear = new Date().getFullYear();
   const canEditDayoffs = hasPermission(state.user, 'entitlements.manage');
   const [initialDayoffs] = useState(() => entitlementFor(state.entitlements, account.employeeId, dayoffYear, users).dayoffAccrued);
+  const periodYear = vacationYear(new Date(), state.vacationSettings);
+  const entitlement = entitlementFor(state.entitlements, account.employeeId, periodYear, users);
+  const vacationOptions = state.dictionaries.filter((d) => d.dictionary === 'vacationType');
+  const annualCode = annualVacationCode(state.dictionaries), previousCode = previousVacationCode(state.dictionaries);
+  const [vacations, setVacations] = useState<{ code: string; days: string }[]>(() => [{ code: annualCode, days: String(entitlement.vacationDays) }, ...(entitlement.carriedOver ? [{ code: previousCode, days: String(entitlement.carriedOver) }] : []), ...Object.entries(entitlement.vacationTypeDays ?? {}).map(([code, days]) => ({ code, days: String(days) }))]);
   const [draft, setDraft] = useState<PersonDraft>({
     fullName: account.fullName,
     position: account.position,
@@ -279,18 +285,33 @@ const EditUserDialog = ({ account, users, units, protectedAccount, onClose, onSa
     setError('');
   };
   const submit = () => {
-    const problem = checkPerson(draft, users, account.employeeId);
+    const annual = vacations.find((v) => v.code === annualCode)?.days ?? '';
+    const problem = checkPerson({ ...draft, annualVacationDays: annual }, users, account.employeeId);
     if (problem) return setError(problem);
-    onSave({ ...draft, dayoffAccrued: canEditDayoffs && Number(draft.dayoffAccrued) !== initialDayoffs ? draft.dayoffAccrued : undefined, fullName: draft.fullName.trim(), position: draft.position.trim(), email: draft.email.trim(), windowsLogin: draft.windowsLogin.trim() });
+    if (vacations.some((v) => !v.days.trim() || !validVacationDays(Number(v.days)))) return setError('Для каждого отпуска укажите целое количество дней от 0 до 366.');
+    if (new Set(vacations.map((v) => v.code)).size !== vacations.length) return setError('Каждый тип отпуска можно указать только один раз.');
+    onSave({ ...draft, annualVacationDays: annual, vacationTypeDays: Object.fromEntries(vacations.map((v) => [v.code, Number(v.days)])), dayoffAccrued: canEditDayoffs && Number(draft.dayoffAccrued) !== initialDayoffs ? draft.dayoffAccrued : undefined, fullName: draft.fullName.trim(), position: draft.position.trim(), email: draft.email.trim(), windowsLogin: draft.windowsLogin.trim() });
   };
   return <Dialog title="Редактировать сотрудника" context={account.fullName} onClose={onClose} wide>
     <form className="form-stack edit-user-form" onSubmit={(event) => { event.preventDefault(); submit(); }} noValidate>
-      <PersonFields draft={draft} set={set} units={units} disabledRole={protectedAccount} dayoffSlot={
-        <label className="field"><span className="caps">Отгулы, начисленные вручную</span>
+      <PersonFields draft={draft} set={set} units={units} disabledRole={protectedAccount} vacationSlot={
+        <section className="employee-vacations" aria-label="Нормы отпусков">
+          <h3 className="employee-form-heading">Отпуска</h3>
+          <p className="field-hint">Нормы на период {vacationPeriodLabel(periodYear, state.vacationSettings)}. Перенесённые дни укажите вручную.</p>
+          {vacations.map((v, index) => <div className="employee-vacation-row" key={index}>
+            <div className="field"><span className="caps">Тип отпуска</span><Select<string> variant="light" label={`Тип отпуска ${index + 1}`} value={v.code} disabled={v.code === annualCode} options={vacationOptions.filter((item) => item.code === v.code || !vacations.some((row) => row.code === item.code)).map((item) => ({ value: item.code, label: item.title }))} onChange={(code) => setVacations((rows) => rows.map((row, i) => i === index ? { ...row, code } : row))} /></div>
+            <label className="field"><span className="caps">Дней</span><TextInput inputMode="numeric" maxLength={3} mono aria-label={v.code === annualCode ? 'Дней отпуска в год' : `Дней отпуска ${index + 1}`} value={v.days} onChange={(e) => setVacations((rows) => rows.map((row, i) => i === index ? { ...row, days: e.target.value } : row))} /></label>
+            {v.code !== annualCode && <button type="button" className="admin-icon-action danger" aria-label={`Убрать тип отпуска ${index + 1}`} onClick={() => setVacations((rows) => rows.filter((_, i) => i !== index))}><Icon.Trash size={15} /></button>}
+          </div>)}
+          <button type="button" className="text-action" disabled={!vacationOptions.some((item) => !vacations.some((v) => v.code === item.code))} onClick={() => { const next = vacationOptions.find((item) => !vacations.some((v) => v.code === item.code)); if (next) setVacations((rows) => [...rows, { code: next.code, days: '0' }]); }}><Icon.Plus size={12} /> Добавить тип отпуска</button>
+        </section>
+      } dayoffSlot={
+        <label className="field employee-dayoffs"><span className="caps">Отгулы, начисленные вручную</span>
           <TextInput inputMode="numeric" maxLength={4} mono disabled={!canEditDayoffs} value={draft.dayoffAccrued} onChange={(e) => set('dayoffAccrued', e.target.value)} />
           <span className="field-hint">За {dayoffYear} год. Общее ручное начисление, а не остаток. Отгулы за дежурства прибавляются автоматически; использованные вычитаются.{!canEditDayoffs && ' Для изменения нужно разрешение на управление нормами отпусков и отгулов.'}</span>
         </label>
       } />
+      <h3 className="employee-form-heading">Доступ и отображение</h3>
       <Checkbox checked={draft.active} disabled={protectedAccount} onChange={(v) => set('active', v)}>{protectedAccount ? 'Основной администратор должен оставаться активным' : 'Разрешить вход в приложение'}</Checkbox>
       <Checkbox checked={draft.hidden} onChange={(v) => set('hidden', v)}>Скрыть сотрудника во всех рабочих разделах</Checkbox>
       <p className="field-hint">Сотрудник не отображается в списках, планировании, календаре, графике событий и показателях. Вход и назначенные права сохраняются. Учётная запись остаётся доступной здесь.</p>
@@ -782,7 +803,7 @@ const DictionariesTab = ({ state, dispatch }: TabProps) => {
             {withColor && <td>{entry.color ? <span className="num"><i className="admin-swatch" style={{ background: entry.color }} aria-hidden />{entry.color}</span> : <span className="num muted"><i className="admin-swatch" style={{ background: dictionary === 'vacationType' ? 'var(--abs-vacation)' : dictionary === 'dutyType' ? 'var(--abs-duty)' : `var(${dictionaryColorName(dictionary, entry.code)})` }} aria-hidden />по умолчанию</span>}</td>}
             <td className="admin-icon-actions">
               <button type="button" className="admin-icon-action" onClick={() => setEditing(entry)} aria-label={`Изменить значение ${entry.title}`} data-tip="Изменить"><Icon.Edit size={15} /></button>
-              <button type="button" className="admin-icon-action danger" disabled={(entry.dictionary === 'position' && state.users.some((u) => u.position === entry.title)) || (entry.dictionary === 'rank' && state.users.some((u) => u.rank === entry.title)) || dutyDictionaryInUse(entry, state.dictionaries, state.absences) || entry.dictionary === 'vacationType' && (entries.length <= 1 || state.absences.some((a) => a.type === 'vacation' && vacationTypeCode(a, state.dictionaries) === entry.code))} onClick={() => setDeleting(entry)} aria-label={`Удалить значение ${entry.title}`} data-tip={entry.dictionary === 'absenceType' || entry.dictionary === 'dutyType' || entry.dictionary === 'vacationType' ? 'Системное, используемое или последнее обязательное значение удалить нельзя' : 'Удалить'}><Icon.Trash size={15} /></button>
+              <button type="button" className="admin-icon-action danger" disabled={(entry.dictionary === 'position' && state.users.some((u) => u.position === entry.title)) || (entry.dictionary === 'rank' && state.users.some((u) => u.rank === entry.title)) || dutyDictionaryInUse(entry, state.dictionaries, state.absences) || entry.dictionary === 'vacationType' && (['dict-vacation-annual', 'dict-vacation-previous-year'].includes(entry.id) || state.entitlements.some((e) => Object.hasOwn(e.vacationTypeDays ?? {}, entry.code)) || entries.length <= 1 || state.absences.some((a) => a.type === 'vacation' && vacationTypeCode(a, state.dictionaries) === entry.code))} onClick={() => setDeleting(entry)} aria-label={`Удалить значение ${entry.title}`} data-tip={entry.dictionary === 'absenceType' || entry.dictionary === 'dutyType' || entry.dictionary === 'vacationType' ? 'Системное, используемое или последнее обязательное значение удалить нельзя' : 'Удалить'}><Icon.Trash size={15} /></button>
             </td>
           </tr>)}
           {entries.length === 0 && <tr><td colSpan={withColor ? 4 : 3} className="admin-empty">Значений пока нет. Нажмите «Добавить значение».</td></tr>}
@@ -819,7 +840,7 @@ const DictionaryDialog = ({ entry, kind, label, entries, onClose, onSave }: { en
     <form className="form-stack" onSubmit={(event) => { event.preventDefault(); submit(); }} noValidate>
       <div className="field-row">
         <label className="field"><span className="caps">Название</span><TextInput value={title} onChange={(event) => { setTitle(event.target.value); setError(''); }} placeholder="Название значения" maxLength={160} invalid={!!error} /></label>
-        {ordered ? <label className="field"><span className="caps">Порядок</span><TextInput inputMode="numeric" value={order} onChange={(event) => setOrder(event.target.value)} /><span className="field-hint">Меньший номер — выше в списке.</span></label> : <div className="field"><label className="caps" htmlFor="dict-code">Код</label><TextInput id="dict-code" value={code} readOnly={kind === 'absenceType' && !!entry && systemEvent(entry.code)} onChange={(event) => { setCode(event.target.value); setError(''); }} placeholder="internal-review" maxLength={48} mono invalid={!!error} aria-describedby="dict-code-hint" /><span className="field-hint" id="dict-code-hint">{kind === 'absenceType' && !!entry && systemEvent(entry.code) ? 'Системный код: определяет правила расчёта и не меняется.' : 'Связывает значение с данными. При смене кода события обновятся автоматически.'}</span></div>}
+        {ordered ? <label className="field"><span className="caps">Порядок</span><TextInput inputMode="numeric" value={order} onChange={(event) => setOrder(event.target.value)} /><span className="field-hint">Меньший номер — выше в списке.</span></label> : <div className="field"><label className="caps" htmlFor="dict-code">Код</label><TextInput id="dict-code" value={code} readOnly={!!entry && (kind === 'absenceType' && systemEvent(entry.code))} onChange={(event) => { setCode(event.target.value); setError(''); }} placeholder="internal-review" maxLength={48} mono invalid={!!error} aria-describedby="dict-code-hint" /><span className="field-hint" id="dict-code-hint">{!!entry && (kind === 'absenceType' && systemEvent(entry.code)) ? 'Системный код: определяет правила расчёта и не меняется.' : 'Связывает значение с данными. При смене кода события обновятся автоматически.'}</span></div>}
       </div>
       {withColor && <div className="field"><span className="caps">Цвет</span><ColorPicker value={color} onChange={(value) => { setColor(value); setError(''); }} label={kind === 'absenceType' ? 'Цвет вида отсутствия' : kind === 'dutyType' ? 'Цвет вида дежурства' : kind === 'vacationType' ? 'Цвет типа отпуска' : 'Цвет категории'} /><span className="field-hint">В тёмной теме цвет автоматически высветляется.</span></div>}
       {error && <p className="field-error" role="alert">{error}</p>}
@@ -930,7 +951,7 @@ const UnitsTab = ({ state, dispatch }: TabProps) => {
     <div className="table-scroll admin-table-wrap">
       <table className="admin-table admin-plan-table">
         <caption className="sr-only">Подразделения</caption>
-        <thead><tr><th scope="col">Название</th><th scope="col">Уровень</th><th scope="col">Сотрудники</th><th scope="col" className="admin-actions-head">Действие</th></tr></thead>
+        <thead><tr><th scope="col">Название</th><th scope="col">Уровень</th><th scope="col">Порядок</th><th scope="col">Сотрудники</th><th scope="col" className="admin-actions-head">Действие</th></tr></thead>
         <tbody>{tree.filter(({ unit }) => !hidden(unit)).map(({ unit, depth }) => {
           const children = state.units.filter((u) => u.parentId === unit.id).length;
           const staff = staffIn(unit.id);
@@ -947,6 +968,7 @@ const UnitsTab = ({ state, dispatch }: TabProps) => {
               </div>
             </td>
             <td>{unitKindLabel(unit.kind)}</td>
+            <td className="num">{unit.order ?? '—'}</td>
             <td><span className="num">{staff}</span>{direct > 0 && direct !== staff && <span className="faint"> · {direct} напрямую</span>}</td>
             <td className="admin-icon-actions">
               {childKind && <button type="button" className="admin-icon-action" onClick={() => setEditing({ parentId: unit.id })} aria-label={`Добавить в «${unit.name}»: ${childKind.label.toLowerCase()}`} data-tip={`Добавить: ${childKind.label.toLowerCase()}`}><Icon.Plus size={15} /></button>}
@@ -964,29 +986,32 @@ const UnitsTab = ({ state, dispatch }: TabProps) => {
 };
 
 /** Форма подразделения: уровень, вышестоящее подразделение нужного уровня и название. */
-const UnitDialog = ({ unit, parentId: initialParent = null, units, onClose, onSave }: { unit?: Unit; parentId?: string | null; units: Unit[]; onClose: () => void; onSave: (draft: { id?: string; parentId: string | null; kind: UnitKind; name: string; managesParent?: boolean }) => void }) => {
+const UnitDialog = ({ unit, parentId: initialParent = null, units, onClose, onSave }: { unit?: Unit; parentId?: string | null; units: Unit[]; onClose: () => void; onSave: (draft: { id?: string; parentId: string | null; kind: UnitKind; name: string; managesParent?: boolean; order?: number }) => void }) => {
   const parentUnit = initialParent ? units.find((u) => u.id === initialParent) : undefined;
   const initialKind: UnitKind = unit?.kind ?? (parentUnit ? UNIT_KINDS.find((k) => PARENT_KIND[k.kind] === parentUnit.kind)?.kind ?? 'section' : 'organization');
   const [kind, setKind] = useState<UnitKind>(initialKind);
   const [parent, setParent] = useState<string | null>(unit ? unit.parentId : initialParent);
   const [name, setName] = useState(unit?.name ?? '');
+  const [order, setOrder] = useState(unit?.order !== undefined ? String(unit.order) : unit ? '' : String(Math.min(1000000, Math.max(0, ...units.filter((u) => u.parentId === initialParent).map((u) => u.order ?? 0)) + 1)));
   const [leadership, setLeadership] = useState<boolean | undefined>(unit?.managesParent);
   const [error, setError] = useState('');
   const hasChildren = !!unit && units.some((u) => u.parentId === unit.id);
   const parentKind = PARENT_KIND[kind];
-  const parents = parentKind ? units.filter((u) => u.kind === parentKind) : [];
+  const parents = parentKind ? unitTree(units).map(({ unit }) => unit).filter((u) => u.kind === parentKind) : [];
   const changeKind = (next: UnitKind) => {
     setKind(next);
     const pk = PARENT_KIND[next];
-    const candidates = pk ? units.filter((u) => u.kind === pk) : [];
+    const candidates = pk ? unitTree(units).map(({ unit }) => unit).filter((u) => u.kind === pk) : [];
     setParent(pk ? (candidates.some((u) => u.id === parent) ? parent : candidates[0]?.id ?? null) : null);
     setError('');
   };
   const submit = () => {
     const n = name.trim();
     if (!n) return setError('Введите название подразделения.');
+    const number = order === '' ? undefined : Number(order);
+    if (number !== undefined && (!Number.isInteger(number) || number < 1 || number > 1000000)) return setError('Порядок должен быть целым числом от 1 до 1000000.');
     if (parentKind && !parent) return setError(`Выберите вышестоящее подразделение: ${unitKindLabel(parentKind).toLowerCase()}.`);
-    onSave({ ...(unit ? { id: unit.id } : {}), parentId: parentKind ? parent : null, kind, name: n,
+    onSave({ ...(unit ? { id: unit.id } : {}), parentId: parentKind ? parent : null, kind, name: n, ...(number !== undefined ? { order: number } : {}),
       ...(kind === 'section' ? { managesParent: leadership ?? isDepartmentLeadership({ kind, name: n }) } : {}) });
   };
   return <Dialog title={unit ? 'Изменить подразделение' : 'Добавить подразделение'} context={unit ? `${unitKindLabel(unit.kind)} · ${unit.name}` : parentUnit ? `В «${parentUnit.name}»` : 'Новое подразделение'} onClose={onClose}>
@@ -996,6 +1021,7 @@ const UnitDialog = ({ unit, parentId: initialParent = null, units, onClose, onSa
         {parentKind && <div className="field"><span className="caps">Вышестоящее: {unitKindLabel(parentKind).toLowerCase()}</span><Select<string> variant="light" label="Вышестоящее подразделение" value={parent ?? ''} options={parents.length ? parents.map((u) => ({ value: u.id, label: u.name })) : [{ value: '', label: `Сначала добавьте: ${unitKindLabel(parentKind).toLowerCase()}` }]} onChange={(v) => { setParent(v || null); setError(''); }} /></div>}
       </div>
       <label className="field"><span className="caps">Название</span><TextInput value={name} onChange={(event) => { setName(event.target.value); setError(''); }} placeholder={kind === 'section' ? 'Отделение разработки' : kind === 'department' ? 'Отдел разработки' : kind === 'directorate' ? 'Управление информационных технологий' : 'Ведомство'} maxLength={200} invalid={!!error} /></label>
+      <label className="field"><span className="caps">Порядок</span><TextInput inputMode="numeric" value={order} onChange={(event) => { setOrder(event.target.value); setError(''); }} /><span className="field-hint">Меньший номер — выше среди подразделений одного уровня и общего родителя.</span></label>
       {kind === 'section' && <div className="field">
         <label className="check"><input type="checkbox" checked={leadership ?? isDepartmentLeadership({ kind, name })} onChange={(event) => setLeadership(event.target.checked)} />Руководство родительского отдела</label>
         <span className="field-hint">Руководители этой группы видят задачи и отчёты всех отделений родительского отдела. Для исполнителей доступ остаётся личным.</span>

@@ -33,6 +33,8 @@ export const vacationPeriodLabel = (year: number, settings?: VacationSettings) =
 };
 export const annualVacationDays = (users: ManagedUser[], list: Entitlement[], employeeId: number): number => users.find((u) => u.employeeId === employeeId)?.annualVacationDays ?? list.filter((e) => e.employeeId === employeeId).sort((a, b) => b.year - a.year)[0]?.vacationDays ?? DEFAULT_VACATION_DAYS;
 export const withVacationTypes = (entries: DictionaryEntry[]): DictionaryEntry[] => entries.some((e) => e.dictionary === 'vacationType') ? entries : [...entries, { ...DEFAULT_VACATION_TYPE }];
+export const annualVacationCode = (entries?: DictionaryEntry[]) => entries?.find((e) => e.id === 'dict-vacation-annual' && e.dictionary === 'vacationType')?.code ?? 'annual';
+export const previousVacationCode = (entries?: DictionaryEntry[]) => entries?.find((e) => e.id === 'dict-vacation-previous-year' && e.dictionary === 'vacationType')?.code ?? 'previous-year';
 export const vacationTypes = (entries: DictionaryEntry[]) => withVacationTypes(entries).filter((e) => e.dictionary === 'vacationType');
-export const vacationTypeCode = (a: Pick<Absence, 'vacationType'>, entries: DictionaryEntry[]) => a.vacationType ?? vacationTypes(entries).find((e) => e.code === 'annual')?.code ?? vacationTypes(entries)[0]!.code;
+export const vacationTypeCode = (a: Pick<Absence, 'vacationType'>, entries: DictionaryEntry[]) => a.vacationType ?? vacationTypes(entries).find((e) => e.id === 'dict-vacation-annual')?.code ?? vacationTypes(entries).find((e) => e.code === 'annual')?.code ?? vacationTypes(entries)[0]!.code;
 export const vacationTypeTitle = (a: Pick<Absence, 'vacationType'>, entries: DictionaryEntry[]) => vacationTypes(entries).find((e) => e.code === vacationTypeCode(a, entries))?.title ?? a.vacationType ?? 'Отпуск';

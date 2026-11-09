@@ -33,6 +33,7 @@ export default defineConfig(({ mode }) => {
     // Версия приложения из package.json — показывается в интерфейсе.
     define: { __APP_VERSION__: JSON.stringify(pkg.version) },
     test: {
+      include: ['src/test/**/*.test.{ts,tsx}'],
       environment: 'jsdom',
       globals: true,
       setupFiles: ['./src/test/setup.ts'],

@@ -87,18 +87,19 @@ export const AbsenceModal = ({ absence, defaults, onClose, onSaveDraft }: Props)
   // Остаток без этого отсутствия и после него.
   const others = state.absences.filter((a) => a.id !== draft.id);
   const referenceDate = valid ? fromDateKey(draft.from) : today;
-  const balanceOptions = { users: state.users, settings: state.vacationSettings, referenceDate };
+  const balanceOptions = { users: state.users, settings: state.vacationSettings, dictionaries: state.dictionaries, referenceDate };
   const before = balanceFor(others, state.entitlements, draft.employeeId, year, today, balanceOptions);
   const withThis = draft.status === 'rejected' ? before : balanceFor([...others, { ...probe, status: 'approved' }], state.entitlements, draft.employeeId, year, today, balanceOptions);
   const counted = draft.type === 'vacation' ? 'vacation' : draft.type === 'dayoff' ? 'dayoff' : null;
-  const leftNow = counted === 'vacation' ? before.vacation.left : counted === 'dayoff' ? before.dayoff.left : null;
-  const leftAfter = counted === 'vacation' ? withThis.vacation.left : counted === 'dayoff' ? withThis.dayoff.left : null;
+  const vacationCode = vacationTypeCode(draft, state.dictionaries);
+  const leftNow = counted === 'vacation' ? before.vacationByType[vacationCode]?.left ?? 0 : counted === 'dayoff' ? before.dayoff.left : null;
+  const leftAfter = counted === 'vacation' ? withThis.vacationByType[vacationCode]?.left ?? 0 : counted === 'dayoff' ? withThis.dayoff.left : null;
 
-  const clashing = valid && draft.type !== 'duty' && draft.status !== 'rejected' ? state.tasks.filter((t) => !t.done && t.assigneeIds.includes(draft.employeeId)
+  const clashing = valid && draft.type !== 'duty' && draft.status !== 'rejected' ? state.tasks.filter((t) => !t.local && !t.done && t.assigneeIds.includes(draft.employeeId)
     && covers(probe, new Date(t.end), today) && !linkedTripCoversTask({ ...t, tripAbsenceIds: linkedIds.includes(t.id) ? [probe.id] : [] }, probe)) : [];
   const linkChanges = [...new Set([...initialLinks, ...linkedIds])].filter((id) => initialLinks.includes(id) !== linkedIds.includes(id)).map((taskId) => ({ taskId, linked: linkedIds.includes(taskId) }));
   const normalizedQuery = taskSearch.toLocaleLowerCase('ru').replace(/ё/g, 'е');
-  const linkChoices = state.tasks.filter((task) => (task.assigneeIds.includes(draft.employeeId) || linkedIds.includes(task.id))
+  const linkChoices = state.tasks.filter((task) => !task.local && (task.assigneeIds.includes(draft.employeeId) || linkedIds.includes(task.id))
     && task.title.toLocaleLowerCase('ru').replace(/ё/g, 'е').includes(normalizedQuery))
     .sort((a, b) => Number(linkedIds.includes(b.id)) - Number(linkedIds.includes(a.id))
       || Number(linkedTripCoversTask({ ...b, tripAbsenceIds: [probe.id] }, probe)) - Number(linkedTripCoversTask({ ...a, tripAbsenceIds: [probe.id] }, probe))

@@ -1,7 +1,7 @@
 // Отсутствия: длительность, остатки отпуска и отгулов, пересечения со сроками задач.
 import { addDays, fromDateKey, startOfDay, toDateKey } from './dates';
-import type { Absence, AbsenceType, Entitlement, ManagedUser, Task, VacationSettings } from './types';
-import { annualVacationDays, vacationPeriod, vacationYear } from './vacations';
+import type { Absence, AbsenceType, DictionaryEntry, Entitlement, ManagedUser, Task, VacationSettings } from './types';
+import { annualVacationCode, annualVacationDays, previousVacationCode, vacationPeriod, vacationYear } from './vacations';
 import { linkedTripCoversTask, type TripTask } from './taskTrips';
 
 /** Больничный без даты окончания считается длящимся ещё столько дней после сегодняшнего. */
@@ -77,8 +77,12 @@ export const entitlementFor = (list: Entitlement[], employeeId: number, year: nu
     dayoffAccrued: 0,
   };
 
+export type VacationBalance = { total: number; used: number; current: number; planned: number; requested: number; left: number };
+const emptyVacation = (total = 0): VacationBalance => ({ total, used: 0, current: 0, planned: 0, requested: 0, left: 0 });
+
 export type Balance = {
-  vacation: { total: number; used: number; current: number; planned: number; requested: number; left: number };
+  vacation: VacationBalance;
+  vacationByType: Record<string, VacationBalance>;
   dayoff: { accrued: number; used: number; requested: number; left: number };
   sick: { days: number; cases: number };
   trip: { days: number; cases: number };
@@ -89,7 +93,7 @@ export type Balance = {
  * Остатки за год. Отпуск: использовано (прошедшие дни), текущий (идёт сейчас), запланировано (впереди),
  * заявки — отдельно и в остаток не входят, пока руководитель их не согласует.
  */
-export const balanceFor = (absences: Absence[], entitlements: Entitlement[], employeeId: number, year: number, today: Date = new Date(), options: { users?: ManagedUser[]; settings?: VacationSettings; referenceDate?: Date } = {}): Balance => {
+export const balanceFor = (absences: Absence[], entitlements: Entitlement[], employeeId: number, year: number, today: Date = new Date(), options: { users?: ManagedUser[]; settings?: VacationSettings; referenceDate?: Date; dictionaries?: DictionaryEntry[] } = {}): Balance => {
   const periodYear = vacationYear(options.referenceDate ?? new Date(year, today.getMonth(), today.getDate()), options.settings);
   const period = vacationPeriod(periodYear, options.settings);
   const ent = entitlementFor(entitlements, employeeId, periodYear, options.users);
@@ -98,7 +102,8 @@ export const balanceFor = (absences: Absence[], entitlements: Entitlement[], emp
   const mine = absences.filter((a) => a.employeeId === employeeId && isActive(a));
   const t = startOfDay(today);
   const b: Balance = {
-    vacation: { total: ent.vacationDays + ent.carriedOver, used: 0, current: 0, planned: 0, requested: 0, left: 0 },
+    vacation: emptyVacation(ent.vacationDays + ent.carriedOver + Object.values(ent.vacationTypeDays ?? {}).reduce((sum, days) => sum + days, 0)),
+    vacationByType: { [annualVacationCode(options.dictionaries)]: emptyVacation(ent.vacationDays), ...(ent.carriedOver ? { [previousVacationCode(options.dictionaries)]: emptyVacation(ent.carriedOver) } : {}), ...Object.fromEntries(Object.entries(ent.vacationTypeDays ?? {}).map(([code, days]) => [code, emptyVacation(days)])) },
     dayoff: { accrued: calendarEnt.dayoffAccrued + dutyDayoffs(absences, employeeId, year, today), used: 0, requested: 0, left: 0 },
     sick: { days: 0, cases: 0 },
     trip: { days: 0, cases: 0 },
@@ -110,10 +115,11 @@ export const balanceFor = (absences: Absence[], entitlements: Entitlement[], emp
     if (a.type === 'vacation') {
       const vacationFrom = addDays(fromDateKey(a.from), a.travelDaysBefore ?? 0);
       const vacationTo = addDays(absenceEnd(a, today), -(a.travelDaysAfter ?? 0));
-      if (a.status === 'request') b.vacation.requested += days;
-      else if (vacationTo < t || period.to < t) b.vacation.used += days;
-      else if (vacationFrom > t) b.vacation.planned += days;
-      else b.vacation.current += days;
+      const code = a.vacationType ?? annualVacationCode(options.dictionaries);
+      const typed = b.vacationByType[code] ?? (b.vacationByType[code] = emptyVacation());
+      const bucket = a.status === 'request' ? 'requested' : vacationTo < t || period.to < t ? 'used' : vacationFrom > t ? 'planned' : 'current';
+      b.vacation[bucket] += days;
+      typed[bucket] += days;
     } else if (a.type === 'dayoff') {
       if (a.status === 'request') b.dayoff.requested += days;
       else b.dayoff.used += days;
@@ -122,7 +128,7 @@ export const balanceFor = (absences: Absence[], entitlements: Entitlement[], emp
       b[a.type].cases += 1;
     }
   }
-  b.vacation.left = b.vacation.total - b.vacation.used - b.vacation.current - b.vacation.planned;
+  for (const v of [b.vacation, ...Object.values(b.vacationByType)]) v.left = v.total - v.used - v.current - v.planned;
   b.dayoff.left = b.dayoff.accrued - b.dayoff.used;
   return b;
 };
@@ -144,7 +150,7 @@ export const findClashes = (tasks: Task[], absences: Absence[], today: Date = ne
   const t = startOfDay(today);
   const out: Clash[] = [];
   for (const task of tasks) {
-    if (task.done) continue;
+    if (task.local || task.done) continue;
     const end = new Date(task.end);
     for (const absence of taskAbsenceConflicts(task, absences, today)) {
       const employeeId = absence.employeeId;

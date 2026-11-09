@@ -37,3 +37,6 @@ dist-iis
 .claude/settings.local.json
 release
 tmp/pdfs/
+
+.vercel
+.env*

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import { AbsencePanel } from '../components/AbsencePanel';
+import { Pagination, usePagination } from '../components/Pagination';
 import { useTaskEditor } from '../components/taskEditor';
 import { PeriodPicker } from '../components/ui';
 import { FilterCard } from '../kit';
@@ -24,7 +25,7 @@ export const Employees = () => {
   const counts = useMemo(() => {
     const m = new Map<number, { open: number; overdue: number }>();
     for (const t of state.tasks) {
-      if (t.done) continue;
+      if (t.local || t.done) continue;
       for (const a of t.assigneeIds) {
         const c = m.get(a) ?? { open: 0, overdue: 0 };
         c.open += 1;
@@ -99,17 +100,20 @@ const EmployeeCard = ({ id }: { id: number }) => {
   const { state } = useStore();
   const { openTask } = useTaskEditor();
   const [period, setPeriod] = useState<Period>('all');
+  const [tab, setTab] = useState<'tasks' | 'events'>('tasks');
   const e = employeeById.get(id);
   const managed = state.users.find((account) => account.employeeId === id);
   const group = department.groups.find((g) => g.employeeIds.includes(id));
   const now = new Date();
 
   const open = useMemo(
-    () => state.tasks.filter((t) => !t.done && t.assigneeIds.includes(id)).sort((a, b) => a.end.localeCompare(b.end)),
+    () => state.tasks.filter((t) => !t.local && !t.done && t.assigneeIds.includes(id)).sort((a, b) => a.end.localeCompare(b.end)),
     [state.tasks, id],
   );
   const periodEntries = useMemo(() => entriesInPeriod(state.reports, period), [state.reports, period]);
   const done = useMemo(() => periodEntries.filter((entry) => entry.assigneeId === id).sort((a, b) => b.doneAt.localeCompare(a.doneAt)), [periodEntries, id]);
+  const plannedPages = usePagination(open);
+  const donePages = usePagination(done);
   const departmentSize = useMemo(() => new Set([...department.groups.flatMap((item) => item.employeeIds), ...state.users.map((account) => account.employeeId)]).size, [state.users]);
   const scoringCtx = useMemo(() => ({ scoring: state.scoring, users: state.users, units: state.units }), [state.scoring, state.users, state.units]);
   const scoreContext = useMemo(() => employeeScoreContext(periodEntries, id, departmentSize, scoringCtx), [periodEntries, id, departmentSize, scoringCtx]);
@@ -136,9 +140,20 @@ const EmployeeCard = ({ id }: { id: number }) => {
           })()}
         </div>
       </div>
+      <div className="seg employee-tabs" role="tablist" aria-label="Раздел карточки сотрудника" onKeyDown={(event) => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key === 'Home' ? 'tasks' : event.key === 'End' ? 'events' : tab === 'tasks' ? 'events' : 'tasks';
+        setTab(next);
+        document.getElementById(`employee-${id}-tab-${next}`)?.focus();
+      }}>
+        {([['tasks', 'Задачи'], ['events', 'События']] as const).map(([key, label]) => <button key={key} type="button" role="tab" id={`employee-${id}-tab-${key}`} data-label={label} aria-controls={`employee-${id}-panel-${key}`} aria-selected={tab === key} tabIndex={tab === key ? 0 : -1} onClick={() => setTab(key)}><span className="seg-label">{label}</span></button>)}
+      </div>
+      {tab === 'events' && <div role="tabpanel" id={`employee-${id}-panel-events`} aria-labelledby={`employee-${id}-tab-events`}><AbsencePanel id={id} /></div>}
+      {tab === 'tasks' && <div role="tabpanel" id={`employee-${id}-panel-tasks`} aria-labelledby={`employee-${id}-tab-tasks`}>
       <div className="filters">
         <FilterCard label="Период для баллов" wide>
-          <PeriodPicker value={period} onChange={setPeriod} />
+          <PeriodPicker value={period} onChange={(value) => { setPeriod(value); donePages.setPage(1); }} />
         </FilterCard>
       </div>
       <section className="card">
@@ -177,8 +192,6 @@ const EmployeeCard = ({ id }: { id: number }) => {
         </div>
       </section>
 
-      {e && <AbsencePanel id={id} />}
-
       <div className="split split--half">
         <section className="card">
           <div className="card-head">
@@ -187,7 +200,7 @@ const EmployeeCard = ({ id }: { id: number }) => {
           </div>
           {open.length === 0 && <p className="empty">Неисполненных задач нет.</p>}
           <ul className="list">
-            {open.map((t) => {
+            {plannedPages.items.map((t) => {
               const late = isOverdue(t, now);
               const row = t.rowId ? state.planRows.find((item) => item.id === t.rowId) : null;
               return (
@@ -201,6 +214,7 @@ const EmployeeCard = ({ id }: { id: number }) => {
               );
             })}
           </ul>
+          <Pagination label="Страницы запланированных задач" page={plannedPages.page} pages={plannedPages.pages} onChange={plannedPages.setPage} />
         </section>
         <section className="card">
           <div className="card-head">
@@ -209,7 +223,7 @@ const EmployeeCard = ({ id }: { id: number }) => {
           </div>
           {done.length === 0 && <p className="empty">За выбранный период нет исполненных задач в отчётах.</p>}
           <ul className="list">
-            {done.slice(0, 50).map((x) => (
+            {donePages.items.map((x) => (
               <li key={`${x.taskId}-${x.doneAt}`} className="done">
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                   <span className="t">{x.title}</span>
@@ -223,9 +237,10 @@ const EmployeeCard = ({ id }: { id: number }) => {
               </li>
             ))}
           </ul>
-          {done.length > 50 && <p className="empty">Показаны последние 50 из {done.length}.</p>}
+          <Pagination label="Страницы исполненных задач" page={donePages.page} pages={donePages.pages} onChange={donePages.setPage} />
         </section>
       </div>
+      </div>}
     </div>
   );
 };

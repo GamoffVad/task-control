@@ -22,7 +22,7 @@ import { tripLinksError } from '../src/lib/taskTrips';
 import { fromData, PERSISTED, reducer, toData, type Action } from '../src/lib/reducer';
 import { DEFAULT_DICTIONARIES } from '../src/lib/seed';
 import { DEFAULT_TEMPLATES } from '../src/lib/templates';
-import { addDefaultVacationTypes, validVacationDays, validVacationSettings, vacationTypeCode, vacationTypes } from '../src/lib/vacations';
+import { addDefaultVacationTypes, annualVacationCode, validVacationDays, validVacationSettings, vacationTypeCode, vacationTypes } from '../src/lib/vacations';
 import { dutyTypeCode, dutyTypes, eventTypeExists, withDutyTypes } from '../src/lib/eventTypes';
 import type { VacationSettings } from '../src/lib/types';
 import { normalizePeriodSettings, validPeriodSettings, validReportRange } from '../src/lib/periods';
@@ -280,6 +280,7 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
       if (typeof a.employeeId !== 'number' || !data.users.some((user) => user.employeeId === a.employeeId)) bad('пользователь');
       if (a.hidden !== undefined && typeof a.hidden !== 'boolean') bad('скрытие сотрудника');
       if (a.annualVacationDays !== undefined && !validVacationDays(a.annualVacationDays as number)) bad('ежегодную норму отпуска (целое число от 0 до 366)');
+      if (a.vacationTypeDays !== undefined && (!isObj(a.vacationTypeDays) || !Object.hasOwn(a.vacationTypeDays, annualVacationCode(data.dictionaries ?? DEFAULT_DICTIONARIES)) || Object.entries(a.vacationTypeDays).some(([code, days]) => !(data.dictionaries ?? DEFAULT_DICTIONARIES).some((d) => d.dictionary === 'vacationType' && d.code === code) || !validVacationDays(days as number)))) bad('нормы типов отпуска');
       if (a.dayoffAccrued !== undefined && !validDayoffAccrued(a.dayoffAccrued as number)) bad('начисленные вручную отгулы (целое число от 0 до 3000)');
       if (!['administrator', 'manager', 'executor'].includes(a.role as string) || typeof a.active !== 'boolean' || (a.windowsLogin !== undefined && (!str(a.windowsLogin, 128) || !(a.windowsLogin as string).trim()))) bad('роль или Windows-логин пользователя');
       if (a.unitId !== undefined && (typeof a.unitId !== 'string' || (a.unitId !== '' && !(data.units ?? DEFAULT_UNITS).some((u) => u.id === a.unitId)))) bad('подразделение пользователя');
@@ -294,6 +295,7 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
         active: a.active as boolean,
         ...(a.hidden !== undefined ? { hidden: a.hidden as boolean } : {}),
         ...(a.annualVacationDays !== undefined ? { annualVacationDays: a.annualVacationDays as number } : {}),
+        ...(a.vacationTypeDays !== undefined ? { vacationTypeDays: a.vacationTypeDays as Record<string, number> } : {}),
         ...(a.dayoffAccrued !== undefined ? { dayoffAccrued: a.dayoffAccrued as number } : {}),
         now,
         ...(a.windowsLogin !== undefined ? { windowsLogin: a.windowsLogin as string } : {}),
@@ -323,8 +325,9 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
       if (!str(d.name, 200) || !String(d.name).trim()) bad('название подразделения');
       if (d.parentId !== null && !str(d.parentId, 100)) bad('вышестоящее подразделение');
       if (d.managesParent !== undefined && typeof d.managesParent !== 'boolean') bad('руководство подразделения');
+      if (d.order !== undefined && (!Number.isInteger(d.order) || (d.order as number) < 1 || (d.order as number) > 1000000)) bad('порядок подразделения');
       return { type: 'saveUnit', draft: { ...(d.id ? { id: d.id as string } : {}), parentId: d.parentId as string | null, kind: d.kind as UnitKind, name: d.name as string,
-        ...(d.managesParent !== undefined ? { managesParent: d.managesParent as boolean } : {}) } };
+        ...(d.order !== undefined ? { order: d.order as number } : {}), ...(d.managesParent !== undefined ? { managesParent: d.managesParent as boolean } : {}) } };
     }
     case 'saveTemplate': {
       if (!isObj(a.draft)) bad('шаблон');

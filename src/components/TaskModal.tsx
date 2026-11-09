@@ -141,7 +141,7 @@ const TaskModal = ({ task, defaults, context, onClose }: OpenArgs & { onClose: (
   };
 
   // Кто из исполнителей отсутствует в день срока.
-  const absentees = draft.done ? [] : taskAbsenceConflicts(draft, allTrips).map((a) => ({ id: a.employeeId, a }));
+  const absentees = draft.done || draft.local ? [] : taskAbsenceConflicts(draft, allTrips).map((a) => ({ id: a.employeeId, a }));
 
   const row = draft.rowId ? state.planRows.find((item) => item.id === draft.rowId) : null;
   const rowIsHeader = !!row?.isHeader;

@@ -102,6 +102,7 @@ export const TABLES: SchemaTable[] = [
       { name: 'year', type: 'int' },
       { name: 'vacation_days', type: 'int', default: '0' },
       { name: 'carried_over', type: 'int', default: '0' },
+      { name: 'vacation_type_days', type: 'nvarchar(max)', nullable: true },
       { name: 'dayoff_accrued', type: 'int', default: '0' },
     ],
   },
@@ -179,6 +180,7 @@ export const TABLES: SchemaTable[] = [
       { name: 'kind', type: 'nvarchar(32)', default: "'section'" },
       { name: 'name', type: 'nvarchar(256)', default: "''" },
       { name: 'manages_parent', type: 'bit', nullable: true },
+      { name: 'sort_order', type: 'int', nullable: true },
     ],
   },
   {
@@ -411,8 +413,8 @@ const readAll = async (q: Q): Promise<Data | null> => {
       return { id: a.id, employeeId: a.employee_id, type: a.type, ...(a.duty_type ? { dutyType: a.duty_type } : {}), ...(a.vacation_type ? { vacationType: a.vacation_type } : {}), ...(a.travel_days_before != null ? { travelDaysBefore: a.travel_days_before } : {}), ...(a.travel_days_after != null ? { travelDaysAfter: a.travel_days_after } : {}), from: a.date_from, to: a.date_to, status: a.status, note: a.note, decidedBy: a.decided_by, createdAt: iso(a.created_at)! } as Absence;
     }),
     entitlements: entitlements.map((x) => {
-      const e = x as unknown as { employee_id: number; year: number; vacation_days: number; carried_over: number; dayoff_accrued: number };
-      return { employeeId: e.employee_id, year: e.year, vacationDays: e.vacation_days, carriedOver: e.carried_over, dayoffAccrued: e.dayoff_accrued } as Entitlement;
+      const e = x as unknown as { employee_id: number; year: number; vacation_days: number; carried_over: number; dayoff_accrued: number; vacation_type_days: string | null };
+      return { employeeId: e.employee_id, year: e.year, vacationDays: e.vacation_days, carriedOver: e.carried_over, ...(e.vacation_type_days ? { vacationTypeDays: json<Record<string, number>>(e.vacation_type_days, {}) } : {}), dayoffAccrued: e.dayoff_accrued } as Entitlement;
     }),
     reports: reports.map((x) => {
       const rep = x as unknown as { week_start: string; period_end: string | null; submitted_at: Date; entries: string };
@@ -458,8 +460,8 @@ const readAll = async (q: Q): Promise<Data | null> => {
       : DEFAULT_TEMPLATES.map((t) => ({ ...t })),
     units: unitsReady
       ? units.map((x) => {
-          const u = x as unknown as { id: string; parent_id: string | null; kind: Unit['kind']; name: string; manages_parent: boolean | null };
-          return { id: u.id, parentId: u.parent_id, kind: u.kind, name: u.name, ...(u.manages_parent != null ? { managesParent: !!u.manages_parent } : {}) } as Unit;
+          const u = x as unknown as { id: string; parent_id: string | null; kind: Unit['kind']; name: string; manages_parent: boolean | null; sort_order: number | null };
+          return { id: u.id, parentId: u.parent_id, kind: u.kind, name: u.name, ...(u.sort_order != null ? { order: u.sort_order } : {}), ...(u.manages_parent != null ? { managesParent: !!u.manages_parent } : {}) } as Unit;
         })
       : INITIAL_UNITS.map((u) => ({ ...u })),
     roles: migratedRoles,
@@ -522,10 +524,10 @@ const ENTITLEMENTS: Table<Entitlement> = {
       q,
       'tc_entitlements',
       '[employee_id] = @v1 and [year] = @v2',
-      '[vacation_days]=@v3, [carried_over]=@v4, [dayoff_accrued]=@v5',
-      '[employee_id],[year],[vacation_days],[carried_over],[dayoff_accrued]',
-      '@v1,@v2,@v3,@v4,@v5',
-      [I(e.employeeId), I(e.year), I(e.vacationDays), I(e.carriedOver), I(e.dayoffAccrued)],
+      '[vacation_days]=@v3, [carried_over]=@v4, [dayoff_accrued]=@v5, [vacation_type_days]=@v6',
+      '[employee_id],[year],[vacation_days],[carried_over],[dayoff_accrued],[vacation_type_days]',
+      '@v1,@v2,@v3,@v4,@v5,@v6',
+      [I(e.employeeId), I(e.year), I(e.vacationDays), I(e.carriedOver), I(e.dayoffAccrued), e.vacationTypeDays ? J(e.vacationTypeDays) : S(null)],
     ),
   remove: (q, e) => run(q, 'delete from dbo.tc_entitlements where [employee_id] = @v1 and [year] = @v2', [I(e.employeeId), I(e.year)]),
 };
@@ -604,7 +606,7 @@ const USERS: Table<ManagedUser> = {
 const UNITS: Table<Unit> = {
   key: (unit) => unit.id,
   upsert: (q, unit) =>
-    upsert(q, 'tc_units', '[id] = @v1', '[parent_id]=@v2, [kind]=@v3, [name]=@v4, [manages_parent]=@v5', '[id],[parent_id],[kind],[name],[manages_parent]', '@v1,@v2,@v3,@v4,@v5', [S(unit.id, 64), S(unit.parentId, 64), S(unit.kind, 32), S(unit.name, 256), BIT(unit.managesParent)]),
+    upsert(q, 'tc_units', '[id] = @v1', '[parent_id]=@v2, [kind]=@v3, [name]=@v4, [manages_parent]=@v5, [sort_order]=@v6', '[id],[parent_id],[kind],[name],[manages_parent],[sort_order]', '@v1,@v2,@v3,@v4,@v5,@v6', [S(unit.id, 64), S(unit.parentId, 64), S(unit.kind, 32), S(unit.name, 256), BIT(unit.managesParent), I(unit.order)]),
   remove: (q, unit) => run(q, 'delete from dbo.tc_units where [id] = @v1', [S(unit.id, 64)]),
 };
 

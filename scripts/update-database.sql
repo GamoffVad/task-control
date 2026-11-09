@@ -117,12 +117,15 @@ BEGIN TRY
     [year] int not null,
     [vacation_days] int not null constraint df_tc_entitlements_vacation_days default 0,
     [carried_over] int not null constraint df_tc_entitlements_carried default 0,
+    [vacation_type_days] nvarchar(max) null,
     [dayoff_accrued] int not null constraint df_tc_entitlements_dayoff default 0,
     constraint pk_tc_entitlements primary key ([employee_id], [year]))');
 
   EXEC(N'if col_length(''dbo.tc_entitlements'', ''vacation_days'') is null alter table dbo.tc_entitlements add [vacation_days] int not null constraint df_tc_entitlements_vacation_days default 0');
 
   EXEC(N'if col_length(''dbo.tc_entitlements'', ''carried_over'') is null alter table dbo.tc_entitlements add [carried_over] int not null constraint df_tc_entitlements_carried default 0');
+
+  EXEC(N'if col_length(''dbo.tc_entitlements'', ''vacation_type_days'') is null alter table dbo.tc_entitlements add [vacation_type_days] nvarchar(max) null');
 
   EXEC(N'if col_length(''dbo.tc_entitlements'', ''dayoff_accrued'') is null alter table dbo.tc_entitlements add [dayoff_accrued] int not null constraint df_tc_entitlements_dayoff default 0');
 
@@ -225,7 +228,8 @@ BEGIN TRY
     [parent_id] nvarchar(64) null,
     [kind] nvarchar(32) not null constraint df_tc_units_kind default ''section'',
     [name] nvarchar(256) not null constraint df_tc_units_name default '''',
-    [manages_parent] bit null)');
+    [manages_parent] bit null,
+    [sort_order] int null)');
 
   EXEC(N'if col_length(''dbo.tc_units'', ''parent_id'') is null alter table dbo.tc_units add [parent_id] nvarchar(64) null');
 
@@ -234,6 +238,8 @@ BEGIN TRY
   EXEC(N'if col_length(''dbo.tc_units'', ''name'') is null alter table dbo.tc_units add [name] nvarchar(256) not null constraint df_tc_units_name default ''''');
 
   EXEC(N'if col_length(''dbo.tc_units'', ''manages_parent'') is null alter table dbo.tc_units add [manages_parent] bit null');
+
+  EXEC(N'if col_length(''dbo.tc_units'', ''sort_order'') is null alter table dbo.tc_units add [sort_order] int null');
 
   EXEC(N'if object_id(N''dbo.tc_templates'', N''U'') is null create table dbo.tc_templates (
     [id] nvarchar(64) not null primary key,

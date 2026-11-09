@@ -53,18 +53,34 @@ describe('большой отдел', () => {
     expect(document.querySelector('.tl-group-start')).toBeNull();
   });
 
-  it('порядок в «Тетрисе» совпадает с деревом сотрудников после смены подразделений', () => {
+  it('учитывает заданный порядок подразделений в Тетрисе', () => {
     const initial = state();
     initial.user = { email: 'user@example.com', employeeId: 1, role: 'administrator' };
-    // Начальник с большим ID остаётся первым независимо от подразделения.
-    initial.users = initial.users.map((u) => u.employeeId === 1 ? { ...u, unitId: 's-dev', position: 'Специалист' } : u.employeeId === 107 ? { ...u, unitId: 'g-1', position: 'Начальник' } : u);
-    initial.dictionaries = [...initial.dictionaries, { id: 'chief', dictionary: 'position', code: 'chief', title: 'Начальник', order: 1 }, { id: 'staff', dictionary: 'position', code: 'staff', title: 'Специалист', order: 2 }];
-    const directory = renderAt('/employees/1', initial);
-    const expected = [...document.querySelectorAll('.employee-directory .tree-row')].map((el) => el.getAttribute('href'));
-    expect(expected[0]).toBe('/employees/107');
-    expect(expected.indexOf('/employees/107')).toBeLessThan(expected.indexOf('/employees/1'));
-    directory.unmount();
+    initial.users = initial.users.filter((u) => u.employeeId <= 4).map((u) => ({ ...u, unitId: u.employeeId <= 2 ? 'g-1' : 'g-2' }));
+    initial.units = initial.units.map((u) => u.id === 'g-1' ? { ...u, order: 2 } : u.id === 'g-2' ? { ...u, order: 1 } : u);
     renderAt('/tetris', initial);
-    expect([...document.querySelectorAll('.tl-who')].map((el) => el.getAttribute('href'))).toEqual(expected);
+    const names = [...document.querySelectorAll('.tl-who')].map((el) => el.getAttribute('href'));
+    expect(names.slice(0, 2)).toEqual(expect.arrayContaining(['/employees/3', '/employees/4']));
+    expect(names.slice(2)).toEqual(expect.arrayContaining(['/employees/1', '/employees/2']));
+  });
+
+  it('держит подразделения вместе и сортирует сотрудников по должности внутри каждой группы', async () => {
+    const initial = state();
+    initial.user = { email: 'user@example.com', employeeId: 1, role: 'administrator' };
+    initial.users = initial.users.filter((u) => u.employeeId <= 4).map((u) => {
+      const positions: Record<number, string> = { 1: 'Заместитель', 2: 'Специалист', 3: 'Начальник', 4: 'Младший' };
+      return { ...u, position: positions[u.employeeId], unitId: u.employeeId <= 2 ? 'g-1' : 'g-2' };
+    });
+    initial.dictionaries = [...initial.dictionaries, ...['Начальник', 'Заместитель', 'Специалист', 'Младший'].map((title, i) => ({ id: `p-${i}`, dictionary: 'position' as const, code: `p-${i}`, title, order: i + 1 }))];
+    renderAt('/tetris', initial);
+    const names = () => [...document.querySelectorAll('.tl-who')].map((el) => el.getAttribute('href'));
+    expect(names()).toEqual(['/employees/3', '/employees/4', '/employees/1', '/employees/2']);
+    expect([...document.querySelectorAll('.tl-who.tl-group-start')].map((el) => el.getAttribute('href'))).toEqual(['/employees/1']);
+    expect(document.querySelectorAll('.tl-lane.tl-group-start')).toHaveLength(1);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /^Группа: Весь отдел/ }));
+    await user.click(screen.getByRole('option', { name: 'Руководство' }));
+    expect(names()).toEqual(['/employees/1', '/employees/2']);
+    expect(document.querySelectorAll('.tl-group-start')).toHaveLength(0);
   });
 });

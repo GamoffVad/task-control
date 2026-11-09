@@ -36,7 +36,7 @@ describe('скрытый сотрудник', () => {
     await user.click(screen.getByRole('button', { name: /^Сотрудник:/ }));
     expect(screen.queryByRole('option', { name: 'Сидоров Д.Е.' })).toBeNull();
     await user.keyboard('{Escape}');
-    await user.click(screen.getByRole('button', { name: 'Новая задача' }));
+    await user.click(document.querySelector<HTMLElement>('.cal-slot, .month-cell')!);
     expect(within(screen.getByRole('dialog')).queryByRole('checkbox', { name: 'Сидоров Д.Е.' })).toBeNull();
   });
 

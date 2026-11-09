@@ -30,6 +30,25 @@ const initial = (): AppState => {
 const absence = (from: string, to: string, extra: Partial<Absence> = {}): Absence => ({ id: from, employeeId: 3, type: 'vacation', from, to, status: 'approved', createdAt: NOW.toISOString(), note: '', decidedBy: 1, ...extra });
 
 describe('отпускной период и индивидуальная норма', () => {
+  it('считает нормы, согласованные дни и заявки отдельно по каждому типу', () => {
+    const ent = [{ employeeId: 3, year: 2026, vacationDays: 28, carriedOver: 5, vacationTypeDays: { veteran: 15 }, dayoffAccrued: 0 }];
+    const events = [absence('2026-02-01', '2026-02-10'), absence('2026-03-01', '2026-03-02', { vacationType: 'previous-year' }), absence('2026-10-01', '2026-10-03', { vacationType: 'veteran' }), absence('2026-11-01', '2026-11-04', { vacationType: 'veteran', status: 'request' })];
+    const balance = balanceFor(events, ent, 3, 2026, NOW);
+    expect(balance.vacationByType.annual).toMatchObject({ total: 28, used: 10, left: 18 });
+    expect(balance.vacationByType['previous-year']).toMatchObject({ total: 5, used: 2, left: 3 });
+    expect(balance.vacationByType.veteran).toMatchObject({ total: 15, planned: 3, requested: 4, left: 12 });
+    expect(balance.vacation).toMatchObject({ total: 48, left: 33 });
+  });
+  it('сохраняет нормы типов на текущий период, не меняя историю', () => {
+    const state = initial();
+    state.entitlements = [{ employeeId: 3, year: 2025, vacationDays: 20, carriedOver: 0, vacationTypeDays: { veteran: 3 }, dayoffAccrued: 0 }, { employeeId: 3, year: 2026, vacationDays: 28, carriedOver: 5, dayoffAccrued: 2 }];
+    const next = reducer(state, { type: 'saveManagedUser', employeeId: 3, role: 'executor', active: true, vacationTypeDays: { annual: 30, 'previous-year': 4, veteran: 15 }, now: NOW });
+    expect(entitlementFor(next.entitlements, 3, 2026)).toMatchObject({ vacationDays: 30, carriedOver: 4, vacationTypeDays: { veteran: 15 }, dayoffAccrued: 2 });
+    expect(entitlementFor(next.entitlements, 3, 2025).vacationTypeDays).toEqual({ veteran: 3 });
+    expect(entitlementFor(next.entitlements, 3, 2027, next.users)).toMatchObject({ vacationDays: 30, carriedOver: 0 });
+    expect(entitlementFor(next.entitlements, 3, 2027, next.users).vacationTypeDays).toBeUndefined();
+  });
+
   it('сохраняет отгулы из карточки в календарном году отдельно от отпускного периода', () => {
     const state = initial();
     state.vacationSettings = { resetMonth: 11, resetDay: 1 };
@@ -188,7 +207,7 @@ describe('настройки отпусков в интерфейсе', () => {
     await user.click(screen.getByRole('button', { name: /Редактировать пользователя Сидоров/ }));
     const input = screen.getByLabelText(/Отгулы, начисленные вручную/);
     expect(input).toHaveValue('3');
-    expect(input.closest('.employee-balances')).toContainElement(screen.getByLabelText(/Дней отпуска в год/));
+    expect(input.closest('form')).toContainElement(screen.getByLabelText(/Дней отпуска в год/));
     await user.clear(input);
     await user.type(input, '-1');
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
@@ -220,6 +239,25 @@ describe('настройки отпусков в интерфейсе', () => {
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
     expect(loadState().users.find((u) => u.employeeId === 3)?.fullName).toBe('Сидоров Иван');
   });
+  it('назначает тип отпуска в форме и показывает его остаток сотруднику', async () => {
+    const state = initial();
+    state.entitlements = [{ employeeId: 3, year: 2026, vacationDays: 28, carriedOver: 0, dayoffAccrued: 0 }];
+    const view = render(<StoreProvider initial={state}><MemoryRouter initialEntries={['/admin']}><AppRoutes /></MemoryRouter></StoreProvider>);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /Редактировать пользователя Сидоров/ }));
+    await user.click(screen.getByRole('button', { name: 'Добавить тип отпуска' }));
+    await user.click(screen.getByRole('button', { name: /^Тип отпуска 2:/ }));
+    await user.click(screen.getByRole('option', { name: 'Ветеранский отпуск' }));
+    await user.clear(screen.getByLabelText('Дней отпуска 2'));
+    await user.type(screen.getByLabelText('Дней отпуска 2'), '15');
+    await user.click(screen.getByRole('button', { name: 'Сохранить' }));
+    const saved = loadState();
+    expect(entitlementFor(saved.entitlements, 3, 2026).vacationTypeDays).toEqual({ veteran: 15 });
+    view.unmount();
+    render(<StoreProvider initial={saved}><AbsencePanel id={3} /></StoreProvider>);
+    expect(within(screen.getByLabelText('Остатки по типам отпуска')).getByText('Ветеранский отпуск')).toBeInTheDocument();
+  });
+
   it('сохраняет норму в редактировании сотрудника и проверяет ввод', async () => {
     render(<StoreProvider initial={initial()}><MemoryRouter initialEntries={['/admin']}><AppRoutes /></MemoryRouter></StoreProvider>);
     const user = userEvent.setup();

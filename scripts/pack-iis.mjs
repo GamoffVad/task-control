@@ -20,7 +20,8 @@ if (process.platform !== 'win32') {
 
 execSync('npm run build:iis', { cwd: root, stdio: 'inherit' });
 
-rmSync(release, { recursive: true, force: true });
+mkdirSync(release, { recursive: true });
+if (existsSync(stage) || existsSync(zip)) throw new Error(`Комплект ${name} уже существует; сохраните его или выберите новую версию.`);
 mkdirSync(stage, { recursive: true });
 cpSync(path.join(root, 'dist-iis'), path.join(stage, 'dist-iis'), { recursive: true });
 copyFileSync(path.join(root, 'deploy-iis.bat'), path.join(stage, 'deploy-iis.bat'));

@@ -123,7 +123,7 @@ export const detectEvents = (before: Data, after: Data, actor: User, timeZone = 
 export const overdueNotice = (data: Data, employeeId: number, now: Date, timeZone = NOTIFY_TIME_ZONE): NoticeEvent | null => {
   const todayKey = dayKey(now, timeZone);
   const mine = data.tasks
-    .filter((t) => !t.done && t.assigneeIds.includes(employeeId) && dayKey(new Date(t.end), timeZone) < todayKey)
+    .filter((t) => !t.local && !t.done && t.assigneeIds.includes(employeeId) && dayKey(new Date(t.end), timeZone) < todayKey)
     .sort((a, b) => a.end.localeCompare(b.end));
   if (!mine.length) return null;
   const list = mine.slice(0, 3).map((t) => `• ${clip(t.title, 70)} (${fmt(t.end, false, timeZone).slice(0, 5)})`).join('\n');

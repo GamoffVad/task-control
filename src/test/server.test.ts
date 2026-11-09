@@ -61,6 +61,25 @@ const withApi = async (options: Partial<Parameters<typeof createApi>[0]> & { rep
 };
 
 describe('API', () => {
+  it('сохраняет нормы отпусков по типам и проверяет их', async () => {
+    const token = await login('user@example.com');
+    const action = { type: 'saveManagedUser', employeeId: 3, role: 'executor', active: true, vacationTypeDays: { annual: 28, 'previous-year': 5, veteran: 15 } };
+    expect((await call('/api/action', { method: 'POST', token, body: { action } })).status).toBe(200);
+    const ent = (await repo.read())!.entitlements.find((e) => e.employeeId === 3 && e.year === 2026)!;
+    expect(ent).toMatchObject({ vacationDays: 28, carriedOver: 5, vacationTypeDays: { veteran: 15 } });
+    expect((await call('/api/action', { method: 'POST', token, body: { action: { ...action, vacationTypeDays: { annual: 28, veteran: -1 } } } })).status).toBe(400);
+  });
+
+  it('принимает и сохраняет порядок подразделения, отклоняет неверное значение', async () => {
+    const token = await login('user@example.com');
+    const draft = { id: 'g-1', parentId: 'u-dept-dev', kind: 'section', name: 'Руководство', order: 7 };
+    const saved = await call('/api/action', { method: 'POST', token, body: { action: { type: 'saveUnit', draft } } });
+    expect(saved.status).toBe(200);
+    expect((await repo.read())!.units!.find((unit) => unit.id === 'g-1')?.order).toBe(7);
+    const bad = await call('/api/action', { method: 'POST', token, body: { action: { type: 'saveUnit', draft: { ...draft, order: 0 } } } });
+    expect(bad.status).toBe(400);
+  });
+
   it('личная заметка доступна только владельцу, не попадает в отчёты и не меняет тип', async () => {
     const original = (await repo.read())!;
     repo = createMemoryRepo(undefined, { ...original, tasks: [], notices: [] });

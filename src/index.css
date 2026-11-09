@@ -794,6 +794,9 @@ td.name { color: var(--ink); font-weight: 600; }
   z-index: 2;
 }
 .cal-event:hover { outline: 1px solid var(--accent); }
+.calendar-layout .page-actions { margin-left: auto; justify-content: flex-end; }
+.calendar-layout .page-actions > .calendar-movement { flex: 0 1 auto; }
+.calendar-movement { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 10px; }
 .calendar-move-note { margin: 6px 0; font-size: 12px; line-height: 1.5; height: 1.5em; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .planning-task-step { width: 10rem; max-width: 100%; min-width: 0; }
 .planning-task-step > .caps { display: block; font-size: 10px; }
@@ -1041,6 +1044,10 @@ td.name { color: var(--ink); font-weight: 600; }
 .stat .value { font-family: var(--font-mono); font-size: 27px; font-weight: 700; line-height: 1.15; color: var(--ink); }
 .stat .value.ratio { color: var(--accent); }
 .stat .expl { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+.list-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 12px; margin-top: 14px; }
+.list-pagination .num { font-size: 12px; color: var(--ink-3); }
+.employee-tabs { margin-bottom: 12px; border-bottom: 1px solid var(--dash); }
+.employee-tabs button[aria-selected="true"] { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
 .employees-layout > .employee-card { order: -1; }
 @media (max-width: 559px) {
   .stat + .stat { border-left: none; padding-left: 0; }
@@ -1290,8 +1297,9 @@ a.label:hover { color: var(--accent); }
 .tt-brush-tools { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem 1rem; min-width: 0; }
 .tt-brush-tools .check { flex-shrink: 0; font-weight: 600; white-space: nowrap; }
 .tt-brush-choice { display: block; width: 22rem; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
-.tt-brush-choice.inactive, .tt-brush-hint.inactive { visibility: hidden; pointer-events: none; }
+.tt-brush-choice.inactive { visibility: hidden; pointer-events: none; }
 .tt-brush-hint { display: grid; padding: .4rem 0 .6rem; color: var(--ink-3); font-size: .8rem; min-height: 2rem; }
+.tt-brush-hint.inactive { display: none; }
 .tt-brush-hint-reserve, .tt-brush-hint-text { grid-area: 1 / 1; }
 .tt-brush-hint-reserve { visibility: hidden; pointer-events: none; }
 .tl-brush-mode { user-select: none; touch-action: pan-y; }
@@ -1580,18 +1588,18 @@ a.label:hover { color: var(--accent); }
 .tl-lane { grid-column: 2 / -1; }
 
 /* ——— Тетрис: компактная шапка, чтобы графику оставалось больше высоты ——— */
-.tt-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 10px 0; }
+.tt-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 0; }
 .tt-title { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; }
 .tt-title h1 { font-size: clamp(22px, 1rem + 1vw, 26px); }
 .tt-sub { font-size: 13px; font-weight: 400; letter-spacing: 0; color: var(--ink-3); }
 .tetris-page { min-width: 0; }
-.tt-tabs { flex-wrap: wrap; margin-left: auto; flex: none; }
+.tt-tabs { flex-wrap: wrap; flex: none; order: 0; }
 .tt-tabs button { min-height: 44px; }
 .tt-tabs button[aria-selected="true"] { color: var(--accent); font-weight: 700; border-bottom-color: var(--accent); }
 .tetris-page [role="tabpanel"][hidden] { display: none; }
 .tt-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; order: 1; width: 100%; min-width: 0; }
 .tt-tools[hidden] { display: none; }
-.tt-actions { display: flex; align-items: center; gap: 8px; flex: none; margin-left: auto; order: 2; }
+.tt-actions { display: flex; align-items: center; gap: 8px; flex: none; margin-left: auto; order: 3; }
 .tt-actions[hidden] { display: none; }
 .tt-actions .icon-btn, .file-export { width: 44px; height: 44px; flex: none; padding: 0; }
 .tt-actions .btn--primary { background: var(--accent); color: var(--sheet); border-color: var(--accent); }
@@ -1606,8 +1614,9 @@ a.label:hover { color: var(--accent); }
   .tt-head { flex-wrap: nowrap; gap: 12px; }
   .tt-title { flex: none; }
   .tt-sub { display: none; }
-  .tt-tools { order: 0; width: auto; flex: 1 1 auto; flex-wrap: nowrap; gap: 12px; }
-  .tt-actions { order: 0; margin-left: 0; }
+  .tt-tools { order: 0; width: auto; flex: 0 1 auto; flex-wrap: nowrap; gap: 12px; padding-left: 12px; border-left: 1px dashed var(--dash); }
+  .tt-tabs { order: 0; }
+  .tt-actions { order: 0; margin-left: auto; }
   .tt-brush-tools { flex-wrap: nowrap; gap: 8px; flex: none; }
   .tt-brush-choice { width: clamp(10rem, 12vw, 16rem); }
   .tt-group { flex: 1 1 9rem; width: auto; max-width: 210px; gap: 6px; }
@@ -1719,3 +1728,16 @@ a.label:hover { color: var(--accent); }
 .period-settings-grid .field-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 @media (max-width: 760px) { .period-settings-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; } }
 @media (max-width: 480px) { .period-settings-grid .field-row { grid-template-columns: minmax(0, 1fr); } }
+
+/* Редактирование норм сотрудника и остатки по типам отпусков. */
+.employee-form-heading { margin: 8px 0 0; padding-top: 14px; border-top: 1px dashed var(--dash); font-size: 14px; }
+.employee-vacations { display: grid; gap: 10px; }
+.employee-vacations .employee-form-heading { margin: 0; }
+.employee-vacation-row { display: grid; grid-template-columns: minmax(0, 1fr) 100px 32px; align-items: end; gap: 10px; }
+.employee-vacation-row .admin-icon-action { height: 42px; }
+.employee-dayoffs { max-width: 100%; }
+.vacation-types { display: grid; gap: 9px; margin: 14px 0; }
+.vacation-type { display: grid; gap: 3px; padding-top: 9px; border-top: 1px dashed var(--dash); font-size: 12px; }
+.vacation-type strong { color: var(--ink); }
+.vacation-type span { color: var(--muted); }
+@media (max-width: 480px) { .employee-vacation-row { grid-template-columns: minmax(0, 1fr) 65px 32px; gap: 6px; } }

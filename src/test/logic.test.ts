@@ -32,7 +32,11 @@ import {
 } from '../lib/logic';
 import { layoutDay } from '../lib/calendarLayout';
 import { DEFAULT_SCORING, DEFAULT_USERS } from '../lib/access';
-import { DEFAULT_UNITS } from '../lib/units';
+import { DEFAULT_UNITS, unitTree } from '../lib/units';
+import { findClashes } from '../lib/absences';
+import { overdueNotice } from '../lib/notify';
+import { nextPlanningSlot } from '../lib/planningSlots';
+import { overdueTasks } from '../lib/logic';
 import { unreadMessages } from '../lib/chat';
 import { createSeed } from '../lib/seed';
 import { taskAccess } from '../lib/permissions';
@@ -576,5 +580,30 @@ describe('поиск', () => {
     expect(ids('сборка журнал')).toEqual([]);
     expect(ids('   ')).toEqual(['a', 'b', 'c']);
     expect(searchTasks([task({ title: 'Отчёт' })], 'отчет')).toHaveLength(1);
+  });
+});
+
+
+describe('личные заметки и порядок подразделений', () => {
+  it('не включает заметки в контроль, планирование, пересечения и напоминания', () => {
+    const note = task({ id: 'private', local: true, rowId: null, title: 'Личная заметка', start: new Date(2026, 8, 17, 9).toISOString(), end: new Date(2026, 8, 17, 10).toISOString() });
+    const normal = task({ id: 'normal', end: note.end });
+    expect(Object.values(bucketize([note, normal], 1, NOW)).flat().map((t) => t.id)).toEqual(['normal']);
+    expect(tasksInWeek([note, normal], new Date(2026, 8, 14), new Date(2026, 8, 20)).map((t) => t.id)).toEqual(['normal']);
+    expect(overdueTasks([note], new Date(2026, 8, 18))).toEqual([]);
+    expect(overdueNotice({ ...createSeed(), tasks: [note] }, 1, new Date(2026, 8, 18, 12))).toBeNull();
+    expect(findClashes([note], createSeed().absences, NOW)).toEqual([]);
+    expect(nextPlanningSlot([note], 1, new Date(2026, 8, 17), new Date(2026, 8, 17), 60, new Date(2026, 8, 17, 8))).toEqual(nextPlanningSlot([], 1, new Date(2026, 8, 17), new Date(2026, 8, 17), 60, new Date(2026, 8, 17, 8)));
+  });
+  it('сохраняет и применяет порядок среди соседних подразделений', () => {
+    const state = { ...createSeed(), user: { email: 'admin@example.com', employeeId: 1, role: 'administrator' as const } };
+    const target = state.units.find((u) => u.id === 'g-2')!;
+    const saved = reducer(state, { type: 'saveUnit', draft: { ...target, order: 2 } });
+    expect(saved.units.find((u) => u.id === target.id)?.order).toBe(2);
+    const other = saved.units.find((u) => u.id === 'g-1')!;
+    const updated = reducer(saved, { type: 'saveUnit', draft: { ...other, order: 1 } });
+    const siblings = unitTree(updated.units).map(({ unit }) => unit).filter((u) => u.parentId === target.parentId);
+    expect(siblings.slice(0, 2).map((u) => u.id)).toEqual(['g-1', 'g-2']);
+    expect(reducer(updated, { type: 'saveUnit', draft: { ...target, order: 0 } })).toBe(updated);
   });
 });

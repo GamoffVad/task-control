@@ -26,10 +26,10 @@ export type PlanningSlot = { start: string; end: string };
  * В текущем периоде не предлагаем прошедшее время; для исторического периода
  * начинаем с его первого дня. При заполненном периоде результат отсутствует.
  */
-export const nextPlanningSlot = (tasks: Pick<Task, 'start' | 'end' | 'assigneeIds'>[], employeeId: number, from: Date, to: Date, step: PlanningStep, now = new Date()): PlanningSlot | null => {
+export const nextPlanningSlot = (tasks: (Pick<Task, 'start' | 'end' | 'assigneeIds'> & Pick<Task, 'local'>)[], employeeId: number, from: Date, to: Date, step: PlanningStep, now = new Date()): PlanningSlot | null => {
   const first = startOfDay(from), last = startOfDay(to), today = startOfDay(now);
   const current = today >= first && today <= last;
-  const busy = tasks.filter(task => task.assigneeIds.includes(employeeId))
+  const busy = tasks.filter(task => !task.local && task.assigneeIds.includes(employeeId))
     .map(task => ({ start: new Date(task.start).getTime(), end: new Date(task.end).getTime() }))
     .filter(task => Number.isFinite(task.start) && Number.isFinite(task.end) && task.end > task.start)
     .sort((a, b) => a.start - b.start);
