@@ -258,6 +258,17 @@ describe('настройки отпусков в интерфейсе', () => {
     expect(within(screen.getByLabelText('Остатки по типам отпуска')).getByText('Ветеранский отпуск')).toBeInTheDocument();
   });
 
+  it.each([['users.manage', true, false], ['users.entitlements', false, true]] as const)('разделяет поля формы по праву %s', async (permission, accountEnabled, leaveEnabled) => {
+    const state = initial();
+    state.user = { ...state.user!, permissions: [permission] };
+    render(<StoreProvider initial={state}><MemoryRouter initialEntries={['/admin']}><AppRoutes /></MemoryRouter></StoreProvider>);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /Редактировать пользователя Сидоров/ }));
+    expect(screen.getByLabelText('ФИО')).toHaveProperty('disabled', !accountEnabled);
+    expect(screen.getByLabelText('Дней отпуска в год')).toHaveProperty('disabled', !leaveEnabled);
+    expect(screen.getByLabelText(/Отгулы, начисленные вручную/)).toHaveProperty('disabled', !leaveEnabled);
+  });
+
   it('сохраняет норму в редактировании сотрудника и проверяет ввод', async () => {
     render(<StoreProvider initial={initial()}><MemoryRouter initialEntries={['/admin']}><AppRoutes /></MemoryRouter></StoreProvider>);
     const user = userEvent.setup();

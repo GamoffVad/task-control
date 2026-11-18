@@ -9,7 +9,9 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { version } = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
-const name = `task-control-iis-${version}`;
+const suffix = process.env.TC_PACKAGE_SUFFIX || '';
+if (suffix && !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(suffix)) throw new Error('Некорректный суффикс имени архива.');
+const name = `task-control-iis-${version}${suffix ? `-${suffix}` : ''}`;
 const release = path.join(root, 'release');
 const stage = path.join(release, name);
 const zip = path.join(release, `${name}.zip`);
@@ -63,7 +65,7 @@ const steps = [
   '2. В первых строках deploy-iis.bat проверьте IP, PORT и SQLSERVER (имя вашего SQL Server).',
   '3. Запустите deploy-iis.bat от имени администратора.',
   '4. Откройте http://<адрес>:<порт>/api/health — должно быть {"ok":true,"storage":"sqlserver"}.',
-  '5. Способ входа (форма или Windows) переключается в приложении: Администрирование > Аутентификация.',
+  '5. Вход осуществляется через Windows; сопоставление сотрудников настраивается в разделе Администрирование.',
   '',
   'Обновление действующего сайта: сохраните резервную копию базы SQL Server и запускайте тот же',
   'deploy-iis.bat. Существующие подключения, web.config и data сохраняются. Схема обновляется',

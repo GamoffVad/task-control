@@ -60,10 +60,8 @@ describe('дни на дорогу каждого отпуска', () => {
   it('в форме сохраняет дни дороги и показывает разбивку общей длительности', async () => {
     render(<StoreProvider initial={initial()}><AbsenceModal defaults={{ employeeId: 3, from: '2026-10-01', to: '2026-10-10' }} onClose={vi.fn()} /></StoreProvider>);
     const user = userEvent.setup();
-    const before = screen.getByLabelText('На дорогу туда, дней');
-    const after = screen.getByLabelText('На дорогу обратно, дней');
-    await user.clear(before); await user.type(before, '2');
-    await user.clear(after); await user.type(after, '1');
+    const before = screen.getByLabelText('Дни на дорогу (всего)');
+    await user.clear(before); await user.type(before, '3');
     expect(screen.getByText(/Всего отсутствия:/)).toHaveTextContent('10 дн. = отпуск 7 дн. + дорога 3 дн.');
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
     expect(loadState().absences[0]).toMatchObject({ travelDaysBefore: 2, travelDaysAfter: 1 });
@@ -75,13 +73,13 @@ describe('дни на дорогу каждого отпуска', () => {
     const close = vi.fn();
     render(<StoreProvider initial={state}><AbsenceModal absence={state.absences[0]} onClose={close} /></StoreProvider>);
     const user = userEvent.setup();
-    const before = screen.getByLabelText('На дорогу туда, дней');
-    expect(before).toHaveValue('2');
+    const before = screen.getByLabelText('Дни на дорогу (всего)');
+    expect(before).toHaveValue('3');
     await user.clear(before); await user.type(before, '11');
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
     expect(screen.getByRole('alert')).toHaveTextContent('не могут превышать');
     expect(close).not.toHaveBeenCalled();
-    await user.clear(before); await user.type(before, '2');
+    await user.clear(before); await user.type(before, '3');
     await user.type(screen.getByLabelText('Комментарий'), 'Приказ');
     await user.click(screen.getByRole('button', { name: 'Сохранить' }));
     expect(loadState().absences[0]).toMatchObject({ travelDaysBefore: 2, travelDaysAfter: 1, note: 'Приказ' });

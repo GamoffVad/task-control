@@ -1,4 +1,6 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useContext, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { StoreContext } from '../lib/store';
+import { holidayFor } from '../lib/holidays';
 import { Icon } from '../components/Icons';
 import { addMonths, fromDateKey, isSameDay, toDateKey } from '../lib/dates';
 import { SearchField } from './SearchField';
@@ -61,6 +63,7 @@ type Props = {
 };
 
 function DateInput({ mode, value, onChange, id, disabled, readOnly, invalid, placeholder, step = 30 }: Props & { mode: Mode }) {
+  const holidays = useContext(StoreContext)?.state.holidays;
   const [text, setText] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [timeQuery, setTimeQuery] = useState('');
@@ -230,9 +233,10 @@ function DateInput({ mode, value, onChange, id, disabled, readOnly, invalid, pla
                     key={d.getTime()}
                     type="button"
                     role="gridcell"
-                    className={`day${other ? ' other' : ''}${[0, 6].includes(d.getDay()) ? ' we' : ''}${isSameDay(d, today) ? ' today' : ''}`}
+                    data-tip={holidayFor(d, holidays)?.description}
+                    className={`day${holidayFor(d, holidays) || [0, 6].includes(d.getDay()) ? ' holiday' : ''}${other ? ' other' : ''}${[0, 6].includes(d.getDay()) ? ' we' : ''}${isSameDay(d, today) ? ' today' : ''}`}
                     aria-selected={isSel}
-                    aria-label={`${d.getDate()} ${MONTHS_GEN[d.getMonth()]} ${d.getFullYear()}`}
+                    aria-label={`${d.getDate()} ${MONTHS_GEN[d.getMonth()]} ${d.getFullYear()}${holidayFor(d, holidays) ? ` — ${holidayFor(d, holidays)!.description}` : ''}`}
                     tabIndex={isCur ? 0 : -1}
                     data-cursor={isCur}
                     onClick={() => pickDay(d)}

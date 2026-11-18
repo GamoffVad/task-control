@@ -1,6 +1,6 @@
 // Демонстрационные данные, построенные относительно текущей даты.
 import { employees, isCoreEmployee, planRows } from './data';
-import { DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS } from './access';
+import { ACCESS_VERSION, DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS } from './access';
 import { normalizeAppearance } from './appearance';
 import { STAFF_USERS } from './staff';
 import { DEFAULT_UNITS } from './units';
@@ -109,7 +109,7 @@ export const createSeed = (now: Date = new Date()): AppState => {
   };
 
   return {
-    version: 6,
+    version: 6, accessVersion: ACCESS_VERSION,
     tasks,
     reports: [...createSeedReports(now), lastReport],
     messages: createSeedMessages(now),

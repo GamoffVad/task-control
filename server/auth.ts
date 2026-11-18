@@ -29,7 +29,7 @@ export const verifyToken = (token: string | undefined, secret: string, now: Date
   try {
     const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
     if (typeof data.exp !== 'number' || data.exp < now.getTime()) return null;
-    if (typeof data.employeeId !== 'number' || !['administrator', 'manager', 'executor'].includes(data.role)) return null;
+    if (typeof data.employeeId !== 'number' || typeof data.role !== 'string' || data.role.length > 32) return null;
     return { email: String(data.email), employeeId: data.employeeId, role: data.role };
   } catch {
     return null;

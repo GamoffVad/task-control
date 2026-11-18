@@ -1,3 +1,4 @@
+import { holidayFor, type Holiday } from './holidays';
 // Выгрузка «Тетриса» в Excel: книга из нескольких листов — график месяца, события,
 // пересечения со сроками задач и остатки. Цвет заливки берётся из справочника «Виды отсутствий»,
 // поэтому совпадает с цветом полосы на графике.
@@ -36,6 +37,7 @@ export type TetrisExportInput = {
   absences: Absence[];
   tasks: Task[];
   dictionaries: DictionaryEntry[];
+  holidays?: Holiday[];
   /** Виды отсутствий с названиями — как в приложении. */
   types: { key: AbsenceType; label: string; full: string }[];
   /** Остаток отпуска и отгулов сотрудника; null — не показывать. */
@@ -90,7 +92,7 @@ const chartSheet = (input: TetrisExportInput): Sheet => {
     cells: [
       { value: 'Сотрудник', style: { bold: true, fill: HEAD, border: true } },
       { value: 'Отпуск / отгулы', style: { bold: true, fill: HEAD, border: true, center: true, wrap: true } },
-      ...days.map((d) => ({ value: d.getDate(), style: { bold: true, fill: [0, 6].includes(d.getDay()) ? WEEKEND : HEAD, border: true, center: true } })),
+      ...days.map((d) => ({ value: d.getDate(), style: { bold: true, fill: [0, 6].includes(d.getDay()) || holidayFor(d, input.holidays) ? WEEKEND : HEAD, color: holidayFor(d, input.holidays) ? DANGER : INK, border: true, center: true } })),
     ],
   });
 
@@ -115,7 +117,7 @@ const chartSheet = (input: TetrisExportInput): Sheet => {
           border: true,
           center: true,
           // Согласованное — насыщенный тон, заявка — светлее: как штриховка на графике.
-          fill: color ? lighten(color, approved(absence!) ? 0.55 : 0.25) : [0, 6].includes(day.getDay()) ? WEEKEND : undefined,
+          fill: color ? lighten(color, approved(absence!) ? 0.55 : 0.25) : ([0, 6].includes(day.getDay()) || holidayFor(day, input.holidays)) ? WEEKEND : undefined,
           color: clash ? DANGER : INK,
           bold: !!text,
         },

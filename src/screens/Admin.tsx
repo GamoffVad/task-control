@@ -24,9 +24,10 @@ import { unitOf } from '../lib/data';
 import { dutyDictionaryInUse, systemEvent } from '../lib/eventTypes';
 import { dictionaryColorName, hasDictionaryColor } from '../lib/eventPresentation';
 import { entitlementFor, validDayoffAccrued } from '../lib/absences';
+import { validHoliday } from '../lib/holidays';
 import { annualVacationCode, previousVacationCode, annualVacationDays, normalizeVacationSettings, validVacationDays, vacationPeriodLabel, vacationTypeCode, vacationYear } from '../lib/vacations';
 
-type Tab = 'users' | 'units' | 'roles' | 'authentication' | 'database' | 'scoring' | 'appearance' | 'dictionaries' | 'planRows' | 'templates' | 'vacations' | 'periods';
+type Tab = 'productionCalendar' | 'users' | 'units' | 'roles' | 'authentication' | 'database' | 'scoring' | 'appearance' | 'dictionaries' | 'planRows' | 'templates' | 'vacations' | 'periods';
 const ALL_TABS: { value: Tab; label: string; permission: Permission }[] = [
   { value: 'users', label: 'Пользователи', permission: 'users.manage' },
   { value: 'units', label: 'Подразделения', permission: 'units.manage' },
@@ -35,16 +36,12 @@ const ALL_TABS: { value: Tab; label: string; permission: Permission }[] = [
   { value: 'database', label: 'База данных', permission: 'database.manage' },
   { value: 'scoring', label: 'Оценка', permission: 'scoring.manage' },
   { value: 'periods', label: 'Периоды', permission: 'periods.manage' },
+  { value: 'productionCalendar', label: 'Производственный календарь', permission: 'periods.manage' },
   { value: 'vacations', label: 'Отпуска', permission: 'entitlements.manage' },
   { value: 'appearance', label: 'Редактирование UI', permission: 'appearance.manage' },
   { value: 'dictionaries', label: 'Словари', permission: 'dictionaries.manage' },
   { value: 'planRows', label: 'Разделы планирования', permission: 'planRows.manage' },
   { value: 'templates', label: 'Шаблоны документов', permission: 'templates.manage' },
-];
-const ROLE_OPTIONS: { value: Role; label: string }[] = [
-  { value: 'administrator', label: 'Администратор' },
-  { value: 'manager', label: 'Руководитель' },
-  { value: 'executor', label: 'Исполнитель' },
 ];
 const REQUIRED_ADMIN_PERMISSIONS: Permission[] = ['admin.access', 'users.manage', 'roles.manage'];
 const canAdminister = (role: Role, roles: ReturnType<typeof useStore>['state']['roles']) => REQUIRED_ADMIN_PERMISSIONS.every((permission) => permissionsFor(role, roles).includes(permission));
@@ -62,7 +59,7 @@ type TabProps = { state: ReturnType<typeof useStore>['state']; dispatch: ReturnT
 
 export const Admin = () => {
   const { state, dispatch } = useStore({ includeHidden: true });
-  const tabs = ALL_TABS.filter((item) => hasPermission(state.user, item.permission));
+  const tabs = ALL_TABS.filter((item) => hasPermission(state.user, item.permission) || item.value === 'users' && hasPermission(state.user, 'users.entitlements'));
   const [tab, setTab] = useState<Tab>(() => tabs[0]?.value ?? 'users');
   const activeTab = tabs.some((item) => item.value === tab) ? tab : tabs[0]?.value;
   return (
@@ -71,7 +68,7 @@ export const Admin = () => {
         <PageHeader
           title="Администрирование"
           subtitle={
-            tabs.length > 1
+            (tabs.length > 1 || activeTab !== 'appearance')
               ? 'Пользователи и подразделения, доступ, вход через Windows, правила оценки, разделы планирования, справочники и шаблоны документов.'
               : 'Оформление интерфейса: цвета, шрифты и размеры текста. Настройки личные — действуют только у вас.'
           }
@@ -85,6 +82,7 @@ export const Admin = () => {
       {activeTab === 'database' && <DatabaseSettings />}
       {activeTab === 'scoring' && <ScoringTab state={state} dispatch={dispatch} />}
       {activeTab === 'periods' && <PeriodsTab state={state} dispatch={dispatch} />}
+      {activeTab === 'productionCalendar' && <ProductionCalendar state={state} dispatch={dispatch} />}
       {activeTab === 'vacations' && <VacationsTab state={state} dispatch={dispatch} />}
       {activeTab === 'appearance' && <AppearanceTab state={state} dispatch={dispatch} />}
       {activeTab === 'dictionaries' && <DictionariesTab state={state} dispatch={dispatch} />}
@@ -104,17 +102,15 @@ const UsersTab = ({ state, dispatch }: TabProps) => {
     if (!editing) return;
     dispatch({
       type: 'saveManagedUser', employeeId: editing.employeeId, role: draft.role, active: draft.active, hidden: draft.hidden,
-      annualVacationDays: Number(draft.annualVacationDays),
-      ...(draft.vacationTypeDays ? { vacationTypeDays: draft.vacationTypeDays } : {}),
-      ...(hasPermission(state.user, 'entitlements.manage') && draft.dayoffAccrued !== undefined ? { dayoffAccrued: Number(draft.dayoffAccrued) } : {}),
-      windowsLogin: draft.windowsLogin, unitId: draft.unitId, fullName: draft.fullName, position: draft.position, rank: draft.rank, email: draft.email,
+      ...(hasPermission(state.user, 'users.entitlements') ? { annualVacationDays: Number(draft.annualVacationDays), ...(draft.vacationTypeDays ? { vacationTypeDays: draft.vacationTypeDays } : {}), ...(draft.dayoffAccrued !== undefined ? { dayoffAccrued: Number(draft.dayoffAccrued) } : {}) } : {}),
+      ...(hasPermission(state.user, 'users.manage') ? { windowsLogin: draft.windowsLogin, unitId: draft.unitId, fullName: draft.fullName, position: draft.position, rank: draft.rank, email: draft.email } : {}),
     });
     setEditing(null);
   };
   return <div className="admin-section">
     <div className="card-head admin-content-head">
       <div><h2>Пользователи</h2><p className="subtitle">Данные сотрудника — ФИО, должность, почта, Windows-логин, подразделение и роль — правятся здесь. Отключённый пользователь не сможет войти.</p></div>
-      <div className="admin-users-actions"><span className="faint num">{state.users.filter((item) => item.active).length} активн.</span><Button variant="primary" icon={<Icon.Plus size={15} />} onClick={() => setAdding(true)}>Добавить пользователя</Button></div>
+      <div className="admin-users-actions"><span className="faint num">{state.users.filter((item) => item.active).length} активн.</span>{hasPermission(state.user, 'users.manage') && <Button variant="primary" icon={<Icon.Plus size={15} />} onClick={() => setAdding(true)}>Добавить пользователя</Button>}</div>
     </div>
     <div className="table-scroll admin-table-wrap">
       <table className="admin-table admin-users-table">
@@ -128,11 +124,11 @@ const UsersTab = ({ state, dispatch }: TabProps) => {
             <td>{(() => { const path = unitPath(state.units, unitOf(account)); const last = path.at(-1); return last ? <span data-tip={path.map((u) => u.name).join(' › ')}>{last.name}</span> : <span className="muted">не выбрано</span>; })()}</td>
             <td><span className="num muted">{account.email}</span></td>
             <td><span className="num">{account.windowsLogin}</span></td>
-            <td>{ROLE_OPTIONS.find((option) => option.value === account.role)?.label}</td>
+            <td>{state.roles.find((item) => item.role === account.role)?.name ?? account.role}</td>
             <td><span className={`admin-access-state${account.active ? ' active' : ''}`}>{protectedAccount ? 'Основной администратор' : account.active ? 'Активен' : 'Отключён'}</span></td>
             <td className="admin-icon-actions">
               <button type="button" className="admin-icon-action" onClick={() => setEditing(account)} aria-label={`Редактировать пользователя ${account.fullName}`} data-tip="Редактировать"><Icon.Edit size={15} /></button>
-              <button type="button" className="admin-icon-action danger" disabled={protectedAccount || currentAccount} onClick={() => setDeleting(account)} aria-label={`Удалить пользователя ${account.fullName}`} data-tip={currentAccount ? 'Нельзя удалить текущую учётную запись' : protectedAccount ? 'Нельзя удалить последнего администратора' : 'Удалить'}><Icon.Trash size={15} /></button>
+              <button type="button" className="admin-icon-action danger" disabled={!hasPermission(state.user, 'users.manage') || protectedAccount || currentAccount} onClick={() => setDeleting(account)} aria-label={`Удалить пользователя ${account.fullName}`} data-tip={currentAccount ? 'Нельзя удалить текущую учётную запись' : protectedAccount ? 'Нельзя удалить последнего администратора' : 'Удалить'}><Icon.Trash size={15} /></button>
             </td>
           </tr>;
         })}</tbody>
@@ -142,6 +138,27 @@ const UsersTab = ({ state, dispatch }: TabProps) => {
     {adding && <AddUserDialog users={state.users} units={state.units} directoryAvailable={directoryAvailable} onClose={() => setAdding(false)} onSave={(account) => { dispatch({ type: 'addManagedUser', account }); setAdding(false); }} />}
     {editing && <EditUserDialog account={editing} users={state.users} units={state.units} protectedAccount={editing.active && canAdminister(editing.role, state.roles) && state.users.filter((item) => item.active && canAdminister(item.role, state.roles)).length === 1} onClose={() => setEditing(null)} onSave={saveUser} />}
     {deleting && <DeleteUserDialog account={deleting} onClose={() => setDeleting(null)} onConfirm={() => { dispatch({ type: 'deleteManagedUser', employeeId: deleting.employeeId }); setDeleting(null); }} />}
+  </div>;
+};
+
+const ProductionCalendar = ({ state, dispatch }: TabProps) => {
+  const [editingDate, setEditingDate] = useState<string | null>(null);
+  const [date, setDate] = useState('');
+  const [description, setDescription] = useState('');
+  const [error, setError] = useState('');
+  const holidays = state.holidays ?? [];
+  return <div className="admin-section">
+    <div className="card-head admin-content-head"><div><h2>Производственный календарь</h2><p className="subtitle">Праздники задаются на конкретную дату. Даты выделяются в календаре и Тетрисе; описание видно в подсказке.</p></div></div>
+    <form className="field-row" onSubmit={(event) => { event.preventDefault(); const holiday = { date, description: description.trim() }; if (!validHoliday(holiday)) { setError('Укажите существующую дату и описание праздника.'); return; } dispatch({ type: 'saveHoliday', holiday }); setDate(''); setDescription(''); setEditingDate(null); setError(''); }}>
+      <label className="field"><span className="caps">Дата</span><DateField value={date} onChange={setDate} disabled={!!editingDate} placeholder="дд.мм.гггг" /></label>
+      <label className="field"><span className="caps">Описание</span><TextInput value={description} maxLength={200} onChange={(event) => setDescription(event.target.value)} placeholder="Название праздника" /></label>
+      <div className="field"><span className="caps">&nbsp;</span><Button type="submit" variant="primary" icon={<Icon.Plus size={15} />}>{editingDate ? 'Сохранить описание' : 'Добавить или обновить'}</Button>{editingDate && <Button onClick={() => { setDate(''); setDescription(''); setEditingDate(null); }}>Отмена</Button>}</div>
+    </form>
+    {error && <p className="field-error" role="alert">{error}</p>}
+    <div className="table-scroll admin-table-wrap"><table className="admin-table"><caption className="sr-only">Праздничные дни</caption><thead><tr><th>Дата</th><th>Описание</th><th>Действие</th></tr></thead><tbody>
+      {holidays.map((holiday) => <tr key={holiday.date}><td>{fmtDate(fromDateKey(holiday.date))}</td><td>{holiday.description}</td><td><button type="button" className="admin-icon-action" aria-label={`Изменить праздник ${holiday.description}`} onClick={() => { setDate(holiday.date); setDescription(holiday.description); setEditingDate(holiday.date); }}><Icon.Edit size={15} /></button> <button type="button" className="admin-icon-action danger" aria-label={`Удалить праздник ${holiday.description}`} onClick={() => dispatch({ type: 'deleteHoliday', date: holiday.date })}><Icon.Trash size={15} /></button></td></tr>)}
+      {!holidays.length && <tr><td colSpan={3} className="admin-empty">Праздничные дни пока не добавлены.</td></tr>}
+    </tbody></table></div>
   </div>;
 };
 
@@ -212,7 +229,7 @@ const checkPerson = (draft: PersonDraft, users: ManagedUser[], employeeId: numbe
 };
 
 /** Общие поля сотрудника. Все доступны для правки независимо от способа входа и настройки Active Directory. */
-const PersonFields = ({ draft, set, units, disabledRole, nameSlot, dayoffSlot, vacationSlot }: { draft: PersonDraft; set: <K extends keyof PersonDraft>(key: K, value: PersonDraft[K]) => void; units: Unit[]; disabledRole?: boolean; nameSlot?: ReactNode; dayoffSlot?: ReactNode; vacationSlot?: ReactNode }) => {
+const PersonFields = ({ draft, set, units, disabledRole, disabledAccount, disabledVacation, nameSlot, dayoffSlot, vacationSlot }: { draft: PersonDraft; set: <K extends keyof PersonDraft>(key: K, value: PersonDraft[K]) => void; units: Unit[]; disabledRole?: boolean; disabledAccount?: boolean; disabledVacation?: boolean; nameSlot?: ReactNode; dayoffSlot?: ReactNode; vacationSlot?: ReactNode }) => {
   const { state } = useStore();
   const options = (kind: 'position' | 'rank', current: string) => {
     const values = state.dictionaries.filter((d) => d.dictionary === kind).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.title.localeCompare(b.title, 'ru'));
@@ -221,34 +238,29 @@ const PersonFields = ({ draft, set, units, disabledRole, nameSlot, dayoffSlot, v
   return (
   <>
     {vacationSlot && <h3 className="employee-form-heading">Сотрудник</h3>}
+    <div className="person-fields-grid">
     {nameSlot ?? (
       <label className="field"><span className="caps">ФИО</span>
-        <TextInput value={draft.fullName} onChange={(e) => set('fullName', e.target.value)} placeholder="Иванов Алексей Борисович" maxLength={200} />
+        <TextInput disabled={disabledAccount} value={draft.fullName} onChange={(e) => set('fullName', e.target.value)} placeholder="Иванов Алексей Борисович" maxLength={200} />
       </label>
     )}
-    <div className="field-row">
-      <div className="field"><span className="caps">Должность</span><Select<string> variant="light" label="Должность" value={draft.position} options={options('position', draft.position)} onChange={(v) => set('position', v)} /></div>
-      <div className="field"><span className="caps">Звание</span><Select<string> variant="light" label="Звание" value={draft.rank} options={options('rank', draft.rank)} onChange={(v) => set('rank', v)} /></div>
+      <div className="field"><span className="caps">Должность</span><Select<string> variant="light" label="Должность" disabled={disabledAccount} value={draft.position} options={options('position', draft.position)} onChange={(v) => set('position', v)} /></div>
+      <div className="field"><span className="caps">Звание</span><Select<string> variant="light" label="Звание" disabled={disabledAccount} value={draft.rank} options={options('rank', draft.rank)} onChange={(v) => set('rank', v)} /></div>
     </div>
-    {vacationSlot && <h3 className="employee-form-heading">Учётная запись</h3>}
-    <div className="field-row">
-      <label className="field"><span className="caps">Электронная почта</span>
-        <TextInput value={draft.email} onChange={(e) => set('email', e.target.value)} placeholder="ivanov@example.com" maxLength={200} />
-      </label>
-    </div>
-    <div className="field-row">
+    <div className="person-fields-grid">
       <label className="field"><span className="caps">Windows-логин</span>
-        <TextInput value={draft.windowsLogin} onChange={(e) => set('windowsLogin', e.target.value)} placeholder="ivanov" mono maxLength={128} />
+        <TextInput disabled={disabledAccount} value={draft.windowsLogin} onChange={(e) => set('windowsLogin', e.target.value)} placeholder="ivanov" mono maxLength={128} />
       </label>
+      <label className="field"><span className="caps">Электронная почта</span><TextInput disabled={disabledAccount} value={draft.email} onChange={(e) => set('email', e.target.value)} placeholder="ivanov@example.com" maxLength={200} /></label>
       <div className="field"><span className="caps">Подразделение</span>
-        <Select<string> variant="light" label="Подразделение сотрудника" value={draft.unitId} options={unitOptions(units)} onChange={(v) => set('unitId', v)} />
+        <Select<string> variant="light" label="Подразделение сотрудника" disabled={disabledAccount} value={draft.unitId} options={unitOptions(units)} onChange={(v) => set('unitId', v)} />
       </div>
     </div>
     <div className="field"><span className="caps">Роль</span>
-      <Select<Role> value={draft.role} options={ROLE_OPTIONS} disabled={disabledRole} label="Роль сотрудника" onChange={(v) => set('role', v)} />
+      <Select<Role> value={draft.role} options={state.roles.map((r) => ({ value: r.role, label: r.name }))} disabled={disabledRole || disabledAccount} label="Роль сотрудника" onChange={(v) => set('role', v)} />
     </div>
     {vacationSlot ?? <label className="field"><span className="caps">Дней отпуска в год</span>
-      <TextInput inputMode="numeric" maxLength={3} mono value={draft.annualVacationDays} onChange={(e) => set('annualVacationDays', e.target.value)} />
+      <TextInput inputMode="numeric" maxLength={3} mono disabled={disabledVacation} value={draft.annualVacationDays} onChange={(e) => set('annualVacationDays', e.target.value)} />
       <span className="field-hint">Индивидуальная ежегодная норма без дней на дорогу. Дни на дорогу указываются при оформлении каждого отпуска.</span>
     </label>}
     {dayoffSlot}
@@ -259,7 +271,8 @@ const PersonFields = ({ draft, set, units, disabledRole, nameSlot, dayoffSlot, v
 const EditUserDialog = ({ account, users, units, protectedAccount, onClose, onSave }: { account: ManagedUser; users: ManagedUser[]; units: Unit[]; protectedAccount: boolean; onClose: () => void; onSave: (draft: PersonDraft) => void }) => {
   const { state } = useStore({ includeHidden: true });
   const dayoffYear = new Date().getFullYear();
-  const canEditDayoffs = hasPermission(state.user, 'entitlements.manage');
+  const canEditDayoffs = hasPermission(state.user, 'users.entitlements');
+  const canEditAccount = hasPermission(state.user, 'users.manage');
   const [initialDayoffs] = useState(() => entitlementFor(state.entitlements, account.employeeId, dayoffYear, users).dayoffAccrued);
   const periodYear = vacationYear(new Date(), state.vacationSettings);
   const entitlement = entitlementFor(state.entitlements, account.employeeId, periodYear, users);
@@ -287,23 +300,24 @@ const EditUserDialog = ({ account, users, units, protectedAccount, onClose, onSa
   const submit = () => {
     const annual = vacations.find((v) => v.code === annualCode)?.days ?? '';
     const problem = checkPerson({ ...draft, annualVacationDays: annual }, users, account.employeeId);
-    if (problem) return setError(problem);
-    if (vacations.some((v) => !v.days.trim() || !validVacationDays(Number(v.days)))) return setError('Для каждого отпуска укажите целое количество дней от 0 до 366.');
-    if (new Set(vacations.map((v) => v.code)).size !== vacations.length) return setError('Каждый тип отпуска можно указать только один раз.');
+    if (canEditAccount && problem) return setError(problem);
+    if (canEditDayoffs && (!draft.dayoffAccrued?.trim() || !validDayoffAccrued(Number(draft.dayoffAccrued)))) return setError('Укажите начисленные вручную отгулы: целое число от 0 до 3000 дней.');
+    if (canEditDayoffs && vacations.some((v) => !v.days.trim() || !validVacationDays(Number(v.days)))) return setError('Для каждого отпуска укажите целое количество дней от 0 до 366.');
+    if (canEditDayoffs && new Set(vacations.map((v) => v.code)).size !== vacations.length) return setError('Каждый тип отпуска можно указать только один раз.');
     onSave({ ...draft, annualVacationDays: annual, vacationTypeDays: Object.fromEntries(vacations.map((v) => [v.code, Number(v.days)])), dayoffAccrued: canEditDayoffs && Number(draft.dayoffAccrued) !== initialDayoffs ? draft.dayoffAccrued : undefined, fullName: draft.fullName.trim(), position: draft.position.trim(), email: draft.email.trim(), windowsLogin: draft.windowsLogin.trim() });
   };
   return <Dialog title="Редактировать сотрудника" context={account.fullName} onClose={onClose} wide>
     <form className="form-stack edit-user-form" onSubmit={(event) => { event.preventDefault(); submit(); }} noValidate>
-      <PersonFields draft={draft} set={set} units={units} disabledRole={protectedAccount} vacationSlot={
+      <PersonFields draft={draft} set={set} units={units} disabledRole={protectedAccount} disabledAccount={!canEditAccount} vacationSlot={
         <section className="employee-vacations" aria-label="Нормы отпусков">
           <h3 className="employee-form-heading">Отпуска</h3>
           <p className="field-hint">Нормы на период {vacationPeriodLabel(periodYear, state.vacationSettings)}. Перенесённые дни укажите вручную.</p>
           {vacations.map((v, index) => <div className="employee-vacation-row" key={index}>
-            <div className="field"><span className="caps">Тип отпуска</span><Select<string> variant="light" label={`Тип отпуска ${index + 1}`} value={v.code} disabled={v.code === annualCode} options={vacationOptions.filter((item) => item.code === v.code || !vacations.some((row) => row.code === item.code)).map((item) => ({ value: item.code, label: item.title }))} onChange={(code) => setVacations((rows) => rows.map((row, i) => i === index ? { ...row, code } : row))} /></div>
-            <label className="field"><span className="caps">Дней</span><TextInput inputMode="numeric" maxLength={3} mono aria-label={v.code === annualCode ? 'Дней отпуска в год' : `Дней отпуска ${index + 1}`} value={v.days} onChange={(e) => setVacations((rows) => rows.map((row, i) => i === index ? { ...row, days: e.target.value } : row))} /></label>
-            {v.code !== annualCode && <button type="button" className="admin-icon-action danger" aria-label={`Убрать тип отпуска ${index + 1}`} onClick={() => setVacations((rows) => rows.filter((_, i) => i !== index))}><Icon.Trash size={15} /></button>}
+            <div className="field"><span className="caps">Тип отпуска</span><Select<string> variant="light" label={`Тип отпуска ${index + 1}`} value={v.code} disabled={!canEditDayoffs || v.code === annualCode} options={vacationOptions.filter((item) => item.code === v.code || !vacations.some((row) => row.code === item.code)).map((item) => ({ value: item.code, label: item.title }))} onChange={(code) => setVacations((rows) => rows.map((row, i) => i === index ? { ...row, code } : row))} /></div>
+            <label className="field"><span className="caps">Дней</span><TextInput inputMode="numeric" maxLength={3} mono disabled={!canEditDayoffs} aria-label={v.code === annualCode ? 'Дней отпуска в год' : `Дней отпуска ${index + 1}`} value={v.days} onChange={(e) => setVacations((rows) => rows.map((row, i) => i === index ? { ...row, days: e.target.value } : row))} /></label>
+            {canEditDayoffs && v.code !== annualCode && <button type="button" className="admin-icon-action danger" aria-label={`Убрать тип отпуска ${index + 1}`} onClick={() => setVacations((rows) => rows.filter((_, i) => i !== index))}><Icon.Trash size={15} /></button>}
           </div>)}
-          <button type="button" className="text-action" disabled={!vacationOptions.some((item) => !vacations.some((v) => v.code === item.code))} onClick={() => { const next = vacationOptions.find((item) => !vacations.some((v) => v.code === item.code)); if (next) setVacations((rows) => [...rows, { code: next.code, days: '0' }]); }}><Icon.Plus size={12} /> Добавить тип отпуска</button>
+          <button type="button" className="text-action" disabled={!canEditDayoffs || !vacationOptions.some((item) => !vacations.some((v) => v.code === item.code))} onClick={() => { const next = vacationOptions.find((item) => !vacations.some((v) => v.code === item.code)); if (next) setVacations((rows) => [...rows, { code: next.code, days: '0' }]); }}><Icon.Plus size={12} /> Добавить тип отпуска</button>
         </section>
       } dayoffSlot={
         <label className="field employee-dayoffs"><span className="caps">Отгулы, начисленные вручную</span>
@@ -312,8 +326,9 @@ const EditUserDialog = ({ account, users, units, protectedAccount, onClose, onSa
         </label>
       } />
       <h3 className="employee-form-heading">Доступ и отображение</h3>
-      <Checkbox checked={draft.active} disabled={protectedAccount} onChange={(v) => set('active', v)}>{protectedAccount ? 'Основной администратор должен оставаться активным' : 'Разрешить вход в приложение'}</Checkbox>
-      <Checkbox checked={draft.hidden} onChange={(v) => set('hidden', v)}>Скрыть сотрудника во всех рабочих разделах</Checkbox>
+      <div className="employee-access-row"><Checkbox checked={draft.active} disabled={protectedAccount || !canEditAccount} onChange={(v) => set('active', v)}>{protectedAccount ? 'Основной администратор должен оставаться активным' : 'Разрешить вход в приложение'}</Checkbox>
+      <Checkbox checked={draft.hidden} disabled={!canEditAccount} onChange={(v) => set('hidden', v)}>Скрыть сотрудника во всех рабочих разделах</Checkbox></div>
+      {draft.hidden && <p className="field-hint">Сообщения сотрудника остаются видимыми в общей переписке.</p>}
       <p className="field-hint">Сотрудник не отображается в списках, планировании, календаре, графике событий и показателях. Вход и назначенные права сохраняются. Учётная запись остаётся доступной здесь.</p>
       <p className="field-hint">ФИО, должность и почта хранятся в приложении и правятся здесь независимо от способа входа и настройки Active Directory.</p>
       {error && <p className="field-error" role="alert">{error}</p>}
@@ -330,6 +345,8 @@ const DeleteUserDialog = ({ account, onClose, onConfirm }: { account: ManagedUse
 </Dialog>;
 
 const AddUserDialog = ({ users, units, directoryAvailable, onClose, onSave }: { users: ManagedUser[]; units: Unit[]; directoryAvailable: boolean; onClose: () => void; onSave: (account: ManagedUser) => void }) => {
+  const { state } = useStore();
+  const canEditLeave = hasPermission(state.user, 'users.entitlements');
   const [draft, setDraft] = useState<PersonDraft>({ fullName: '', position: '', rank: '', email: '', windowsLogin: '', unitId: '', role: 'executor', active: true, hidden: false, annualVacationDays: '28' });
   const [error, setError] = useState('');
   const set = <K extends keyof PersonDraft>(key: K, value: PersonDraft[K]) => {
@@ -354,7 +371,7 @@ const AddUserDialog = ({ users, units, directoryAvailable, onClose, onSave }: { 
       email: draft.email.trim(),
       role: draft.role,
       active: draft.active,
-      annualVacationDays: Number(draft.annualVacationDays),
+      ...(canEditLeave ? { annualVacationDays: Number(draft.annualVacationDays) } : {}),
       ...(draft.unitId ? { unitId: draft.unitId } : {}),
     });
   };
@@ -374,7 +391,7 @@ const AddUserDialog = ({ users, units, directoryAvailable, onClose, onSave }: { 
   );
   return <Dialog title="Добавить сотрудника" context={directoryAvailable ? 'Поиск в Active Directory или ввод вручную' : 'Ввод данных вручную'} onClose={onClose} wide>
     <form className="form-stack add-user-form" onSubmit={(event) => { event.preventDefault(); submit(); }} noValidate>
-      <PersonFields draft={draft} set={set} units={units} nameSlot={nameSlot} />
+      <PersonFields draft={draft} set={set} units={units} disabledVacation={!canEditLeave} nameSlot={nameSlot} />
       <Checkbox checked={draft.active} onChange={(v) => set('active', v)}>Разрешить вход в приложение</Checkbox>
       {error && <p className="field-error" role="alert">{error}</p>}
       <div className="form-actions"><Button type="submit" variant="primary" icon={<Icon.Plus size={15} />}>Добавить</Button><Button onClick={onClose}>Отмена</Button></div>
@@ -447,6 +464,11 @@ const AuthenticationTab = () => {
 
 const RolesTab = ({ state, dispatch }: TabProps) => {
   const [role, setRole] = useState<Role>('administrator');
+  const [roleDialog, setRoleDialog] = useState<'new' | 'edit' | null>(null);
+  const [roleCode, setRoleCode] = useState('');
+  const [roleName, setRoleName] = useState('');
+  const [roleError, setRoleError] = useState('');
+  const [deletingRole, setDeletingRole] = useState(false);
   const definition = state.roles.find((item) => item.role === role)!;
   const groups = [...new Set(PERMISSIONS.map((item) => item.group))];
   const required: Permission[] = ['admin.access', 'users.manage', 'roles.manage'];
@@ -456,14 +478,16 @@ const RolesTab = ({ state, dispatch }: TabProps) => {
     dispatch({ type: 'saveRolePermissions', role, permissions });
   };
   return <div className="admin-grid admin-role-layout">
-    <aside className="admin-directory" aria-label="Роли"><p className="caps">Роли</p><div className="admin-directory-list" role="list">
+    <aside className="admin-directory" aria-label="Роли"><p className="caps">Роли</p><Button icon={<Icon.Plus size={15} />} onClick={() => { setRoleCode(''); setRoleName(''); setRoleError(''); setRoleDialog('new'); }}>Добавить роль</Button><div className="admin-directory-list" role="list">
       {state.roles.map((item) => <button key={item.role} type="button" role="listitem" aria-pressed={item.role === role} onClick={() => setRole(item.role)}><span>{item.name}</span><small className="num">{item.permissions.length}</small></button>)}
     </div></aside>
     <div className="admin-content">
-      <div className="card-head admin-content-head"><div><h2>{definition.name}</h2><p className="subtitle">Разрешения применяются ко всем пользователям с этой ролью.</p></div><span className="role-code num">{role}</span></div>
+      <div className="card-head admin-content-head"><div><h2>{definition.name}</h2><p className="subtitle">Разрешения применяются ко всем пользователям с этой ролью.</p></div><div><Button onClick={() => { setRoleCode(role); setRoleName(definition.name); setRoleError(''); setRoleDialog('edit'); }}>Изменить</Button> <Button disabled={['administrator', 'manager', 'executor'].includes(role) || state.users.some((u) => u.role === role)} onClick={() => setDeletingRole(true)}>Удалить</Button> <span className="role-code num">{role}</span></div></div>
       <div className="permission-groups">{groups.map((group) => <section key={group} className="permission-group" aria-labelledby={`permission-${group}`}>
         <h3 id={`permission-${group}`}>{group}</h3><div className="permission-list">{PERMISSIONS.filter((item) => item.group === group).map((item) => <Checkbox key={item.key} checked={definition.permissions.includes(item.key)} disabled={!hasOtherAdministrator && required.includes(item.key) && state.users.some((user) => user.active && user.role === role)} onChange={(checked) => toggle(item.key, checked)}>{item.label}</Checkbox>)}</div>
       </section>)}</div>
+      {deletingRole && <Dialog title="Удалить роль?" context={definition.name} onClose={() => setDeletingRole(false)}><div className="form-actions"><Button variant="danger" onClick={() => { dispatch({ type: 'deleteRole', role }); setRole('administrator'); setDeletingRole(false); }}>Удалить роль</Button><Button onClick={() => setDeletingRole(false)}>Отмена</Button></div></Dialog>}
+      {roleDialog && <Dialog title={roleDialog === 'new' ? 'Добавить роль' : 'Изменить роль'} onClose={() => setRoleDialog(null)}><form className="form-stack" onSubmit={(e) => { e.preventDefault(); if (!/^[a-z][a-z0-9_-]{0,31}$/.test(roleCode) || !roleName.trim() || state.roles.some((r) => (roleDialog === 'new' || r.role !== roleCode) && (r.role === roleCode || r.name.toLowerCase() === roleName.trim().toLowerCase()))) { setRoleError('Введите уникальное название и код латинскими буквами, цифрами или дефисом.'); return; } dispatch({ type: 'saveRole', role: roleCode, name: roleName.trim() }); setRole(roleCode); setRoleDialog(null); }}><label className="field"><span className="caps">Код роли</span><TextInput value={roleCode} readOnly={roleDialog === 'edit'} onChange={(e) => setRoleCode(e.target.value)} /></label><label className="field"><span className="caps">Название</span><TextInput value={roleName} maxLength={100} onChange={(e) => setRoleName(e.target.value)} /></label>{roleError && <p role="alert" className="field-error">{roleError}</p>}<Button type="submit" variant="primary">Сохранить</Button></form></Dialog>}
       <p className="help-note">Изменения сохраняются сразу. У активного пользователя должны оставаться разрешения на вход в администрирование, управление пользователями и ролями.</p>
     </div>
   </div>;

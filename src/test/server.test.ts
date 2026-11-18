@@ -61,6 +61,45 @@ const withApi = async (options: Partial<Parameters<typeof createApi>[0]> & { rep
 };
 
 describe('API', () => {
+  it('сохраняет и удаляет праздничные дни с проверкой даты и прав', async () => {
+    const admin = await login('user');
+    const send = (token: string, action: unknown) => call('/api/action', { method: 'POST', token, body: { action } });
+    const action = { type: 'saveHoliday', holiday: { date: '2026-11-04', description: 'Праздничный день' } };
+    expect((await send(admin, action)).status).toBe(200);
+    expect((await repo.read())!.holidays).toEqual([action.holiday]);
+    expect((await send(admin, { ...action, holiday: { ...action.holiday, date: '2026-02-30' } })).status).toBe(400);
+    expect((await send(await login('sidorov'), action)).status).toBe(403);
+    expect((await send(admin, { type: 'deleteHoliday', date: action.holiday.date })).status).toBe(200);
+    expect((await repo.read())!.holidays).toEqual([]);
+  });
+  it('сервер независимо проверяет настройки учетной записи и нормы', async () => {
+    const original = (await repo.read())!;
+    const run = async (permissions: import('../lib/types').Permission[], action: unknown) => {
+      repo = createMemoryRepo(undefined, { ...original, roles: original.roles.map((r) => r.role === 'manager' ? { ...r, permissions } : r) });
+      const token = await login('petrov');
+      return call('/api/action', { method: 'POST', token, body: { action } });
+    };
+    const base = { type: 'saveManagedUser', employeeId: 3, role: 'executor', active: true };
+    expect((await run(['users.manage'], { ...base, annualVacationDays: 30 })).status).toBe(403);
+    expect((await run(['users.manage'], { ...base, fullName: 'Сидоров Иван' })).status).toBe(200);
+    expect((await run(['users.entitlements'], { ...base, fullName: 'Сидоров Иван' })).status).toBe(403);
+    expect((await run(['users.entitlements'], { ...base, annualVacationDays: 30, dayoffAccrued: 4 })).status).toBe(200);
+  });
+  it('создаёт, назначает, переименовывает и удаляет пользовательскую роль', async () => {
+    const token = await login('user@example.com');
+    const send = (action: unknown) => call('/api/action', { method: 'POST', token, body: { action } });
+    expect((await send({ type: 'saveRole', role: 'reviewer', name: 'Проверяющий' })).status).toBe(200);
+    expect((await send({ type: 'saveRolePermissions', role: 'reviewer', permissions: ['tasks.execute'] })).status).toBe(200);
+    expect((await send({ type: 'saveManagedUser', employeeId: 3, role: 'reviewer', active: true })).status).toBe(200);
+    expect((await login('sidorov'))).toBeTruthy();
+    expect((await send({ type: 'saveRole', role: 'reviewer', name: 'Эксперт' })).status).toBe(200);
+    expect((await repo.read())!.roles!.find((r) => r.role === 'reviewer')?.name).toBe('Эксперт');
+    await send({ type: 'deleteRole', role: 'reviewer' });
+    expect((await repo.read())!.roles!.some((r) => r.role === 'reviewer')).toBe(true);
+    await send({ type: 'saveManagedUser', employeeId: 3, role: 'executor', active: true });
+    expect((await send({ type: 'deleteRole', role: 'reviewer' })).status).toBe(200);
+    expect((await repo.read())!.roles!.some((r) => r.role === 'reviewer')).toBe(false);
+  });
   it('сохраняет нормы отпусков по типам и проверяет их', async () => {
     const token = await login('user@example.com');
     const action = { type: 'saveManagedUser', employeeId: 3, role: 'executor', active: true, vacationTypeDays: { annual: 28, 'previous-year': 5, veteran: 15 } };
@@ -201,13 +240,13 @@ describe('API', () => {
     for (const dayoffAccrued of [-1, 1.5, 3001, '5', null]) expect((await save({ ...action, dayoffAccrued })).status).toBe(400);
     expect((await save(action, await login('sidorov'))).status).toBe(403);
     const data = (await repo.read())!;
-    data.roles = data.roles.map((r) => r.role === 'administrator' ? { ...r, permissions: r.permissions.filter((p) => p !== 'entitlements.manage') } : r);
+    data.roles = data.roles.map((r) => r.role === 'administrator' ? { ...r, permissions: r.permissions.filter((p) => p !== 'users.entitlements') } : r);
     repo = createMemoryRepo(undefined, data);
     expect((await save(action)).status).toBe(403);
     expect((await repo.read())!.users.find((u) => u.employeeId === 3)?.annualVacationDays).toBe(42);
-    const { dayoffAccrued: _dayoffs, ...detailsOnly } = action;
-    expect((await save({ ...detailsOnly, annualVacationDays: 36 })).status).toBe(200);
-    expect((await repo.read())!.entitlements.find((e) => e.employeeId === 3 && e.year === 2026)).toMatchObject({ vacationDays: 36, dayoffAccrued: 0 });
+    const { dayoffAccrued: _dayoffs, annualVacationDays: _vacation, ...detailsOnly } = action;
+    expect((await save({ ...detailsOnly, fullName: 'Сидоров Иван' })).status).toBe(200);
+    expect((await repo.read())!.entitlements.find((e) => e.employeeId === 3 && e.year === 2026)).toMatchObject({ vacationDays: 42, dayoffAccrued: 0 });
   });
   it('сохраняет раздельные периоды, применяет их к отчёту и проверяет права и границы', async () => {
     const token = await login('user');

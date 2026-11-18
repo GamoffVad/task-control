@@ -5,7 +5,8 @@ export const PERMISSIONS: { key: Permission; label: string; group: string }[] = 
   { key: 'database.manage', label: 'База данных: настраивать подключение SQL Server', group: 'Администрирование' },
   // По разрешению на каждую вкладку администрирования, чтобы доступ настраивался точно.
   { key: 'admin.access', label: 'Открывать администрирование', group: 'Администрирование' },
-  { key: 'users.manage', label: 'Пользователи: вести и назначать роли', group: 'Администрирование' },
+  { key: 'users.manage', label: 'Пользователи: изменять настройки учетной записи', group: 'Администрирование' },
+  { key: 'users.entitlements', label: 'Пользователи: изменять значения отпусков и отгулов', group: 'Администрирование' },
   { key: 'units.manage', label: 'Подразделения: вести дерево', group: 'Администрирование' },
   { key: 'roles.manage', label: 'Роли и разрешения: настраивать', group: 'Администрирование' },
   { key: 'authentication.manage', label: 'Аутентификация: настраивать способ входа', group: 'Администрирование' },
@@ -24,7 +25,7 @@ export const PERMISSIONS: { key: Permission; label: string; group: string }[] = 
   { key: 'tasks.delete', label: 'Удалять задачи', group: 'Задачи' },
   { key: 'absences.manage', label: 'Вести отсутствия и согласовывать заявки', group: 'Отсутствия' },
   { key: 'absences.request', label: 'Подавать заявки на отсутствие', group: 'Отсутствия' },
-  { key: 'entitlements.manage', label: 'Изменять нормы отпусков и отгулов', group: 'Отсутствия' },
+  { key: 'entitlements.manage', label: 'Отпуска: настраивать начало отпускного периода', group: 'Отсутствия' },
   { key: 'data.reset', label: 'Восстанавливать демонстрационные данные', group: 'Система' },
 ];
 
@@ -35,7 +36,7 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
   {
     role: 'manager',
     name: 'Руководитель',
-    permissions: ['reports.view', 'tasks.plan', 'tasks.execute', 'tasks.score', 'tasks.delete', 'absences.manage', 'absences.request', 'entitlements.manage', 'appearance.manage'],
+    permissions: ['reports.view', 'tasks.plan', 'tasks.execute', 'tasks.score', 'tasks.delete', 'absences.manage', 'absences.request', 'entitlements.manage', 'users.entitlements', 'appearance.manage'],
   },
   { role: 'executor', name: 'Исполнитель', permissions: ['tasks.execute', 'absences.request', 'appearance.manage'] },
 ];
@@ -57,7 +58,10 @@ export const DEFAULT_AUTHENTICATION = { mode: 'form', allowEmergencyForm: true }
  * Версия набора прав. Права, добавленные после выпуска базы, дописываются один раз при обновлении:
  * иначе новый раздел администрирования остался бы недоступен.
  */
-export const ACCESS_VERSION = '10';
+export const ACCESS_VERSION = '11';
+/** Права на нормы в старых ролях сохраняются при переходе к отдельному разрешению. */
+export const migrateUserEntitlements = (roles: RoleDefinition[]) => roles.map((role) => (role.permissions.includes('users.manage') || role.permissions.includes('entitlements.manage')) && !role.permissions.includes('users.entitlements') ? { ...role, permissions: [...role.permissions, 'users.entitlements' as Permission] } : role);
+export const migrateAccess = (roles: RoleDefinition[], version?: string | null) => version === ACCESS_VERSION ? roles : migrateUserEntitlements(version === '10' ? roles : withAddedPermissions(roles));
 /** Дописываются администратору: доступ к этим вкладкам выдаётся осознанно. */
 const ADDED_ADMIN_PERMISSIONS: Permission[] = ['authentication.manage', 'database.manage', 'scoring.manage', 'units.manage', 'planRows.manage', 'templates.manage', 'tasks.viewAll', 'chat.moderate', 'periods.manage'];
 /** Дописываются всем ролям: оформление личное и по умолчанию доступно каждому. */
@@ -73,6 +77,7 @@ export const withAddedPermissions = (roles: RoleDefinition[]): RoleDefinition[] 
 /** Вкладки администрирования: доступ к каждой открывается своим разрешением. */
 export const ADMIN_TAB_PERMISSIONS: Permission[] = [
   'users.manage',
+  'users.entitlements',
   'units.manage',
   'roles.manage',
   'authentication.manage',
@@ -90,7 +95,7 @@ export const ADMIN_TAB_PERMISSIONS: Permission[] = [
 export const DEFAULT_SCORING: ScoringSettings = { excludedUnitIds: [], excludedEmployeeIds: [], averageBase: 'staff', byDirection: true };
 
 export const permissionsFor = (role: Role, roles: RoleDefinition[] = DEFAULT_ROLES): Permission[] =>
-  roles.find((item) => item.role === role)?.permissions ?? DEFAULT_ROLES.find((item) => item.role === role)!.permissions;
+  roles.find((item) => item.role === role)?.permissions ?? DEFAULT_ROLES.find((item) => item.role === role)?.permissions ?? [];
 
 export const sessionUser = (account: ManagedUser, roles: RoleDefinition[]): User => ({
   email: account.email,

@@ -1,7 +1,8 @@
 // Изменение данных приложения. Чистые функции без React: тот же код работает в браузере и на сервере,
 // поэтому права проверяются одинаково в обоих местах.
 import { employeeById, planRows, sortedPlanRows } from './data';
-import { ACCESS_VERSION, DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS, effectiveUser, hasPermission, PERMISSIONS, permissionsFor, withAddedPermissions } from './access';
+import { validHoliday } from './holidays';
+import { ACCESS_VERSION, DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS, effectiveUser, hasPermission, PERMISSIONS, permissionsFor, withAddedPermissions, migrateAccess } from './access';
 import { createSeed, DEFAULT_DICTIONARIES } from './seed';
 import { normalizeAppearance } from './appearance';
 import { buildReportEntries, clampScore, upsertReport, type TaskDraft } from './logic';
@@ -60,6 +61,8 @@ export type Action =
   | { type: 'saveEntitlement'; entitlement: Entitlement; dayoffYear?: number; now?: Date }
   | { type: 'saveVacationSettings'; settings: VacationSettings }
   | { type: 'savePeriodSettings'; settings: PeriodSettings }
+  | { type: 'saveHoliday'; holiday: import('./holidays').Holiday }
+  | { type: 'deleteHoliday'; date: string }
   | { type: 'saveDictionary'; draft: DictionaryDraft }
   | { type: 'deleteDictionary'; id: string }
   | { type: 'savePlanRow'; draft: PlanRowDraft }
@@ -72,6 +75,8 @@ export type Action =
   | { type: 'addManagedUser'; account: ManagedUser }
   | { type: 'deleteManagedUser'; employeeId: number }
   | { type: 'saveRolePermissions'; role: Role; permissions: Permission[] }
+  | { type: 'saveRole'; role: Role; name: string }
+  | { type: 'deleteRole'; role: Role }
   | { type: 'saveAuthentication'; mode: AuthenticationMode; allowEmergencyForm: boolean }
   | { type: 'saveScoring'; scoring: ScoringSettings }
   /** Обнуление показателей: удаляет отчёты (все либо недель, начавшихся раньше даты YYYY-MM-DD). Баллы пересчитываются из отчётов. */
@@ -101,6 +106,8 @@ export const PERSISTED: Action['type'][] = [
   'saveEntitlement',
   'saveVacationSettings',
   'savePeriodSettings',
+  'saveHoliday',
+  'deleteHoliday',
   'saveDictionary',
   'deleteDictionary',
   'savePlanRow',
@@ -113,6 +120,8 @@ export const PERSISTED: Action['type'][] = [
   'deleteTemplate',
   'deleteManagedUser',
   'saveRolePermissions',
+  'saveRole',
+  'deleteRole',
   'saveAuthentication',
   'saveScoring',
   'resetScores',
@@ -280,6 +289,13 @@ export const reducer = (state: AppState, action: Action): AppState => {
     }
     case 'saveVacationSettings':
       return hasPermission(state.user, 'entitlements.manage') && validVacationSettings(action.settings) ? { ...state, vacationSettings: { ...action.settings } } : state;
+    case 'saveHoliday': {
+      if (!hasPermission(state.user, 'periods.manage') || !validHoliday(action.holiday)) return state;
+      const holiday = { date: action.holiday.date, description: action.holiday.description.trim() };
+      return { ...state, holidays: [...(state.holidays ?? []).filter((h) => h.date !== holiday.date), holiday].sort((a, b) => a.date.localeCompare(b.date)) };
+    }
+    case 'deleteHoliday':
+      return hasPermission(state.user, 'periods.manage') && (state.holidays ?? []).some((h) => h.date === action.date) ? { ...state, holidays: (state.holidays ?? []).filter((h) => h.date !== action.date) } : state;
     case 'savePeriodSettings':
       return hasPermission(state.user, 'periods.manage') && validPeriodSettings(action.settings) ? { ...state, periodSettings: normalizePeriodSettings(action.settings) } : state;
     case 'deleteAbsence': {
@@ -295,7 +311,7 @@ export const reducer = (state: AppState, action: Action): AppState => {
       return { ...state, absences };
     }
     case 'saveEntitlement': {
-      if (!hasPermission(state.user, 'entitlements.manage')) return state;
+      if (!hasPermission(state.user, 'users.entitlements')) return state;
       const e = action.entitlement;
       const clean: Entitlement = {
         employeeId: e.employeeId,
@@ -394,12 +410,16 @@ export const reducer = (state: AppState, action: Action): AppState => {
       return { ...state, planRows: state.planRows.filter((row) => row.id !== action.id) };
     }
     case 'saveManagedUser': {
-      if (!hasPermission(state.user, 'users.manage')) return state;
+      const canAccount = hasPermission(state.user, 'users.manage'), canLeave = hasPermission(state.user, 'users.entitlements');
+      if (!canAccount && !canLeave) return state;
+      if (!state.roles.some((role) => role.role === action.role)) return state;
       const current = state.users.find((item) => item.employeeId === action.employeeId);
       if (!current) return state;
+      if (!canAccount && (action.role !== current.role || action.active !== current.active || action.hidden !== undefined && action.hidden !== (current.hidden ?? false) || action.fullName !== undefined && action.fullName !== current.fullName || action.position !== undefined && action.position !== current.position || action.rank !== undefined && action.rank !== (current.rank ?? '') || action.email !== undefined && action.email !== current.email || action.windowsLogin !== undefined && action.windowsLogin !== current.windowsLogin || action.unitId !== undefined && action.unitId !== (current.unitId ?? DEFAULT_UNIT_OF[current.employeeId] ?? ''))) return state;
+      if (!canLeave && (action.annualVacationDays !== undefined || action.vacationTypeDays !== undefined || action.dayoffAccrued !== undefined)) return state;
       if (action.annualVacationDays !== undefined && !validVacationDays(action.annualVacationDays)) return state;
       if (action.vacationTypeDays !== undefined && (Object.entries(action.vacationTypeDays).some(([code, days]) => !state.dictionaries.some((d) => d.dictionary === 'vacationType' && d.code === code) || !validVacationDays(days)) || !Object.hasOwn(action.vacationTypeDays, annualVacationCode(state.dictionaries)))) return state;
-      if (action.dayoffAccrued !== undefined && (!validDayoffAccrued(action.dayoffAccrued) || !hasPermission(state.user, 'entitlements.manage'))) return state;
+      if (action.dayoffAccrued !== undefined && !validDayoffAccrued(action.dayoffAccrued)) return state;
       const windowsLogin = (action.windowsLogin ?? current.windowsLogin).trim().slice(0, 128);
       if (!windowsLogin || state.users.some((item) => item.employeeId !== action.employeeId && item.windowsLogin.toLowerCase() === windowsLogin.toLowerCase())) return state;
       if (action.unitId !== undefined && action.unitId !== '' && !state.units.some((u) => u.id === action.unitId)) return state;
@@ -439,6 +459,8 @@ export const reducer = (state: AppState, action: Action): AppState => {
     case 'addManagedUser': {
       if (!hasPermission(state.user, 'users.manage')) return state;
       const account = action.account;
+      if (account.annualVacationDays !== undefined && !hasPermission(state.user, 'users.entitlements')) return state;
+      if (!state.roles.some((role) => role.role === account.role)) return state;
       if (account.annualVacationDays !== undefined && !validVacationDays(account.annualVacationDays)) return state;
       const login = account.windowsLogin.trim().slice(0, 128);
       const fullName = account.fullName.trim().slice(0, 200);
@@ -507,6 +529,16 @@ export const reducer = (state: AppState, action: Action): AppState => {
       const hasAdmin = users.some((item) => item.active && ['admin.access', 'users.manage', 'roles.manage'].every((permission) => permissionsFor(item.role, state.roles).includes(permission as Permission)));
       return hasAdmin ? { ...state, users } : state;
     }
+    case 'saveRole': {
+      if (!hasPermission(state.user, 'roles.manage') || !/^[a-z][a-z0-9_-]{0,31}$/.test(action.role) || !action.name.trim() || action.name.trim().length > 100) return state;
+      const existing = state.roles.find((item) => item.role === action.role);
+      if (state.roles.some((item) => item.role !== action.role && item.name.toLowerCase() === action.name.trim().toLowerCase())) return state;
+      return { ...state, roles: existing ? state.roles.map((item) => item.role === action.role ? { ...item, name: action.name.trim() } : item) : [...state.roles, { role: action.role, name: action.name.trim(), permissions: [] }] };
+    }
+    case 'deleteRole': {
+      if (!hasPermission(state.user, 'roles.manage') || ['administrator', 'manager', 'executor'].includes(action.role) || state.users.some((u) => u.role === action.role)) return state;
+      return { ...state, roles: state.roles.filter((item) => item.role !== action.role) };
+    }
     case 'saveRolePermissions': {
       if (!hasPermission(state.user, 'roles.manage')) return state;
       // Допустимое — всё из общего справочника. Ручной список отставал и молча отбрасывал новые права:
@@ -563,10 +595,12 @@ type Stored = {
   entitlements?: Entitlement[];
   vacationSettings?: VacationSettings;
   periodSettings?: PeriodSettings;
+  holidays?: import('./holidays').Holiday[];
   planRows?: PlanRow[];
   dictionaries?: DictionaryEntry[];
   users?: ManagedUser[];
   roles?: RoleDefinition[];
+  accessVersion?: string;
   units?: Unit[];
   templates?: AppState['templates'];
   authentication?: AppState['authentication'];
@@ -607,10 +641,12 @@ export const migrate = (s: Stored): AppState => {
     entitlements: s.entitlements ?? [],
     vacationSettings: normalizeVacationSettings(s.vacationSettings),
     periodSettings: normalizePeriodSettings(s.periodSettings),
+    holidays: s.holidays ?? [],
     planRows: sortedPlanRows(s.planRows ?? planRows),
     dictionaries: withDutyTypes(withVacationTypes(s.version < 6 ? addDefaultVacationTypes(s.dictionaries ?? DEFAULT_DICTIONARIES) : (s.dictionaries ?? DEFAULT_DICTIONARIES))),
     users,
-    roles: s.periodSettings === undefined ? withAddedPermissions(roles) : roles,
+    roles: migrateAccess(s.periodSettings === undefined ? withAddedPermissions(roles) : roles, s.accessVersion),
+    accessVersion: ACCESS_VERSION,
     authentication: s.authentication ?? { ...DEFAULT_AUTHENTICATION },
     scoring: { ...DEFAULT_SCORING },
     appearance: normalizeAppearance(undefined),
@@ -631,6 +667,7 @@ export const toData = (s: AppState): Data => ({
   entitlements: s.entitlements,
   vacationSettings: normalizeVacationSettings(s.vacationSettings),
   periodSettings: normalizePeriodSettings(s.periodSettings),
+  holidays: s.holidays ?? [],
   planRows: s.planRows,
   dictionaries: s.dictionaries,
   users: s.users,
@@ -647,11 +684,11 @@ export const fromData = (d: Data, user: User | null): AppState => {
   const users = d.users ?? DEFAULT_USERS;
   // Отметка версии прав: если она отстала, администратору дописываются права, добавленные позже.
   // В SQL Server ту же роль играет access-version в tc_meta.
-  const roles = d.accessVersion === ACCESS_VERSION ? (d.roles ?? DEFAULT_ROLES) : withAddedPermissions(d.roles ?? DEFAULT_ROLES);
+  const roles = migrateAccess(d.roles ?? DEFAULT_ROLES, d.accessVersion);
   const normalizedUsers = users.map((account) => {
     const employee = employeeById.get(account.employeeId);
     return { ...account, windowsLogin: account.windowsLogin || account.email.split('@')[0], fullName: account.fullName || (employee ? `${employee.lastname} ${employee.name} ${employee.patronymic}` : account.windowsLogin), position: account.position || employee?.position || '', unitId: account.unitId ?? DEFAULT_UNIT_OF[account.employeeId] };
   });
   const { notices: _notices, accessVersion: _accessVersion, ...rest } = d;
-  return { version: 6, ...rest, chatReads: d.chatReads ?? [], units: d.units ?? DEFAULT_UNITS.map((u) => ({ ...u })), templates: (d.templates ?? DEFAULT_TEMPLATES).map((t) => ({ ...t, scope: templateScope(t) })), planRows: sortedPlanRows(d.planRows ?? planRows), dictionaries: withDutyTypes(withVacationTypes(d.dictionaries ?? DEFAULT_DICTIONARIES)), vacationSettings: normalizeVacationSettings(d.vacationSettings), periodSettings: normalizePeriodSettings(d.periodSettings), users: normalizedUsers, roles, authentication: d.authentication ?? { ...DEFAULT_AUTHENTICATION }, scoring: d.scoring ?? { ...DEFAULT_SCORING }, appearance: normalizeAppearance(undefined), user: effectiveUser(user, normalizedUsers, roles) };
+  return { version: 6, ...rest, accessVersion: ACCESS_VERSION, chatReads: d.chatReads ?? [], units: d.units ?? DEFAULT_UNITS.map((u) => ({ ...u })), templates: (d.templates ?? DEFAULT_TEMPLATES).map((t) => ({ ...t, scope: templateScope(t) })), planRows: sortedPlanRows(d.planRows ?? planRows), dictionaries: withDutyTypes(withVacationTypes(d.dictionaries ?? DEFAULT_DICTIONARIES)), vacationSettings: normalizeVacationSettings(d.vacationSettings), periodSettings: normalizePeriodSettings(d.periodSettings), users: normalizedUsers, roles, authentication: d.authentication ?? { ...DEFAULT_AUTHENTICATION }, scoring: d.scoring ?? { ...DEFAULT_SCORING }, appearance: normalizeAppearance(undefined), user: effectiveUser(user, normalizedUsers, roles) };
 };

@@ -1,3 +1,4 @@
+import { holidayFor } from '../lib/holidays';
 import { memo, useMemo } from 'react';
 import { Link } from 'react-router';
 import { absenceDays, absenceEnd, balanceFor, fmtSpan, travelNote, type Clash } from '../lib/absences';
@@ -40,7 +41,7 @@ export const TetrisRow = memo(({ employee: e, groupStart, days, today, balanceDa
       <b>{name}</b>{!showBal && <span className="bal">{e.position}</span>}
     </Link>
     <div className={`tl-lane${groupStart ? ' tl-group-start' : ''}`} data-brush-employee={e.id}>
-      {days.map((d) => <button key={d.getDate()} type="button" className={`tl-cell${[0, 6].includes(d.getDay()) ? ' we' : ''}${isSameDay(d, today) ? ' today' : ''}`}
+      {days.map((d) => <button key={d.getDate()} type="button" className={`tl-cell${[0, 6].includes(d.getDay()) || holidayFor(d, state.holidays) ? ' we' : ''}${isSameDay(d, today) ? ' today' : ''}`}
         style={{ gridColumn: d.getDate() }} disabled={!canAdd} tabIndex={-1} aria-label={canAdd ? `Новое событие: ${name}, ${fmtDate(d)}` : undefined} onClick={() => onCreate(e.id, d)} />)}
       {stroke && (() => {
         const from = new Date(`${stroke.from}T00:00`), to = new Date(`${stroke.to}T00:00`);

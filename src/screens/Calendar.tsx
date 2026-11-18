@@ -1,3 +1,4 @@
+import { holidayFor } from '../lib/holidays';
 import { useEffect, useMemo, useState, type ReactNode, type PointerEvent } from 'react';
 import { useTaskEditor } from '../components/taskEditor';
 import { TaskTripLabel } from '../components/TaskTripLabel';
@@ -268,7 +269,7 @@ export const Calendar = () => {
             <div ref={grid} className="cal-grid cal-grid--adaptive" style={{ gridTemplateColumns: `56px repeat(${days.length}, minmax(${view === 'day' ? 240 : 110}px, 1fr))` }}>
               <div className="cal-corner" />
               {days.map((d) => (
-                <div key={d.toISOString()} className={`cal-head${isSameDay(d, now) ? ' today' : ''}`}>
+                <div data-tip={holidayFor(d, state.holidays)?.description} key={d.toISOString()} className={`cal-head${holidayFor(d, state.holidays) || [0, 6].includes(d.getDay()) ? ' holiday' : ''}${isSameDay(d, now) ? ' today' : ''}`}>
                   <span className="wd">{fmtWeekday(d)}</span>
                   <span className="d">{d.getDate()}</span>
                 </div>
@@ -396,6 +397,7 @@ const MonthView = ({ cursor, tasks, now, clashes, drag, onCreate, onOpen }: {
   onCreate: (d: Date) => void;
   onOpen: (t: Task) => void;
 }) => {
+  const { state } = useStore();
   const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
   const gridStart = startOfWeek(first);
   const cells = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
@@ -422,13 +424,14 @@ const MonthView = ({ cursor, tasks, now, clashes, drag, onCreate, onOpen }: {
           return (
             <div
               key={d.toISOString()}
-              className={`month-cell${other ? ' other' : ''}${isSameDay(d, now) ? ' today' : ''}${(drag.drop?.mode === 'move' && drag.drop.day === d.toISOString()) || resizeRange ? ' calendar-drop-day' : ''}`}
+              data-tip={holidayFor(d, state.holidays)?.description}
+              className={`month-cell${holidayFor(d, state.holidays) || [0, 6].includes(d.getDay()) ? ' holiday' : ''}${other ? ' other' : ''}${isSameDay(d, now) ? ' today' : ''}${(drag.drop?.mode === 'move' && drag.drop.day === d.toISOString()) || resizeRange ? ' calendar-drop-day' : ''}`}
               data-calendar-day={d.toISOString()}
               data-calendar-mode="month"
               onClick={() => onCreate(d)}
               role="button"
               tabIndex={0}
-              aria-label={`${fmtDayMonth(d)}: задач ${list.length}. Создать задачу`}
+              aria-label={`${fmtDayMonth(d)}${holidayFor(d, state.holidays) ? ` — ${holidayFor(d, state.holidays)!.description}` : ''}: задач ${list.length}. Создать задачу`}
               onKeyDown={(e) => {
                 if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
                   e.preventDefault();

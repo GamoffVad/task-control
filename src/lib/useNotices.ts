@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useStore } from './store';
-import { backgroundTimer, noticePermission, noticesSupported, readNoticePref, readSince, showNotice, writeNoticePref, writeSince } from './notices';
+import { backgroundTimer, noticePermission, noticesSupported, readNoticePref, readSince, showNotice, writeNoticePref, writeSince, type ServerNotice } from './notices';
 
 /** Как часто вкладка спрашивает сервер о новых уведомлениях. */
 export const NOTICE_POLL_MS = 20_000;
@@ -12,40 +12,48 @@ const MISSED_SHOWN = 3;
 export const useNotices = () => {
   const { state, fetchNotices, reload } = useStore();
   const supported = !!fetchNotices && noticesSupported();
+  const insecure = !!fetchNotices && typeof window !== 'undefined' && !window.isSecureContext;
   const [permission, setPermission] = useState<NotificationPermission>(noticePermission);
   const [pref, setPref] = useState(readNoticePref);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [inAppNotices, setInAppNotices] = useState<ServerNotice[]>([]);
   const me = state.user?.employeeId;
-  const enabled = supported && permission === 'granted' && pref !== 'off';
+  const enabled = insecure ? pref !== 'off' && pref !== 'later' : supported && permission === 'granted' && pref !== 'off';
   const polling = useRef(false);
 
+  useEffect(() => { setInAppNotices([]); }, [me]);
   useEffect(() => {
     if (!enabled || !fetchNotices || me === undefined) return;
+    let active = true;
     const poll = async () => {
       if (polling.current) return;
       polling.current = true;
       try {
         const since = readSince(me);
         const { notices, now } = await fetchNotices(since);
-        writeSince(me, notices.at(-1)?.at && notices.at(-1)!.at > now ? notices.at(-1)!.at : now);
-        if (!notices.length) return;
+        if (!active) return;
+        if (!notices.length) { writeSince(me, now); return; }
         const shown = notices.slice(-MISSED_SHOWN);
-        for (const n of shown) await showNotice({ title: n.title, body: n.body, url: n.url, tag: n.id });
-        if (notices.length > shown.length) {
+        if (insecure) setInAppNotices((prev) => [...prev, ...notices.filter((n) => !prev.some((p) => p.id === n.id))].slice(-20));
+        else for (const n of shown) await showNotice({ title: n.title, body: n.body, url: n.url, tag: n.id });
+        if (!insecure && notices.length > shown.length) {
           await showNotice({ title: 'Контроль задач', body: `И ещё уведомлений: ${notices.length - shown.length}. Откройте приложение.`, url: '/', tag: `more-${now}` });
         }
+        writeSince(me, notices.at(-1)?.at && notices.at(-1)!.at > now ? notices.at(-1)!.at : now);
+        setError('');
         // Счётчики, задачи и сообщения на экране — тоже свежие.
         reload();
       } catch {
-        // Нет связи с сервером — повторим при следующем опросе.
+        setError('Не удалось получить или показать уведомления. Проверьте подключение и разрешение браузера; приложение повторит попытку.');
       } finally {
         polling.current = false;
       }
     };
     void poll();
-    return backgroundTimer(NOTICE_POLL_MS, () => void poll());
-  }, [enabled, fetchNotices, me, reload]);
+    const stop = backgroundTimer(NOTICE_POLL_MS, () => void poll());
+    return () => { active = false; stop(); };
+  }, [enabled, fetchNotices, me, reload, insecure]);
 
   // Нажатие на уведомление: Service Worker просит вкладку открыть раздел.
   const navigate = useNavigate();
@@ -62,6 +70,7 @@ export const useNotices = () => {
     setBusy(true);
     setError('');
     try {
+      if (insecure) { writeNoticePref(null); setPref(null); return; }
       const result = await Notification.requestPermission();
       setPermission(result);
       if (result !== 'granted') {
@@ -88,7 +97,7 @@ export const useNotices = () => {
     setPref('later');
   };
 
-  return { supported, permission, pref, enabled, busy, error, enable, disable, later };
+  return { supported, insecure, permission, pref, enabled, busy, error, enable, disable, later, inAppNotices, dismissNotice: (id: string) => setInAppNotices((items) => items.filter((item) => item.id !== id)) };
 };
 
 export type NoticesState = ReturnType<typeof useNotices>;

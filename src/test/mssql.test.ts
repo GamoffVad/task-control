@@ -161,6 +161,22 @@ describe.skipIf(!live)('SQL Server: хранилище', () => {
     expect(back.planRows).toEqual(seed.planRows);
   });
 
+  it('сохраняет сообщение скрытого сотрудника и возвращает его после перечитывания', async () => {
+    const previous = await repo.read();
+    const boss = { email: 'user@example.com', employeeId: 1, role: 'administrator' };
+    const initial = createSeed(NOW);
+    initial.user = boss;
+    initial.users = initial.users.map((u) => u.employeeId === boss.employeeId ? { ...u, hidden: true } : u);
+    try {
+      await repo.update(() => toData(initial));
+      await repo.update((current) => toData(reducer(fromData(current!, boss), { type: 'sendMessage', text: 'Проверка переписки', now: NOW })));
+      const reloaded = await repo.read();
+      expect(reloaded?.messages).toEqual(expect.arrayContaining([expect.objectContaining({ authorId: 1, text: 'Проверка переписки' })]));
+    } finally {
+      if (previous) await repo.update(() => previous);
+    }
+  }, 30_000);
+
   it('сохраняет признак личной заметки при чтении из базы', async () => {
     const before = (await repo.read())!;
     const note = { ...before.tasks[0], id: 'private-note-test', local: true, assigneeIds: [3], rowId: null, category: null, score: null };

@@ -23,7 +23,14 @@ const initial = (hidden = true): AppState => ({ ...createSeed(NOW), users: DEFAU
 const at = (path: string, state = initial()) => render(<StoreProvider initial={state}><MemoryRouter initialEntries={[path]}><AppRoutes /></MemoryRouter></StoreProvider>);
 
 describe('скрытый сотрудник', () => {
-  it.each(['/calendar', '/planning', '/control', '/tetris', '/reports', '/kpi', '/employees/1', '/chat'])('не отображается в рабочем разделе %s', (path) => {
+  it('сообщения скрытого сотрудника видны коллегам в общем канале', () => {
+    const state = initial();
+    const message = state.messages.find((item) => item.authorId === 3)!;
+    at('/chat', state);
+    expect(screen.getByText(message.text)).toBeInTheDocument();
+  });
+
+  it.each(['/calendar', '/planning', '/control', '/tetris', '/reports', '/kpi', '/employees/1'])('не отображается в рабочем разделе %s', (path) => {
     at(path);
     expect(document.querySelector('main')!.textContent).not.toContain('Сидоров');
     expect(employees.some((employee) => employee.id === 3)).toBe(false);
@@ -107,7 +114,7 @@ describe('скрытый сотрудник', () => {
     expect(shown.reports.flatMap((report) => report.entries).some((entry) => entry.assigneeId === 3)).toBe(false);
     expect(shown.absences.some((absence) => absence.employeeId === 3)).toBe(false);
     expect(shown.entitlements.some((entry) => entry.employeeId === 3)).toBe(false);
-    expect(shown.messages.some((message) => message.authorId === 3)).toBe(false);
+    expect(shown.messages).toEqual(state.messages);
     expect(JSON.stringify(state)).toBe(before);
     expect(displayState({ ...state, users: state.users.map((user) => ({ ...user, hidden: false })) }).tasks).toEqual(state.tasks);
   });

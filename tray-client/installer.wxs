@@ -1,0 +1,44 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="Контроль задач — уведомления" Manufacturer="Контроль задач" Version="1.0.4" UpgradeCode="DE59B06F-5DF6-45C8-81A8-78A98ED0F0A8" Scope="perUser" Language="1049">
+    <WixVariable Id="WixUIBannerBmp" Value="$(var.ArtDir)\installer-banner.bmp" />
+    <WixVariable Id="WixUIDialogBmp" Value="$(var.ArtDir)\installer-dialog.bmp" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.ArtDir)\license.rtf" />
+    <MajorUpgrade DowngradeErrorMessage="Установлена более новая версия программы." />
+    <MediaTemplate EmbedCab="yes" />
+    <Property Id="DOTNET4FULL">
+      <RegistrySearch Id="SearchDotNet4Full" Root="HKLM" Key="SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full" Name="Install" Type="raw" />
+    </Property>
+    <Launch Condition="Installed OR DOTNET4FULL = &quot;#1&quot;" Message="Для программы уведомлений требуется .NET Framework 4.0 Full или более новая версия. Установите её и повторите установку." />
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLFOLDER" Name="TaskControlNotifications" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+    <StandardDirectory Id="StartupFolder" />
+    <Component Id="Application" Directory="INSTALLFOLDER" Guid="D09DFF81-5473-4777-8F72-2CBA68239A77">
+      <File Id="ApplicationExe" Source="$(var.TrayExe)" KeyPath="yes" />
+      <File Id="ApplicationConfig" Source="$(var.TrayConfig)" />
+    </Component>
+    <Component Id="MenuShortcut" Directory="ProgramMenuFolder" Guid="54A0D651-81A0-43B2-A88E-3C78DD50390C">
+      <Shortcut Id="MenuLink" Name="Контроль задач — уведомления" Target="[INSTALLFOLDER]TaskControlNotifications.exe" WorkingDirectory="INSTALLFOLDER" />
+      <RegistryValue Root="HKCU" Key="Software\TaskControlNotifications" Name="MenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+    <Component Id="StartupShortcut" Directory="StartupFolder" Guid="8991E416-DBAB-4D54-A5ED-91C10BBCB7F2">
+      <Shortcut Id="StartupLink" Name="Контроль задач — уведомления" Target="[INSTALLFOLDER]TaskControlNotifications.exe" WorkingDirectory="INSTALLFOLDER" />
+      <RegistryValue Root="HKCU" Key="Software\TaskControlNotifications" Name="StartupShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+    <Feature Id="Main" Title="Программа уведомлений" Description="Установка программы и ярлыка в меню Пуск." Level="1" AllowAbsent="no" Display="expand">
+      <ComponentRef Id="Application" />
+      <ComponentRef Id="MenuShortcut" />
+      <Feature Id="AutoStart" Title="Запускать при входе в Windows" Description="Добавляет ярлык в автозагрузку текущего пользователя; можно отключить при установке." Level="1">
+        <ComponentRef Id="StartupShortcut" />
+      </Feature>
+    </Feature>
+    <ui:WixUI Id="WixUI_FeatureTree" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Запустить программу уведомлений" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <CustomAction Id="LaunchNotifications" FileRef="ApplicationExe" ExeCommand="" Execute="immediate" Return="asyncNoWait" />
+    <UI>
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchNotifications" Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" Order="1" />
+    </UI>
+  </Package>
+</Wix>

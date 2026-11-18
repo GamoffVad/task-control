@@ -40,3 +40,5 @@ tmp/pdfs/
 
 .vercel
 .env*
+
+tray-client/Probe.exe

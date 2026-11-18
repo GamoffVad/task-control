@@ -9,11 +9,16 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, 'dist-iis');
 
+execSync('node scripts/build-tray.mjs', { cwd: root, stdio: 'inherit' });
 execSync('npm run build', { cwd: root, stdio: 'inherit' });
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 cpSync(path.join(root, 'dist'), path.join(out, 'public'), { recursive: true });
+// В рабочий комплект попадает только актуальный установщик, без отладочных файлов и старых версий.
+for (const file of ['TaskControlNotificationsSetup.msi', 'TaskControlNotificationsSetup.wixpdb', 'TaskControlNotificationsSetup-1.0.2.msi', 'TaskControlNotificationsSetup-1.0.2.wixpdb', 'TaskControlNotificationsSetup-1.0.3.msi', 'TaskControlNotificationsSetup-1.0.3.wixpdb', 'TaskControlNotificationsSetup-1.0.4.wixpdb']) {
+  rmSync(path.join(out, 'public', 'downloads', file), { force: true });
+}
 
 // Скрипт подготовки SQL Server кладётся рядом с сервером: на сервере может не быть папки проекта.
 cpSync(path.join(root, 'scripts', 'setup-sql.ps1'), path.join(out, 'setup-sql.ps1'));

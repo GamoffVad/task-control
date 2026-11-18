@@ -303,6 +303,17 @@ describe('отчёт и показатели', () => {
 });
 
 describe('переписка', () => {
+  it.each([false, true])('показывает сообщение по кнопке при hidden=%s', async (hidden) => {
+    const user = userEvent.setup();
+    const state = loggedIn();
+    state.users = state.users.map((account) => account.employeeId === 1 ? { ...account, hidden } : account);
+    renderAt('/chat', state);
+    await user.type(screen.getByLabelText('Сообщение'), 'Проверка переписки');
+    await user.click(screen.getByRole('button', { name: /Отправить/ }));
+    expect(screen.getByLabelText('Сообщение')).toHaveValue('');
+    expect(screen.getByRole('log', { name: 'Сообщения' })).toHaveTextContent('Проверка переписки');
+  });
+
   it('отправляет сообщение по Enter', async () => {
     const user = userEvent.setup();
     renderAt('/chat');
@@ -697,7 +708,8 @@ describe('календарь: поиск и категории', () => {
     // Список разрешений покрывает все девять вкладок, включая «Редактирование UI».
     for (const label of [
       'Открывать администрирование',
-      'Пользователи: вести и назначать роли',
+      'Пользователи: изменять настройки учетной записи',
+      'Пользователи: изменять значения отпусков и отгулов',
       'Подразделения: вести дерево',
       'Роли и разрешения: настраивать',
       'Аутентификация: настраивать способ входа',

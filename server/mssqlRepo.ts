@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import sql from 'mssql';
 import { DEFAULT_DICTIONARIES } from '../src/lib/seed';
-import { ACCESS_VERSION, DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, withAddedPermissions } from '../src/lib/access';
+import { ACCESS_VERSION, DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, migrateAccess } from '../src/lib/access';
 import { planRows as DEFAULT_PLAN_ROWS, sortedPlanRows } from '../src/lib/data';
 import type { Absence, ChatRead, Data, Notice, DictionaryEntry, DocumentTemplate, Entitlement, ManagedUser, Message, Permission, PlanRow, Report, RoleDefinition, Task, Unit } from '../src/lib/types';
 import { DEFAULT_UNITS, MAIN_DEPARTMENT_ID } from '../src/lib/units';
@@ -361,6 +361,7 @@ const readAll = async (q: Q): Promise<Data | null> => {
   const scoring = await meta(q, 'scoring-settings');
   const vacationSettings = await meta(q, 'vacation-settings');
   const periodSettings = await meta(q, 'period-settings');
+  const holidays = await meta(q, 'production-holidays');
 
   const r = async (text: string) => rows(q, text);
   const tasks = await r('select * from dbo.tc_tasks order by [seq]');
@@ -384,7 +385,7 @@ const readAll = async (q: Q): Promise<Data | null> => {
       })
     : DEFAULT_ROLES;
   // Права, добавленные позже, дописываются администратору при чтении старой базы.
-  const migratedRoles = accessVersion === ACCESS_VERSION ? storedRoles : withAddedPermissions(storedRoles);
+  const migratedRoles = migrateAccess(storedRoles, accessVersion);
 
   return {
     tasks: tasks.map((x) => {
@@ -468,6 +469,7 @@ const readAll = async (q: Q): Promise<Data | null> => {
     authentication: authentication ? JSON.parse(authentication) : { ...DEFAULT_AUTHENTICATION },
     ...(vacationSettings ? { vacationSettings: JSON.parse(vacationSettings) } : {}),
     ...(periodSettings ? { periodSettings: JSON.parse(periodSettings) } : {}),
+    ...(holidays ? { holidays: JSON.parse(holidays) } : {}),
     scoring: scoring ? JSON.parse(scoring) : { ...DEFAULT_SCORING },
     // Отметка версии прав: без неё общий код дописывал бы их администратору при каждом чтении.
     ...(accessVersion ? { accessVersion } : {}),
@@ -899,6 +901,7 @@ export const createMssqlRepo = (settings: MssqlSettings): Repo => {
         if (stable(before.scoring ?? DEFAULT_SCORING) !== stable(next.scoring ?? DEFAULT_SCORING)) await setMeta(tx, 'scoring-settings', JSON.stringify(next.scoring ?? DEFAULT_SCORING));
         if (stable(before.authentication) !== stable(next.authentication)) await setMeta(tx, 'authentication-settings', JSON.stringify(next.authentication));
         if (stable(before.vacationSettings) !== stable(next.vacationSettings)) await setMeta(tx, 'vacation-settings', JSON.stringify(next.vacationSettings ?? { resetMonth: 1, resetDay: 1 }));
+        if (stable(before.holidays ?? []) !== stable(next.holidays ?? [])) await setMeta(tx, 'production-holidays', JSON.stringify(next.holidays ?? []));
         if (stable(before.periodSettings) !== stable(next.periodSettings)) await setMeta(tx, 'period-settings', JSON.stringify(next.periodSettings ?? null));
 
         await setMetaOnce(tx, 'seeded', new Date().toISOString());

@@ -126,6 +126,18 @@ describe('API уведомлений', () => {
     expect((await notices(boss, got.now)).notices).toEqual([]);
   });
 
+  it('скрытый активный сотрудник входит и получает сообщения коллег', async () => {
+    await repo.update((data) => ({ ...data!, users: data!.users.map((u) => u.employeeId === BOSS.employeeId ? { ...u, hidden: true } : u) }));
+    const boss = await token('user@example.com');
+    const worker = await token('sidorov@example.com');
+    expect(boss).toBeTruthy();
+    const start = await notices(boss);
+    now = new Date(NOW.getTime() + 60_000);
+    const sent = await call('/api/action', { method: 'POST', token: worker, body: { action: { type: 'sendMessage', text: 'Проверка уведомлений' } } });
+    expect(sent.status).toBe(200);
+    expect((await notices(boss, start.now)).notices).toEqual([expect.objectContaining({ title: 'Переписка · Сидоров Д.Е.', body: 'Проверка уведомлений' })]);
+  });
+
   it('журнал не передаётся в данных приложения; устаревшие уведомления удаляются', async () => {
     const worker = await token('sidorov@example.com');
     const res = await call('/api/action', { method: 'POST', token: worker, body: { action: { type: 'sendMessage', text: 'раз' } } });

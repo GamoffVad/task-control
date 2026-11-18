@@ -15,6 +15,7 @@ export const displayState = (state: AppState): AppState => {
     absences: state.absences.filter((absence) => !hidden.has(absence.employeeId)).map((absence) =>
       absence.decidedBy !== null && hidden.has(absence.decidedBy) ? { ...absence, decidedBy: null } : absence),
     entitlements: state.entitlements.filter((entry) => !hidden.has(entry.employeeId)),
-    messages: state.messages.filter((message) => !hidden.has(message.authorId)),
+    // Переписка — общий канал: скрытие сотрудника из рабочих списков не скрывает его сообщения.
+    messages: state.messages,
   };
 };

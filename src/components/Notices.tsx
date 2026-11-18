@@ -24,6 +24,7 @@ export const NoticesBanner = ({ push }: { push: NoticesState }) => {
 
 /** Переключатель в подвале: состояние уведомлений этого браузера. */
 export const NoticesToggle = ({ push }: { push: NoticesState }) => {
+  if (push.insecure) return <button type="button" className="text-action push-state" onClick={push.enabled ? push.disable : push.enable} data-tip="Уведомления показываются внутри открытой вкладки приложения"><Icon.Bell size={13} />{push.enabled ? 'уведомления в приложении включены' : 'включить уведомления в приложении'}</button>;
   if (!push.supported) return null;
   if (push.permission === 'denied') {
     return (
@@ -42,3 +43,6 @@ export const NoticesToggle = ({ push }: { push: NoticesState }) => {
     </button>
   );
 };
+
+/** На HTTP системные уведомления недоступны, поэтому события показываются внутри приложения. */
+export const InAppNotices = ({ push }: { push: NoticesState }) => push.inAppNotices.length ? <div className="in-app-notices" aria-label="Новые уведомления" aria-live="polite">{push.inAppNotices.map((n) => <div className="in-app-notice" key={n.id}><div><strong>{n.title}</strong><p>{n.body}</p>{n.url.startsWith('/') && !n.url.startsWith('//') && <a href={n.url} onClick={() => push.dismissNotice(n.id)}>Открыть</a>}</div><button type="button" aria-label="Закрыть уведомление" onClick={() => push.dismissNotice(n.id)}>×</button></div>)}</div> : null;

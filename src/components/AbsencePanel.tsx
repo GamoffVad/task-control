@@ -5,6 +5,7 @@ import { absenceDays, balanceFor, dutyDayoffs, entitlementFor, fmtSpan, travelDa
 import { ABSENCE_STATUS_LABELS, absenceType } from '../lib/data';
 import { plural } from '../lib/dates';
 import { isManager } from '../lib/permissions';
+import { hasPermission } from '../lib/access';
 import { useStore } from '../lib/store';
 import type { Absence } from '../lib/types';
 import { absColor } from './absColor';
@@ -152,7 +153,7 @@ export const AbsencePanel = ({ id }: { id: number }) => {
       </ul>
       <Pagination label="Страницы событий" page={eventPages.page} pages={eventPages.pages} onChange={eventPages.setPage} />
 
-      {manager && (
+      {hasPermission(state.user, 'users.entitlements') && (
         <div className="norms">
           {norms ? (
             <>

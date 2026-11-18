@@ -14,7 +14,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { validDayoffAccrued, validateAbsence, type AbsenceDraft } from '../src/lib/absences';
 import { applyAbsenceStroke, strokeError, type AbsenceStroke } from '../src/lib/absenceBrush';
-import { ACCESS_VERSION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS, effectiveUser, hasPermission, PERMISSIONS, sessionUser, withAddedPermissions } from '../src/lib/access';
+import { validHoliday } from '../src/lib/holidays';
+import { DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS, effectiveUser, hasPermission, PERMISSIONS, sessionUser, migrateAccess } from '../src/lib/access';
 import { CATEGORIES, employeeById, planRows, syncCategories, syncStaff } from '../src/lib/data';
 import { DEFAULT_UNITS, MAIN_DEPARTMENT_ID } from '../src/lib/units';
 import { validateTask, type TaskDraft } from '../src/lib/logic';
@@ -238,6 +239,13 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
       if (!isObj(a.settings) || !validVacationSettings(a.settings as VacationSettings)) bad('дату ежегодного сброса отпусков');
       return { type: 'saveVacationSettings', settings: { resetMonth: (a.settings as VacationSettings).resetMonth, resetDay: (a.settings as VacationSettings).resetDay } };
     }
+    case 'saveHoliday': {
+      if (!isObj(a.holiday) || !validHoliday(a.holiday as unknown as import('../src/lib/holidays').Holiday)) bad('праздничный день');
+      return { type: 'saveHoliday', holiday: { date: (a.holiday as { date: string }).date, description: (a.holiday as { description: string }).description } };
+    }
+    case 'deleteHoliday':
+      if (!dateKey(a.date)) bad('дату праздника');
+      return { type: 'deleteHoliday', date: a.date as string };
     case 'savePeriodSettings':
       if (!validPeriodSettings(a.settings)) bad('настройки планового и отчётного периода');
       return { type: 'savePeriodSettings', settings: normalizePeriodSettings(a.settings as import('../src/lib/types').PeriodSettings) };
@@ -282,7 +290,7 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
       if (a.annualVacationDays !== undefined && !validVacationDays(a.annualVacationDays as number)) bad('ежегодную норму отпуска (целое число от 0 до 366)');
       if (a.vacationTypeDays !== undefined && (!isObj(a.vacationTypeDays) || !Object.hasOwn(a.vacationTypeDays, annualVacationCode(data.dictionaries ?? DEFAULT_DICTIONARIES)) || Object.entries(a.vacationTypeDays).some(([code, days]) => !(data.dictionaries ?? DEFAULT_DICTIONARIES).some((d) => d.dictionary === 'vacationType' && d.code === code) || !validVacationDays(days as number)))) bad('нормы типов отпуска');
       if (a.dayoffAccrued !== undefined && !validDayoffAccrued(a.dayoffAccrued as number)) bad('начисленные вручную отгулы (целое число от 0 до 3000)');
-      if (!['administrator', 'manager', 'executor'].includes(a.role as string) || typeof a.active !== 'boolean' || (a.windowsLogin !== undefined && (!str(a.windowsLogin, 128) || !(a.windowsLogin as string).trim()))) bad('роль или Windows-логин пользователя');
+      if (!(data.roles ?? DEFAULT_ROLES).some((r) => r.role === a.role) || typeof a.active !== 'boolean' || (a.windowsLogin !== undefined && (!str(a.windowsLogin, 128) || !(a.windowsLogin as string).trim()))) bad('роль или Windows-логин пользователя');
       if (a.unitId !== undefined && (typeof a.unitId !== 'string' || (a.unitId !== '' && !(data.units ?? DEFAULT_UNITS).some((u) => u.id === a.unitId)))) bad('подразделение пользователя');
       if (a.fullName !== undefined && (!str(a.fullName, 200) || !String(a.fullName).trim())) bad('ФИО сотрудника');
       if (a.rank !== undefined && !str(a.rank, 200)) bad('звание сотрудника');
@@ -311,7 +319,7 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
       if (typeof account.employeeId !== 'number' || !Number.isInteger(account.employeeId) || account.employeeId < 1) bad('идентификатор пользователя');
       if (!str(account.fullName, 200) || !String(account.fullName).trim() || !str(account.position, 200) || !str(account.email, 200) || !str(account.windowsLogin, 128) || !String(account.windowsLogin).trim()) bad('данные пользователя');
       if (account.rank !== undefined && !str(account.rank, 200)) bad('звание сотрудника');
-      if (!['administrator', 'manager', 'executor'].includes(account.role as string) || typeof account.active !== 'boolean') bad('роль пользователя');
+      if (!(data.roles ?? DEFAULT_ROLES).some((r) => r.role === account.role) || typeof account.active !== 'boolean') bad('роль пользователя');
       if (account.hidden !== undefined && typeof account.hidden !== 'boolean') bad('скрытие сотрудника');
       if (account.annualVacationDays !== undefined && !validVacationDays(account.annualVacationDays as number)) bad('ежегодную норму отпуска (целое число от 0 до 366)');
       if (account.unitId !== undefined && (typeof account.unitId !== 'string' || !(data.units ?? DEFAULT_UNITS).some((u) => u.id === account.unitId))) bad('подразделение пользователя');
@@ -346,8 +354,16 @@ export const parseAction = (raw: unknown, data: Data, now: Date): Action => {
     case 'deleteManagedUser':
       if (typeof a.employeeId !== 'number' || !data.users.some((user) => user.employeeId === a.employeeId)) bad('пользователь');
       return { type: 'deleteManagedUser', employeeId: a.employeeId as number };
+    case 'saveRole': {
+      if (typeof a.role !== 'string' || !/^[a-z][a-z0-9_-]{0,31}$/.test(a.role) || !str(a.name, 100) || !String(a.name).trim()) bad('роль');
+      return { type: 'saveRole', role: a.role as string, name: a.name as string };
+    }
+    case 'deleteRole': {
+      if (typeof a.role !== 'string' || !(data.roles ?? DEFAULT_ROLES).some((r) => r.role === a.role)) bad('роль');
+      return { type: 'deleteRole', role: a.role as string };
+    }
     case 'saveRolePermissions': {
-      if (!['administrator', 'manager', 'executor'].includes(a.role as string) || !Array.isArray(a.permissions)) bad('роль');
+      if (!(data.roles ?? DEFAULT_ROLES).some((r) => r.role === a.role) || !Array.isArray(a.permissions)) bad('роль');
       // Список берётся из общего справочника разрешений: вручную он отставал при добавлении новых.
       const allowed: Permission[] = PERMISSIONS.map((item) => item.key);
       const permissions = a.permissions as unknown[];
@@ -485,7 +501,7 @@ export const createApi = ({ repo, connection, secret, now = () => new Date(), wi
     // Права, добавленные после выпуска базы (например, «Видеть задачи всего отдела»), дописываются при чтении,
     // а не только при первой записи: иначе до неё администратор видел бы лишь своё подразделение.
     const storedRoles = data.roles ?? DEFAULT_ROLES;
-    const roles = data.accessVersion === ACCESS_VERSION ? storedRoles : withAddedPermissions(storedRoles);
+    const roles = migrateAccess(storedRoles, data.accessVersion);
     const access = recoverAdministrativeAccess(normalizeUsers(data.users ?? []), roles, fallbackAdministrator);
     return { ...data, ...access, authentication, dictionaries: withDutyTypes(data.vacationTypesVersion === 1 ? (data.dictionaries ?? DEFAULT_DICTIONARIES) : addDefaultVacationTypes(data.dictionaries ?? DEFAULT_DICTIONARIES)), vacationTypesVersion: 1 };
   };

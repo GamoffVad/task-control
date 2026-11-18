@@ -1,6 +1,6 @@
 // Доступ к вкладкам администрирования: у каждой своё разрешение, «Редактирование UI» — у всех ролей по умолчанию.
 import { describe, expect, it, vi } from 'vitest';
-import { ADMIN_TAB_PERMISSIONS, DEFAULT_ROLES, PERMISSIONS, permissionsFor, withAddedPermissions } from '../lib/access';
+import { ADMIN_TAB_PERMISSIONS, DEFAULT_ROLES, PERMISSIONS, permissionsFor, withAddedPermissions, migrateAccess, ACCESS_VERSION } from '../lib/access';
 import { canOpenAdmin } from '../lib/permissions';
 import { reducer } from '../lib/reducer';
 import { createSeed } from '../lib/seed';
@@ -18,7 +18,7 @@ describe('разрешения вкладок администрирования
     const catalogue = new Set(PERMISSIONS.map((item) => item.key));
     for (const permission of ADMIN_TAB_PERMISSIONS) expect(catalogue.has(permission), permission).toBe(true);
     // Каждой вкладке, включая настройки отпусков, соответствует разрешение.
-    expect(new Set(ADMIN_TAB_PERMISSIONS).size).toBe(12);
+    expect(new Set(ADMIN_TAB_PERMISSIONS).size).toBe(13);
     expect(PERMISSIONS.find((item) => item.key === 'appearance.manage')!.label).toContain('Редактирование UI');
   });
 
@@ -72,4 +72,25 @@ describe('сохранение разрешений роли', () => {
     const next = reducer(state, { type: 'saveRolePermissions', role: 'executor', permissions: ['tasks.execute', 'выдумка' as never] });
     expect(next.roles.find((r) => r.role === 'executor')!.permissions).toEqual(['tasks.execute']);
   });
+});
+
+
+it('разделяет права на учетную запись и нормы и однократно переносит прежние права', () => {
+  const s = stateFor(admin);
+  const accountOnly = { ...s, user: { ...admin, permissions: ['users.manage'] as import('../lib/types').Permission[] } };
+  const a = { type: 'saveManagedUser', employeeId: 3, role: 'executor', active: true } as const;
+  expect(reducer(accountOnly, { ...a, annualVacationDays: 40 })).toBe(accountOnly);
+  expect(reducer(accountOnly, { ...a, fullName: 'Сидоров Иван' }).users.find((u) => u.employeeId === 3)?.fullName).toBe('Сидоров Иван');
+  const leaveOnly = { ...s, user: { ...admin, permissions: ['users.entitlements'] as import('../lib/types').Permission[] } };
+  expect(reducer(leaveOnly, { ...a, fullName: 'Сидоров Иван' })).toBe(leaveOnly);
+  expect(reducer(leaveOnly, { ...a, annualVacationDays: 40, dayoffAccrued: 3 }).users.find((u) => u.employeeId === 3)?.annualVacationDays).toBe(40);
+});
+
+
+it('переносит старые права один раз и сохраняет последующее отключение', () => {
+  const old = [{ role: 'custom', name: 'Сотрудник', permissions: ['users.manage'] as import('../lib/types').Permission[] }];
+  const migrated = migrateAccess(old, '10');
+  expect(migrated[0].permissions).toContain('users.entitlements');
+  const revoked = [{ ...migrated[0], permissions: ['users.manage'] as import('../lib/types').Permission[] }];
+  expect(migrateAccess(revoked, ACCESS_VERSION)[0].permissions).not.toContain('users.entitlements');
 });

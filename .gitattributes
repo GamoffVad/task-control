@@ -8,6 +8,7 @@
 *.ico binary
 *.woff binary
 *.woff2 binary
+*.msi binary
 
 # Пакетный файл публикации запускает cmd.exe: только переводы строк Windows.
 *.bat text eol=crlf

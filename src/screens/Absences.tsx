@@ -1,3 +1,4 @@
+import { holidayFor } from '../lib/holidays';
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AbsenceModal } from '../components/AbsenceModal';
 import { useTetrisBrush } from '../components/useTetrisBrush';
@@ -169,6 +170,7 @@ export const Absences = () => {
       absences: state.absences.filter((a) => !hidden.has(a.type)),
       tasks: state.tasks.filter((task) => !task.local),
       dictionaries: state.dictionaries,
+      holidays: state.holidays,
       vacationPeriodLabel: vacationPeriodLabel(vacationYear(balanceDate, state.vacationSettings), state.vacationSettings),
       types: ABSENCE_TYPES.map((t) => ({ key: t.key, label: t.label, full: t.full })),
       balance: (employeeId) => {
@@ -291,8 +293,8 @@ export const Absences = () => {
           {days.map((d) => (
             <div
               key={d.getDate()}
-              className={`tl-dh${[0, 6].includes(d.getDay()) ? ' we' : ''}${isSameDay(d, today) ? ' today' : ''}${overDays.has(d.getDate()) ? ' over' : overReqDays.has(d.getDate()) ? ' over-req' : ''}`}
-              data-tip={overDays.has(d.getDate()) ? `В отпуске больше ${fmtShare(VACATION_LIMIT)}` : overReqDays.has(d.getDate()) ? `С заявками в отпуске будет больше ${fmtShare(VACATION_LIMIT)}` : undefined}
+              className={`tl-dh${[0, 6].includes(d.getDay()) ? ' we' : ''}${holidayFor(d, state.holidays) ? ' holiday' : ''}${isSameDay(d, today) ? ' today' : ''}${overDays.has(d.getDate()) ? ' over' : overReqDays.has(d.getDate()) ? ' over-req' : ''}`}
+              data-tip={[holidayFor(d, state.holidays)?.description, overDays.has(d.getDate()) ? `В отпуске больше ${fmtShare(VACATION_LIMIT)}` : overReqDays.has(d.getDate()) ? `С заявками в отпуске будет больше ${fmtShare(VACATION_LIMIT)}` : ''].filter(Boolean).join(' · ') || undefined}
             >
               <b>{d.getDate()}</b>
               {fmtWeekday(d)}

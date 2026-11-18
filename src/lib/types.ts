@@ -1,7 +1,7 @@
 // Модель данных приложения «Контроль задач».
 
 /** Администратор настраивает доступ, руководитель планирует, исполнитель ведёт свои задачи. */
-export type Role = 'administrator' | 'manager' | 'executor';
+export type Role = string;
 
 export type Permission =
   | 'admin.access'
@@ -10,6 +10,7 @@ export type Permission =
   | 'scoring.manage'
   | 'periods.manage'
   | 'users.manage'
+  | 'users.entitlements'
   | 'units.manage'
   | 'roles.manage'
   | 'dictionaries.manage'
@@ -326,6 +327,7 @@ export type DictionaryEntry = {
 
 export type AppState = {
   version: 6;
+  accessVersion?: string;
   tasks: Task[];
   reports: Report[];
   messages: Message[];
@@ -334,6 +336,7 @@ export type AppState = {
   entitlements: Entitlement[];
   vacationSettings?: VacationSettings;
   periodSettings?: PeriodSettings;
+  holidays?: import('./holidays').Holiday[];
   planRows: PlanRow[];
   dictionaries: DictionaryEntry[];
   users: ManagedUser[];

@@ -11,7 +11,7 @@ import { LogoMark } from './LogoMark';
 import { useLogoSteps } from '../lib/logoSteps';
 import { navFor } from './nav';
 import { ThemeToggle } from './ThemeToggle';
-import { NoticesBanner, NoticesToggle } from './Notices';
+import { InAppNotices, NoticesBanner, NoticesToggle } from './Notices';
 import { useNotices } from '../lib/useNotices';
 import { TaskEditorProvider } from './TaskModal';
 import { APP_VERSION } from '../version';
@@ -176,7 +176,7 @@ export const Shell = () => {
               Все изменения будут заменены демонстрационными данными. Нажмите кнопку ещё раз для подтверждения.
             </p>
           )}
-          <NoticesBanner push={notices} />
+          <NoticesBanner push={notices} /><InAppNotices push={notices} />
           {sync.error && (
             <div className="sync-banner" role="alert">
               <span>{sync.error}</span>
@@ -202,6 +202,7 @@ export const Shell = () => {
             )}
             {sync.mode === 'local' && <span className="sync-state">данные в этом браузере</span>}
             <NoticesToggle push={notices} />
+            <a className="tray-download" href="/downloads/TaskControlNotificationsSetup-1.0.4.msi" download aria-label="Скачать установщик уведомлений для Windows" data-tip="Скачать установщик уведомлений для Windows"><Icon.Download size={16} /></a>
           </footer>
         </div>
       </div>

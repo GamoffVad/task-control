@@ -3,7 +3,7 @@ import { api, ApiError, readSession, writeSession } from './api';
 import { authenticate } from './auth';
 import { fromData, PERSISTED, reducer, type Action } from './reducer';
 import { DEFAULT_DICTIONARIES } from './seed';
-import { DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS } from './access';
+import { ACCESS_VERSION, DEFAULT_AUTHENTICATION, DEFAULT_ROLES, DEFAULT_SCORING, DEFAULT_USERS } from './access';
 import { loadAppearance, storeAppearance } from './appearance';
 import { loadState, saveState, StoreContext, type Sync } from './store';
 import type { AppState, DirectoryUser, User } from './types';
@@ -17,7 +17,7 @@ type Mode = 'local' | 'remote';
 /** Режим по умолчанию: в тестах и при VITE_BACKEND=local — данные в браузере, иначе — база на сервере. */
 const defaultMode = (): Mode => (import.meta.env.MODE === 'test' || import.meta.env.VITE_BACKEND === 'local' ? 'local' : 'remote');
 
-const emptyState = (user: User | null): AppState => ({ version: 6, tasks: [], reports: [], messages: [], chatReads: [], absences: [], entitlements: [], planRows: planRows.map((row) => ({ ...row })), dictionaries: DEFAULT_DICTIONARIES, users: DEFAULT_USERS, roles: DEFAULT_ROLES, units: DEFAULT_UNITS.map((u) => ({ ...u })), templates: DEFAULT_TEMPLATES.map((t) => ({ ...t })), authentication: { ...DEFAULT_AUTHENTICATION }, scoring: { ...DEFAULT_SCORING }, appearance: loadAppearance(user?.employeeId), user });
+const emptyState = (user: User | null): AppState => ({ version: 6, accessVersion: ACCESS_VERSION, tasks: [], reports: [], messages: [], chatReads: [], absences: [], entitlements: [], planRows: planRows.map((row) => ({ ...row })), dictionaries: DEFAULT_DICTIONARIES, users: DEFAULT_USERS, roles: DEFAULT_ROLES, units: DEFAULT_UNITS.map((u) => ({ ...u })), templates: DEFAULT_TEMPLATES.map((t) => ({ ...t })), authentication: { ...DEFAULT_AUTHENTICATION }, scoring: { ...DEFAULT_SCORING }, appearance: loadAppearance(user?.employeeId), user });
 
 const BAD_LOGIN = 'Неверный логин или пароль. Проверьте данные и повторите вход.';
 const REFRESH_MS = 60_000;

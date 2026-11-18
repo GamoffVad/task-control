@@ -20,16 +20,24 @@ const { version } = JSON.parse(readFileSync(path.join(root, 'package.json'), 'ut
 
 // Число тестов берётся из фактического прогона, чтобы документация не расходилась с проектом.
 const report = path.join(docs, '.vitest.json');
-execSync(`npx vitest run --testTimeout=15000 --reporter=json --outputFile="${report}"`, { cwd: root, stdio: 'ignore' });
-const { numPassedTests, numFailedTests, numPendingTests, numTotalTests } = JSON.parse(readFileSync(report, 'utf8'));
-rmSync(report);
-// Тесты хранилища SQL Server пропускаются без настроенного сервера, поэтому считаем именно провалы.
-if (numFailedTests) throw new Error(`Тесты не прошли: ${numFailedTests} из ${numTotalTests}`);
-if (numPendingTests) console.log(`Пропущено тестов: ${numPendingTests} (нужен SQL Server — npm run test:mssql)`);
+let numPassedTests;
+if (process.argv.includes('--reuse-test-results')) {
+  const previous = JSON.parse(readFileSync(path.join(docs, 'manual.meta.json'), 'utf8'));
+  if (previous.version !== version || !Number.isInteger(previous.tests)) throw new Error('Нет результатов тестов для текущей версии.');
+  numPassedTests = previous.tests;
+} else {
+  execSync(`npx vitest run --testTimeout=15000 --reporter=json --outputFile="${report}"`, { cwd: root, stdio: 'ignore' });
+  const result = JSON.parse(readFileSync(report, 'utf8'));
+  rmSync(report);
+  if (result.numFailedTests) throw new Error(`Тесты не прошли: ${result.numFailedTests} из ${result.numTotalTests}`);
+  if (result.numPendingTests) console.log(`Пропущено тестов: ${result.numPendingTests} (нужен SQL Server — npm run test:mssql)`);
+  numPassedTests = result.numPassedTests;
+}
 
 if (!skipShots) {
   execSync('npm run build', { cwd: root, stdio: 'inherit' });
-  execSync('node docs/shoot.mjs', { cwd: root, stdio: 'inherit' });
+  execSync('node docs/shoot-current.mjs', { cwd: root, stdio: 'inherit' });
+  execSync('node docs/shoot-current.mjs --remaining-only', { cwd: root, stdio: 'inherit' });
 }
 
 let figure = 0;

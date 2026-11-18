@@ -56,8 +56,9 @@ export const AbsenceModal = ({ absence, defaults, onClose, onSaveDraft }: Props)
         },
   );
   const [errors, setErrors] = useState<AbsenceErrors>({});
-  const [roadBefore, setRoadBefore] = useState(String(absence?.travelDaysBefore ?? defaults?.travelDaysBefore ?? 0));
-  const [roadAfter, setRoadAfter] = useState(String(absence?.travelDaysAfter ?? defaults?.travelDaysAfter ?? 0));
+  const initialBefore = absence?.travelDaysBefore ?? defaults?.travelDaysBefore ?? 0;
+  const initialAfter = absence?.travelDaysAfter ?? defaults?.travelDaysAfter ?? 0;
+  const [roadDays, setRoadDays] = useState(String(initialBefore + initialAfter));
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [initialLinks] = useState(() => state.tasks.filter((task) => absence && task.tripAbsenceIds?.includes(absence.id)).map((task) => task.id));
   const [linkedIds, setLinkedIds] = useState(initialLinks);
@@ -79,7 +80,7 @@ export const AbsenceModal = ({ absence, defaults, onClose, onSaveDraft }: Props)
       return { ...d, from: value, to: toDateKey(to) };
     });
 
-  const travelDraft = { ...draft, travelDaysBefore: Number(roadBefore), travelDaysAfter: Number(roadAfter) };
+  const travelDraft = { ...draft, travelDaysBefore: Number(roadDays) === initialBefore + initialAfter ? initialBefore : Math.ceil(Number(roadDays) / 2), travelDaysAfter: Number(roadDays) === initialBefore + initialAfter ? initialAfter : Math.floor(Number(roadDays) / 2) };
   const probe: Absence = { ...travelDraft, id: draft.id ?? 'new', createdAt: '', decidedBy: null };
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(draft.from) && (draft.to === null || draft.to >= draft.from);
   const days = valid ? absenceDays(probe, today) : 0;
@@ -219,11 +220,8 @@ export const AbsenceModal = ({ absence, defaults, onClose, onSaveDraft }: Props)
             </label>
           </div>
           {draft.type === 'vacation' && <>
-            <div className="field-row">
-              <label className="field"><span className="caps">На дорогу туда, дней</span><TextInput inputMode="numeric" maxLength={3} mono readOnly={readOnly} value={roadBefore} invalid={!!errors.travel} onChange={(e) => { setRoadBefore(e.target.value); setErrors((prev) => ({ ...prev, travel: undefined })); }} /></label>
-              <label className="field"><span className="caps">На дорогу обратно, дней</span><TextInput inputMode="numeric" maxLength={3} mono readOnly={readOnly} value={roadAfter} invalid={!!errors.travel} onChange={(e) => { setRoadAfter(e.target.value); setErrors((prev) => ({ ...prev, travel: undefined })); }} /></label>
-            </div>
-            <p className="field-hint">Даты «С» и «По» включают дорогу. Дни на дорогу приходятся на начало и конец отсутствия и не вычитаются из годовой нормы отпуска.</p>
+            <label className="field"><span className="caps">Дни на дорогу (всего)</span><TextInput inputMode="numeric" maxLength={3} mono readOnly={readOnly} value={roadDays} invalid={!!errors.travel} onChange={(e) => { setRoadDays(e.target.value); setErrors((prev) => ({ ...prev, travel: undefined })); }} /></label>
+            <p className="field-hint">Даты включают дорогу. Дни дороги не вычитаются из нормы отпуска; новое количество распределяется поровну между началом и концом периода; при нечётном числе лишний день приходится на начало.</p>
             {errors.travel && <p className="field-error" role="alert">{errors.travel}</p>}
           </>}
           {draft.type === 'sick' && !readOnly && (
